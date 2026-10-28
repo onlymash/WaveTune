@@ -1,0 +1,17 @@
+# build output
+/target/
+
+# makepkg output when run directly inside packaging/arch/*
+/packaging/arch/*/src/
+/packaging/arch/*/pkg/
+/packaging/arch/*/*.tar.*
+/packaging/arch/wavetune-git/wavetune/
+*.pkg.tar.zst
+*.deb
+
+# Editor and local tooling files
+.idea/
+.vscode/
+build/
+external/
+*.rs.bk

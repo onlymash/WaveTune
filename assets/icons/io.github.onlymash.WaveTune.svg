@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <!-- Base Plate Drop Shadow (GNOME HIG) -->
+    <filter id="shadow" x="-12%" y="-6%" width="124%" height="128%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#010604" flood-opacity="0.65" />
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.4" />
+    </filter>
+
+    <!-- Emerald Glow Filter -->
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Base Plate Gradient (Tech Obsidian to Deep Forest Slate) -->
+    <linearGradient id="plate-bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e2c25" />
+      <stop offset="45%" stop-color="#121d18" />
+      <stop offset="100%" stop-color="#090f0c" />
+    </linearGradient>
+
+    <!-- Ambient Emerald Radial Light -->
+    <radialGradient id="plate-glow" cx="50%" cy="52%" r="60%">
+      <stop offset="0%" stop-color="#00f5a0" stop-opacity="0.22" />
+      <stop offset="50%" stop-color="#00a862" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#00a862" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Specular Rim (GNOME HIG) -->
+    <linearGradient id="plate-rim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.25" />
+      <stop offset="25%" stop-color="#ffffff" stop-opacity="0.06" />
+      <stop offset="70%" stop-color="#000000" stop-opacity="0.1" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.45" />
+    </linearGradient>
+
+    <!-- Earphone Outline Stroke Gradient (Pristine White to Soft Mint) -->
+    <linearGradient id="stroke-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="60%" stop-color="#f0fdf4" />
+      <stop offset="100%" stop-color="#a7f3d0" />
+    </linearGradient>
+
+    <!-- Acoustic Soundwave Gradient (Vibrant OPPO Green to Cyan) -->
+    <linearGradient id="wave-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ffb2" />
+      <stop offset="50%" stop-color="#00dc82" />
+      <stop offset="100%" stop-color="#00c8f8" />
+    </linearGradient>
+
+    <clipPath id="plate-clip">
+      <rect x="12" y="10" width="104" height="104" rx="26" />
+    </clipPath>
+  </defs>
+
+  <!-- 1. Base Plate with Shadow -->
+  <rect x="12" y="10" width="104" height="104" rx="26" fill="url(#plate-bg)" filter="url(#shadow)" />
+
+  <!-- 2. Inside Clipped Content -->
+  <g clip-path="url(#plate-clip)">
+    <!-- Plate Background & Glow -->
+    <rect x="12" y="10" width="104" height="104" rx="26" fill="url(#plate-bg)" />
+    <rect x="12" y="10" width="104" height="104" rx="26" fill="url(#plate-glow)" />
+
+    <!-- Wireless Acoustic Soundwaves Pulsing Outward -->
+    <g filter="url(#glow)">
+      <!-- Wave 1 (Inner Arc) -->
+      <path d="M 44 26 C 50 22, 57 20, 64 20 C 71 20, 78 22, 84 26"
+            fill="none" stroke="url(#wave-grad)" stroke-width="3" stroke-linecap="round" />
+      <!-- Wave 2 (Outer Arc) -->
+      <path d="M 37 17 C 45 12, 54 9, 64 9 C 74 9, 83 12, 91 17"
+            fill="none" stroke="url(#wave-grad)" stroke-width="2.6" stroke-linecap="round" opacity="0.8" />
+    </g>
+
+    <!-- Earphone Iconic Vector Outline Group -->
+    <g>
+      <!-- Headband Arch (Clean 4px Vector Stroke) -->
+      <path d="M 32 64 C 32 40, 46 28, 64 28 C 82 28, 96 40, 96 64"
+            fill="none" stroke="url(#stroke-grad)" stroke-width="4" stroke-linecap="round" />
+
+      <!-- Left Ear Cup (Translucent fill & Crisp 3.2px Outline) -->
+      <rect x="24" y="56" width="15" height="28" rx="7.5" fill="#ffffff" fill-opacity="0.08" />
+      <rect x="24" y="56" width="15" height="28" rx="7.5" fill="none" stroke="url(#stroke-grad)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+      <!-- Left Cushion Accent Bar (OPPO Emerald Glow) -->
+      <rect x="31.5" y="61" width="4.5" height="18" rx="2.2" fill="#00f5a0" opacity="0.85" />
+
+      <!-- Right Ear Cup (Translucent fill & Crisp 3.2px Outline) -->
+      <rect x="89" y="56" width="15" height="28" rx="7.5" fill="#ffffff" fill-opacity="0.08" />
+      <rect x="89" y="56" width="15" height="28" rx="7.5" fill="none" stroke="url(#stroke-grad)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+      <!-- Right Cushion Accent Bar (OPPO Emerald Glow) -->
+      <rect x="92" y="61" width="4.5" height="18" rx="2.2" fill="#00f5a0" opacity="0.85" />
+
+      <!-- Center Acoustic Core / Dynamic Equalizer Waveform Bars -->
+      <g filter="url(#glow)">
+        <line x1="52" y1="67" x2="52" y2="73" stroke="#00ffb2" stroke-width="2.5" stroke-linecap="round" />
+        <line x1="58" y1="63" x2="58" y2="77" stroke="#00ffb2" stroke-width="2.5" stroke-linecap="round" />
+        <line x1="64" y1="59" x2="64" y2="81" stroke="#00f5a0" stroke-width="2.8" stroke-linecap="round" />
+        <line x1="70" y1="63" x2="70" y2="77" stroke="#00dc82" stroke-width="2.5" stroke-linecap="round" />
+        <line x1="76" y1="67" x2="76" y2="73" stroke="#00c8f8" stroke-width="2.5" stroke-linecap="round" />
+      </g>
+    </g>
+
+    <!-- Bottom Status LED Badge (Connected Glow) -->
+    <g transform="translate(56, 93)">
+      <rect x="0" y="0" width="16" height="8" rx="4" fill="#000000" opacity="0.4" />
+      <circle cx="8" cy="4" r="2.8" fill="#00ffb2" opacity="0.25" />
+      <circle cx="8" cy="4" r="1.6" fill="#00f5a0" />
+      <circle cx="7.4" cy="3.4" r="0.5" fill="#ffffff" />
+    </g>
+  </g>
+
+  <!-- 3. Top Specular Bevel Rim (GNOME HIG) -->
+  <rect x="12.5" y="10.5" width="103" height="103" rx="25.5" fill="none" stroke="url(#plate-rim)" stroke-width="1" />
+</svg>

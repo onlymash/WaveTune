@@ -1,0 +1,17 @@
+Package: wavetune
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: onlymash <fiepi.dev@gmail.com>
+Installed-Size: @INSTALLED_SIZE@
+Depends: libc6, libgcc-s1, libgtk-4-1 (>= 4.10), libadwaita-1-0 (>= 1.9), libbluetooth3, libdbus-1-3, libwebp7, bluez
+Section: sound
+Priority: optional
+Homepage: https://github.com/onlymash/WaveTune
+Description: Unofficial multi-brand wireless headset control center
+ WaveTune is an unofficial control center for multi-brand wireless headsets
+ on Linux (ported from EncoDeck), built with GTK4 and libadwaita. It currently
+ supports OPPO, OnePlus, and realme, with future support planned for Huawei,
+ Xiaomi, Vivo, and Edifier. It reads battery, firmware, and wear state and can
+ change noise-control modes on supported models over Bluetooth.
+ .
+ This project is not affiliated with or endorsed by any vendor.

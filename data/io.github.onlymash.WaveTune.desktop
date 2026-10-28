@@ -1,0 +1,16 @@
+[Desktop Entry]
+Name=WaveTune
+Name[zh_CN]=WaveTune
+GenericName=Headset Control Center
+GenericName[zh_CN]=无线耳机控制中心
+Comment=Wireless headset control center for Linux
+Comment[zh_CN]=面向 Linux 桌面的无线耳机控制中心
+Exec=wavetune
+Icon=io.github.onlymash.WaveTune
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;HardwareSettings;GTK;
+StartupNotify=true
+StartupWMClass=io.github.onlymash.WaveTune
+Keywords=Bluetooth;Headset;Headphones;Earbuds;ANC;Audio;Noise;
+Keywords[zh_CN]=蓝牙;耳机;耳塞;降噪;音频;ANC;

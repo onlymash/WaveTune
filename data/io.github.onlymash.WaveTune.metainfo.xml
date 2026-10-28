@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.onlymash.WaveTune</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>WaveTune</name>
+  <name xml:lang="zh_CN">WaveTune</name>
+  <summary>Unofficial wireless headset control center for Linux</summary>
+  <summary xml:lang="zh_CN">面向 Linux 桌面的非官方无线耳机控制中心</summary>
+  <description>
+    <p>
+      WaveTune is a modern GTK4/Libadwaita application designed for managing and controlling wireless Bluetooth headsets on Linux. 
+    </p>
+    <p xml:lang="zh_CN">
+      WaveTune 是专为 Linux 桌面打造的现代化 GTK4/Libadwaita 无线耳机控制中心，致力于为多品牌无线耳机提供统一的桌面控制体验。
+    </p>
+    <ul>
+      <li>Active noise cancellation (ANC), transparency, and adaptive controls</li>
+      <li xml:lang="zh_CN">支持主动降噪（ANC）、通透模式与自适应降噪切换</li>
+      <li>Battery level monitoring for earbuds and charging case</li>
+      <li xml:lang="zh_CN">左右耳及充电盒独立电量实时显示</li>
+      <li>In-ear wear detection status</li>
+      <li xml:lang="zh_CN">耳机佩戴/入耳状态检测</li>
+      <li>Multi-device dual connection switching</li>
+      <li xml:lang="zh_CN">双设备连接管理与快速流转切换</li>
+      <li>Sound effects, equalizer, and 3D device preview</li>
+      <li xml:lang="zh_CN">音效均衡器与交互式 3D 耳机模型预览</li>
+    </ul>
+  </description>
+  <url type="homepage">https://github.com/onlymash/WaveTune</url>
+  <url type="bugtracker">https://github.com/onlymash/WaveTune/issues</url>
+  <launchable type="desktop-id">io.github.onlymash.WaveTune.desktop</launchable>
+  <developer id="io.github.onlymash">
+    <name>onlymash</name>
+  </developer>
+  <content_rating type="oars-1.1" />
+  <provides>
+    <binary>wavetune</binary>
+  </provides>
+  <releases>
+    <release version="0.1.0" date="2026-10-24">
+      <description>
+        <p>Initial release of WaveTune.</p>
+        <p xml:lang="zh_CN">WaveTune 初始版本发布。</p>
+      </description>
+    </release>
+  </releases>
+</component>

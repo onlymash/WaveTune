@@ -1,0 +1,29 @@
+[package]
+name = "wavetune"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+description = "Unofficial wireless headset control center for Linux"
+
+[dependencies]
+bluer = { version = "0.17.4", features = ["bluetoothd"] }
+gtk = { package = "gtk4", version = "0.11.5", features = ["v4_10"] }
+adw = { package = "libadwaita", version = "0.9.2", features = ["v1_9"] }
+libc = "0.2.191"
+tokio = { version = "1.54.1", features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }
+fluent-templates = "0.15"
+unic-langid = "0.9"
+sys-locale = "0.3"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+gltf = "1.4.1"
+glow = "0.18.0"
+glam = "0.34.1"
+bytemuck = { version = "1.21", features = ["derive"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
