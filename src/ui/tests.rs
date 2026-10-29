@@ -931,6 +931,26 @@ fn ui_components_layout_and_behavior() {
     assert!(!controls_widgets.head_switch.state());
     assert!(!controls_widgets.head_switch.is_active());
     assert!(!controls_widgets.head_switch.is_sensitive());
+
+    // Verify ComboRow with enable_combo_row_subtitle_wrap wraps long subtitles vertically
+    // at dialog width instead of squeezing the selected option label
+    let pref_list = gtk::StringList::new(&["头戴式（圆角矩形）", "头戴式（圆形）"]);
+    let pref_combo = adw::ComboRow::builder()
+        .title("应用图标")
+        .subtitle("短说明")
+        .model(&pref_list)
+        .selected(0)
+        .build();
+    crate::ui::components::enable_combo_row_subtitle_wrap(&pref_combo);
+    let (_, short_h, _, _) = pref_combo.measure(gtk::Orientation::Vertical, 380);
+    pref_combo.set_subtitle(
+        "应用图标已更新，桌面任务栏可能需要片刻刷新；这是一段较长的副标题说明文字用于验证自动折行",
+    );
+    let (_, long_h, _, _) = pref_combo.measure(gtk::Orientation::Vertical, 380);
+    assert!(
+        long_h > short_h,
+        "ComboRow height should grow when long subtitle wraps ({long_h} <= {short_h})"
+    );
 }
 
 #[test]

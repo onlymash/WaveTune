@@ -66,6 +66,55 @@ pub(crate) fn combo_row(title: &str, subtitle: Option<&str>) -> adw::ComboRow {
     row
 }
 
+fn configure_subtitle_labels_recursive(widget: &gtk::Widget) {
+    if let Some(label) = widget.downcast_ref::<gtk::Label>() {
+        if label.has_css_class("subtitle") {
+            label.set_wrap(true);
+            label.set_wrap_mode(gtk::pango::WrapMode::WordChar);
+            label.set_ellipsize(gtk::pango::EllipsizeMode::None);
+            label.set_width_chars(1);
+        }
+    }
+    let mut child = widget.first_child();
+    while let Some(c) = child {
+        configure_subtitle_labels_recursive(&c);
+        child = c.next_sibling();
+    }
+}
+
+/// Ensures a `ComboRow`'s subtitle wraps onto multiple lines instead of
+/// squeezing/ellipsizing the selected option label on the right.
+pub(crate) fn enable_combo_row_subtitle_wrap(row: &adw::ComboRow) {
+    row.set_subtitle_lines(0);
+    configure_subtitle_labels_recursive(row.upcast_ref());
+
+    let factory = gtk::SignalListItemFactory::new();
+    factory.connect_setup(|_, obj| {
+        if let Some(list_item) = obj.downcast_ref::<gtk::ListItem>() {
+            let label = gtk::Label::builder()
+                .xalign(0.0)
+                .valign(Align::Center)
+                .build();
+            list_item.set_child(Some(&label));
+        }
+    });
+    factory.connect_bind(|_, obj| {
+        if let Some(list_item) = obj.downcast_ref::<gtk::ListItem>() {
+            if let (Some(label), Some(item)) = (
+                list_item
+                    .child()
+                    .and_then(|w| w.downcast::<gtk::Label>().ok()),
+                list_item
+                    .item()
+                    .and_then(|o| o.downcast::<gtk::StringObject>().ok()),
+            ) {
+                label.set_label(&item.string());
+            }
+        }
+    });
+    row.set_factory(Some(&factory));
+}
+
 pub(crate) trait ComboRowExtManual {
     fn set_items<S: AsRef<str>>(&self, items: &[(u8, S)]);
     fn selected_id(&self) -> Option<u8>;

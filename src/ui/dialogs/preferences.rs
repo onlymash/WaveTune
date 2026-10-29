@@ -52,9 +52,9 @@ pub fn show_preferences_dialog(parent: &impl IsA<gtk::Widget>) {
         .model(&string_list)
         .selected(initial_index)
         .build();
+    crate::ui::components::enable_combo_row_subtitle_wrap(&language_row);
 
     let initial_selected = std::cell::Cell::new(initial_index);
-    let dialog_weak = dialog.downgrade();
     language_row.connect_selected_notify(move |row| {
         let selected = row.selected();
         if selected == initial_selected.get() {
@@ -68,10 +68,6 @@ pub fn show_preferences_dialog(parent: &impl IsA<gtk::Widget>) {
         };
         crate::i18n::set_configured_language(lang_code);
         row.set_subtitle(&crate::t!("pref-language-restart-hint"));
-
-        if let Some(dialog) = dialog_weak.upgrade() {
-            dialog.add_toast(adw::Toast::new(&crate::t!("pref-language-restart-hint")));
-        }
     });
 
     group.add(&language_row);
@@ -100,6 +96,7 @@ pub fn show_preferences_dialog(parent: &impl IsA<gtk::Widget>) {
         .selected(initial_icon_index)
         .build();
     icon_row.add_prefix(&icon_preview);
+    crate::ui::components::enable_combo_row_subtitle_wrap(&icon_row);
 
     let initial_icon_selected = std::cell::Cell::new(initial_icon_index);
     let dialog_weak_for_icon = dialog.downgrade();
@@ -112,12 +109,17 @@ pub fn show_preferences_dialog(parent: &impl IsA<gtk::Widget>) {
         let style = crate::resources::AppIconStyle::from_index(selected);
         icon_preview.set_icon_name(Some(style.icon_name()));
 
-        let message = match crate::resources::set_configured_icon_style(style) {
-            Ok(()) => crate::t!("pref-app-icon-applied-hint"),
-            Err(err) => crate::t!("pref-app-icon-apply-failed", err),
-        };
-        if let Some(dialog) = dialog_weak_for_icon.upgrade() {
-            dialog.add_toast(adw::Toast::new(&message));
+        match crate::resources::set_configured_icon_style(style) {
+            Ok(()) => {
+                row.set_subtitle(&crate::t!("pref-app-icon-applied-hint"));
+            }
+            Err(err) => {
+                let message = crate::t!("pref-app-icon-apply-failed", err);
+                row.set_subtitle(&message);
+                if let Some(dialog) = dialog_weak_for_icon.upgrade() {
+                    dialog.add_toast(adw::Toast::new(&message));
+                }
+            }
         }
     });
 
