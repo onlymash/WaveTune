@@ -26,6 +26,8 @@ use std::{
 
 use crate::app::events::UiUpdate;
 
+static API_BASE_URL: &str = "https://encoapi.vercel.app";
+
 const GENERIC_HEADSET_SVG_TEMPLATE: &str = include_str!("../../assets/images/generic_headset.svg");
 const APP_ICON_DEFAULT_SVG: &str =
     include_str!("../../assets/icons/io.github.onlymash.WaveTune.svg");
@@ -620,7 +622,7 @@ pub fn spawn_artwork_fetch(product_id: u32, color_id: Option<u8>, updates_tx: Se
             if need_artwork {
                 for &color in &colors_to_try {
                     let url = format!(
-                        "https://encoapi.vercel.app/v1/models/{product_id:06X}/assets/device?color={color}&theme=light"
+                        "{API_BASE_URL}/v1/models/{product_id:06X}/assets/device?color={color}&theme=light"
                     );
                     if let Ok(response) = client.get(&url).send() {
                         if response.status().is_success() {
@@ -643,7 +645,7 @@ pub fn spawn_artwork_fetch(product_id: u32, color_id: Option<u8>, updates_tx: Se
             if need_model {
                 for &color in &colors_to_try {
                     let config_url = format!(
-                        "https://encoapi.vercel.app/v1/models/{product_id:06X}/files/model?color={color}&path=config.json"
+                        "{API_BASE_URL}/v1/models/{product_id:06X}/files/model?color={color}&path=config.json"
                     );
                     let mut model_webp_path: Option<String> = None;
                     let mut model_scene_path: Option<String> = None;
@@ -674,7 +676,7 @@ pub fn spawn_artwork_fetch(product_id: u32, color_id: Option<u8>, updates_tx: Se
 
                     if let Some(ref rel_path) = model_webp_path {
                         let model_url = format!(
-                            "https://encoapi.vercel.app/v1/models/{product_id:06X}/files/model?color={color}&path={model_path}",
+                            "{API_BASE_URL}/v1/models/{product_id:06X}/files/model?color={color}&path={model_path}",
                             model_path = rel_path
                         );
                         if let Ok(resp) = client.get(&model_url).send() {
@@ -696,7 +698,7 @@ pub fn spawn_artwork_fetch(product_id: u32, color_id: Option<u8>, updates_tx: Se
                         }
                     } else if let Some(ref rel_path) = model_scene_path {
                         let download_url = format!(
-                            "https://encoapi.vercel.app/v1/models/{product_id:06X}/download/model?color={color}"
+                            "{API_BASE_URL}/v1/models/{product_id:06X}/download/model?color={color}"
                         );
                         if let Ok(resp) = client.get(&download_url).send() {
                             if resp.status().is_success() {
