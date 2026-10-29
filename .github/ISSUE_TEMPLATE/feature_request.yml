@@ -1,0 +1,40 @@
+name: Feature / Headset Support Request
+description: Suggest an enhancement or request support for a wireless headset model
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to propose a new feature or request compatibility support for a headset model.
+
+        > **Privacy Notice:** Do **not** include Bluetooth MAC addresses (`XX:XX:XX:XX:XX:XX`), serial numbers, or personal names of paired devices in your submission.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Feature or Headset Request Summary
+      description: Describe the feature you would like to see, or specify the exact headset brand, model name, and region variant.
+      placeholder: "e.g., Add support for OnePlus Buds 4 (CN), or support custom EQ presets..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: probe_output
+    attributes:
+      label: Probe / Device Information (For Headset Support Requests)
+      description: |
+        If requesting support for an OPPO / OnePlus / realme headset that already connects via system Bluetooth, quit any running WaveTune window (`Ctrl+Q`), run `wavetune --probe` in a terminal, and paste the read-only identification output (Product ID, firmware, capability notes) here.
+      render: text
+      placeholder: "Optional: paste `wavetune --probe` output here (with any personal identifiers redacted)..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any relevant protocol references, screenshots, or design notes.
+    validations:
+      required: false
+

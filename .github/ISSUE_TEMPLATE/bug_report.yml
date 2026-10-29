@@ -1,0 +1,127 @@
+name: Bug Report
+description: Report a bug, crash, Bluetooth connection failure, or incorrect headset behavior
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report an issue! Please fill out the fields below completely so we can reproduce and diagnose the problem.
+
+        > **Privacy Notice:** Before submitting logs or screenshots, please **redact any Bluetooth MAC addresses (`XX:XX:XX:XX:XX:XX`), device serial numbers, and personal names of other paired devices**.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: I have searched existing issues to make sure this bug has not already been reported.
+          required: true
+        - label: My headset is already paired and connected via system Bluetooth settings (`bluetoothd` is active).
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what happened vs. what you expected to happen.
+      placeholder: |
+        Actual behavior:
+        ...
+
+        Expected behavior:
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Exact steps to trigger the issue.
+      placeholder: |
+        1. Connect headset via GNOME Bluetooth settings
+        2. Launch `wavetune`
+        3. Switch noise control mode to ...
+        4. Observe error ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Installation Method
+      options:
+        - AUR (wavetune-git)
+        - AUR (wavetune)
+        - Built from source (cargo)
+        - Debian / Ubuntu package (.deb)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: WaveTune Version / Commit
+      description: Output of `pacman -Qi wavetune-git` / `pacman -Qi wavetune`, or `git rev-parse --short HEAD` if built from source.
+      placeholder: "e.g., r6.g0e58965-1 or 0.1.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: system_env
+    attributes:
+      label: System Environment
+      description: |
+        Please provide your Linux distribution, kernel, desktop environment, session type (Wayland/X11), and key library versions (`bluez`, `gtk4`, `libadwaita`).
+        On Arch Linux, you can check with: `uname -sr && pacman -Q bluez gtk4 libadwaita`
+      value: |
+        - Distribution:
+        - Kernel:
+        - Desktop Environment & Version (e.g., GNOME 50 / KDE Plasma 6):
+        - Session Type (Wayland / X11):
+        - BlueZ Version:
+        - GTK4 / Libadwaita Version:
+    validations:
+      required: true
+
+  - type: input
+    id: headset_model
+    attributes:
+      label: Headset Brand & Exact Model
+      description: Include region/variant if applicable (e.g., China vs. Global edition).
+      placeholder: "e.g., OPPO Enco X3 / OnePlus Buds Pro 3 / realme Buds Air 6 Pro"
+    validations:
+      required: true
+
+  - type: input
+    id: headset_firmware
+    attributes:
+      label: Headset Product ID & Firmware Version
+      description: Reported in WaveTune's Device Info page or via `wavetune --probe` (if connection succeeds).
+      placeholder: "e.g., Product ID: 06EC10, Firmware: 128 / 128 / 100"
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Terminal Output & Diagnostic Logs
+      description: |
+        1. Quit any running WaveTune instance first (`Ctrl+Q` from the main window, as headsets usually allow only one RFCOMM control session at a time).
+        2. Run `wavetune --probe` and/or launch `wavetune` from a terminal to reproduce the issue, then paste the output below.
+        3. For Bluetooth daemon errors, also check `journalctl -u bluetooth -n 50 --no-pager` (remember to redact MAC addresses!).
+      render: text
+      placeholder: "Paste terminal output, `wavetune --probe` output, or relevant `bluetoothd` logs here..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Screenshots or Additional Context
+      description: Any screenshots, GNOME Shell Quick Settings extension details (if related), or other relevant context.
+    validations:
+      required: false
+
