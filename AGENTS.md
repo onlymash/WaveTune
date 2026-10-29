@@ -129,10 +129,10 @@ control service; the device may accept only one control connection at a time.
   modules independent of GTK and BlueZ.
 - `docs/OPPO_BLUETOOTH_API.md`: recorded private-protocol facts and provenance.
 - `docs/IMPLEMENTATION_PLAN.md`: product scope, implementation phases, and acceptance criteria.
-- `packaging/`: Arch/AUR PKGBUILD generator (`arch/generate.sh`, which generates standalone git-ignored
-  AUR repositories in `arch/wavetune` and `arch/wavetune-git` from `Cargo.toml` and git metadata), Debian
-  control template (`debian/`), the shared file layout (`install.sh`), and `package.sh`, which builds
-  packages into `target/dist/`.
+- `packaging/`: Arch/AUR PKGBUILD generator and publisher (`arch/generate.sh` and `arch/publish.sh`,
+  which generate and publish standalone git-ignored AUR repositories in `arch/wavetune` and
+  `arch/wavetune-git` from `Cargo.toml` and git metadata), Debian control template (`debian/`), the
+  shared file layout (`install.sh`), and `package.sh`, which builds packages into `target/dist/`.
 
 Keep protocol parsing independent of GTK. Keep Bluetooth I/O off the GTK main thread and pass typed
 updates to the UI. Prefer extending existing typed state/event structures over embedding protocol
