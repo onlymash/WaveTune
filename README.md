@@ -7,29 +7,31 @@
 > 该项目与各耳机厂商无官方关联。OPPO 私有蓝牙协议与已知证据范围见
 > [协议记录](docs/OPPO_BLUETOOTH_API.md)，实施阶段见[开发计划](docs/IMPLEMENTATION_PLAN.md)。
 
-## 当前进度
+## 安装
 
-- GTK4 原生窗口和总览、音效、设备信息页面。
-- 启动后自动发现由 GNOME/BlueZ 连接的 OnePlus/OPPO/realme 耳机；按 BlueZ 耳机类别与可验证的
-  Bluetooth 厂商数据或 OPPO 控制服务 UUID 筛选，名称仅用于列表显示。每 15 秒刷新，也可
-  手动刷新；所有识别出的 OnePlus/OPPO/realme 耳机都可尝试连接控制通道。连接时通过 SDP 查找
-  `ELNK` RFCOMM 服务和通道；未找到服务时显示明确错误。
-- 已导入 TIANLI0/EncoDeck 的 OPPO/OnePlus 型号目录及其 realme 补充目录，共 131 个型号。
-  目录驱动现有降噪和双设备管理选项；具体操作仍受耳机能力位、运行时支持列表/功能开关和
-  写入确认约束。目录不是硬件兼容性测试报告；X3 仅验证过 RFCOMM 连接、握手和产品识别，
-  尚未验证设置写入。X4 已验证只读握手、型号、固件、佩戴/入耳、盒盖、电量和降噪状态查询。
-- OPPO 应用包编解码、RFCOMM 帧编码、增量帧解码及协议单元测试。
-- 已完成多品牌架构解耦重构（参考 EncoDeck 架构）：将协议层（`src/protocol/`）、兼容配置层（`src/compatibility/`）
-  与会话层（`src/bluetooth/`）区隔为通用状态抽象与品牌专有实现；OPPO/OnePlus/realme 欧加私有协议与配置已收敛至
-  `brands/oppo/`，类名、结构体名与方法全面规范化（如 `OppoFrameDecoder`、`OppoAppPacket`、`OppoCommands`、
-  `OppoDeviceSnapshot`、`OPPO_DEVICE_PROFILES` 等），并通过统一注册中心 `builtin_profiles()` 聚合，为未来扩展华为、
-  小米、vivo、漫步者等多品牌耳机支持奠定基础。
-- 首页连接后显示真实电量和当前降噪模式；依型号目录生成模式选项，直接使用兼容配置中声明
-  的模式集合，不再要求先读取耳机支持模式 API 才开放功能。设置受 capability bit 8、兼容
-  配置树、入耳状态门控，并要求 ACK 和回读匹配。EQ 写入仍禁用。
-- 支持后台驻留模式（`--background` / `-b`、关闭窗口隐藏到后台及可选登录后台自启），通过
-  Session D-Bus（`io.github.onlymash.WaveTune`）向配套 GNOME Shell 快捷面板扩展
-  （`wavetune@onlymash.github.com`，支持 GNOME 45–51）同步电量与降噪模式切换。
+### Arch Linux (AUR)
+
+Arch Linux 及其衍生发行版用户可直接通过 AUR 安装 [`wavetune-git`](https://aur.archlinux.org/packages/wavetune-git)：
+
+```bash
+paru -S wavetune-git
+# 或使用 yay
+yay -S wavetune-git
+```
+
+也可以手动克隆 AUR 仓库构建安装：
+
+```bash
+git clone https://aur.archlinux.org/wavetune-git.git
+cd wavetune-git
+makepkg -si
+```
+
+使用前请确保系统 `bluetooth` 服务已启用，并先在桌面蓝牙设置中配对连接耳机：
+
+```bash
+sudo systemctl enable --now bluetooth
+```
 
 ## Arch Linux 开发依赖
 
