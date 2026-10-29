@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
   <defs>
     <!-- Base Plate Drop Shadow (GNOME HIG) -->
-    <filter id="shadow" x="-12%" y="-6%" width="124%" height="128%">
-      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#010604" flood-opacity="0.65" />
-      <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.4" />
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#010604" flood-opacity="0.65" />
+      <feDropShadow dx="0" dy="0.8" stdDeviation="0.6" flood-color="#000000" flood-opacity="0.4" />
     </filter>
 
     <!-- Emerald Glow Filter -->
@@ -52,59 +52,59 @@
     </linearGradient>
 
     <clipPath id="plate-clip">
-      <rect x="12" y="10" width="104" height="104" rx="26" />
+      <rect x="3" y="3" width="122" height="122" rx="30.5" />
     </clipPath>
   </defs>
 
   <!-- 1. Base Plate with Shadow -->
-  <rect x="12" y="10" width="104" height="104" rx="26" fill="url(#plate-bg)" filter="url(#shadow)" />
+  <rect x="3" y="3" width="122" height="122" rx="30.5" fill="url(#plate-bg)" filter="url(#shadow)" />
 
   <!-- 2. Inside Clipped Content -->
   <g clip-path="url(#plate-clip)">
     <!-- Plate Background & Glow -->
-    <rect x="12" y="10" width="104" height="104" rx="26" fill="url(#plate-bg)" />
-    <rect x="12" y="10" width="104" height="104" rx="26" fill="url(#plate-glow)" />
+    <rect x="3" y="3" width="122" height="122" rx="30.5" fill="url(#plate-bg)" />
+    <rect x="3" y="3" width="122" height="122" rx="30.5" fill="url(#plate-glow)" />
 
     <!-- Wireless Acoustic Soundwaves Pulsing Outward -->
     <g filter="url(#glow)">
       <!-- Wave 1 (Inner Arc) -->
-      <path d="M 44 26 C 50 22, 57 20, 64 20 C 71 20, 78 22, 84 26"
-            fill="none" stroke="url(#wave-grad)" stroke-width="3" stroke-linecap="round" />
+      <path d="M 40.5 21.8 C 47.6 17.1, 55.8 14.7, 64 14.7 C 72.2 14.7, 80.4 17.1, 87.5 21.8"
+            fill="none" stroke="url(#wave-grad)" stroke-width="3.5" stroke-linecap="round" />
       <!-- Wave 2 (Outer Arc) -->
-      <path d="M 37 17 C 45 12, 54 9, 64 9 C 74 9, 83 12, 91 17"
-            fill="none" stroke="url(#wave-grad)" stroke-width="2.6" stroke-linecap="round" opacity="0.8" />
+      <path d="M 32.3 11.2 C 41.7 5.3, 52.3 1.8, 64 1.8 C 75.7 1.8, 86.3 5.3, 95.7 11.2"
+            fill="none" stroke="url(#wave-grad)" stroke-width="3" stroke-linecap="round" opacity="0.8" />
     </g>
 
     <!-- Earphone Iconic Vector Outline Group -->
     <g>
-      <!-- Headband Arch (Clean 4px Vector Stroke) -->
-      <path d="M 32 64 C 32 40, 46 28, 64 28 C 82 28, 96 40, 96 64"
-            fill="none" stroke="url(#stroke-grad)" stroke-width="4" stroke-linecap="round" />
+      <!-- Headband Arch (Clean 4.7px Vector Stroke) -->
+      <path d="M 26.5 66.3 C 26.5 38.2, 42.9 24.1, 64 24.1 C 85.1 24.1, 101.5 38.2, 101.5 66.3"
+            fill="none" stroke="url(#stroke-grad)" stroke-width="4.7" stroke-linecap="round" />
 
-      <!-- Left Ear Cup (Translucent fill & Crisp 3.2px Outline) -->
-      <rect x="24" y="56" width="15" height="28" rx="7.5" fill="#ffffff" fill-opacity="0.08" />
-      <rect x="24" y="56" width="15" height="28" rx="7.5" fill="none" stroke="url(#stroke-grad)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+      <!-- Left Ear Cup (Translucent fill & Crisp 3.8px Outline) -->
+      <rect x="17.1" y="57" width="17.6" height="32.8" rx="8.8" fill="#ffffff" fill-opacity="0.08" />
+      <rect x="17.1" y="57" width="17.6" height="32.8" rx="8.8" fill="none" stroke="url(#stroke-grad)" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round" />
       <!-- Left Cushion Accent Bar (OPPO Emerald Glow) -->
-      <rect x="31.5" y="61" width="4.5" height="18" rx="2.2" fill="#00f5a0" opacity="0.85" />
+      <rect x="25.9" y="62.8" width="5.3" height="21.1" rx="2.6" fill="#00f5a0" opacity="0.85" />
 
-      <!-- Right Ear Cup (Translucent fill & Crisp 3.2px Outline) -->
-      <rect x="89" y="56" width="15" height="28" rx="7.5" fill="#ffffff" fill-opacity="0.08" />
-      <rect x="89" y="56" width="15" height="28" rx="7.5" fill="none" stroke="url(#stroke-grad)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+      <!-- Right Ear Cup (Translucent fill & Crisp 3.8px Outline) -->
+      <rect x="93.3" y="57" width="17.6" height="32.8" rx="8.8" fill="#ffffff" fill-opacity="0.08" />
+      <rect x="93.3" y="57" width="17.6" height="32.8" rx="8.8" fill="none" stroke="url(#stroke-grad)" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round" />
       <!-- Right Cushion Accent Bar (OPPO Emerald Glow) -->
-      <rect x="92" y="61" width="4.5" height="18" rx="2.2" fill="#00f5a0" opacity="0.85" />
+      <rect x="96.8" y="62.8" width="5.3" height="21.1" rx="2.6" fill="#00f5a0" opacity="0.85" />
 
       <!-- Center Acoustic Core / Dynamic Equalizer Waveform Bars -->
       <g filter="url(#glow)">
-        <line x1="52" y1="67" x2="52" y2="73" stroke="#00ffb2" stroke-width="2.5" stroke-linecap="round" />
-        <line x1="58" y1="63" x2="58" y2="77" stroke="#00ffb2" stroke-width="2.5" stroke-linecap="round" />
-        <line x1="64" y1="59" x2="64" y2="81" stroke="#00f5a0" stroke-width="2.8" stroke-linecap="round" />
-        <line x1="70" y1="63" x2="70" y2="77" stroke="#00dc82" stroke-width="2.5" stroke-linecap="round" />
-        <line x1="76" y1="67" x2="76" y2="73" stroke="#00c8f8" stroke-width="2.5" stroke-linecap="round" />
+        <line x1="49.9" y1="69.9" x2="49.9" y2="76.9" stroke="#00ffb2" stroke-width="2.9" stroke-linecap="round" />
+        <line x1="57" y1="65.2" x2="57" y2="81.6" stroke="#00ffb2" stroke-width="2.9" stroke-linecap="round" />
+        <line x1="64" y1="60.5" x2="64" y2="86.3" stroke="#00f5a0" stroke-width="3.3" stroke-linecap="round" />
+        <line x1="71" y1="65.2" x2="71" y2="81.6" stroke="#00dc82" stroke-width="2.9" stroke-linecap="round" />
+        <line x1="78.1" y1="69.9" x2="78.1" y2="76.9" stroke="#00c8f8" stroke-width="2.9" stroke-linecap="round" />
       </g>
     </g>
 
     <!-- Bottom Status LED Badge (Connected Glow) -->
-    <g transform="translate(56, 93)">
+    <g transform="translate(54.6, 100.4) scale(1.173)">
       <rect x="0" y="0" width="16" height="8" rx="4" fill="#000000" opacity="0.4" />
       <circle cx="8" cy="4" r="2.8" fill="#00ffb2" opacity="0.25" />
       <circle cx="8" cy="4" r="1.6" fill="#00f5a0" />
@@ -113,5 +113,5 @@
   </g>
 
   <!-- 3. Top Specular Bevel Rim (GNOME HIG) -->
-  <rect x="12.5" y="10.5" width="103" height="103" rx="25.5" fill="none" stroke="url(#plate-rim)" stroke-width="1" />
+  <rect x="3.5" y="3.5" width="121" height="121" rx="30" fill="none" stroke="url(#plate-rim)" stroke-width="1" />
 </svg>
