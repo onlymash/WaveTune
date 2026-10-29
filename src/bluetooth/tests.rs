@@ -415,10 +415,8 @@ fn paired_device_write_never_disconnects_the_current_host() {
         PairedDeviceAction::Disconnect,
         &mpsc::channel().0,
     );
-    assert!(
-        result.as_ref().unwrap_err().contains("本机")
-            || result.unwrap_err().contains("this device")
-    );
+    let err = result.unwrap_err();
+    assert!(err.contains("本机") || err.to_ascii_lowercase().contains("this device"));
 }
 
 #[test]
@@ -531,10 +529,8 @@ fn paired_device_remove_never_deletes_the_current_host() {
         PairedDeviceAction::Remove,
         &mpsc::channel().0,
     );
-    assert!(
-        result.as_ref().unwrap_err().contains("本机")
-            || result.unwrap_err().contains("this device")
-    );
+    let err = result.unwrap_err();
+    assert!(err.contains("本机") || err.to_ascii_lowercase().contains("this device"));
 }
 
 fn paired_device_response(connected: bool) -> Vec<u8> {
