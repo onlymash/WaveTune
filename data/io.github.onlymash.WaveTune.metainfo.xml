@@ -38,7 +38,7 @@
     <binary>wavetune</binary>
   </provides>
   <releases>
-    <release version="0.1.0" date="2026-10-24">
+    <release version="0.1.0" date="2026-10-29">
       <description>
         <p>Initial release of WaveTune.</p>
         <p xml:lang="zh_CN">WaveTune 初始版本发布。</p>

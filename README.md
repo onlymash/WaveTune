@@ -1,25 +1,32 @@
 # WaveTune
 
-一个面向 Linux 桌面的非官方多品牌无线耳机控制中心（移植自 [EncoDeck](https://github.com/TIANLI0/EncoDeck)），
-使用 Rust 与 GTK4/Libadwaita 构建。当前首要适配 OPPO、OnePlus 和 realme（欧加体系）耳机，底层架构已完成
-品牌解耦隔离，未来将持续扩展其它品牌耳机。当前开发环境目标为 Arch Linux + GNOME。
+**English** | [简体中文](README_zh.md)
 
-> 该项目与各耳机厂商无官方关联。OPPO 私有蓝牙协议与已知证据范围见
-> [协议记录](docs/OPPO_BLUETOOTH_API.md)，实施阶段见[开发计划](docs/IMPLEMENTATION_PLAN.md)。
+An unofficial multi-brand wireless headset control center for the Linux desktop (ported from [EncoDeck](https://github.com/TIANLI0/EncoDeck)), built with Rust and GTK4 / Libadwaita. It currently supports OPPO, OnePlus, and realme wireless headsets, with a decoupled multi-brand architecture ready for expanding to additional brands in the future.
 
-## 安装
+> This project is not affiliated with or endorsed by any headset vendor. See [`docs/OPPO_BLUETOOTH_API.md`](docs/OPPO_BLUETOOTH_API.md) for private Bluetooth protocol details and hardware verification notes.
+
+## Features
+
+- **Status Monitoring & 3D Preview**: Real-time battery levels and charging status for left/right earbuds and charging case, in-ear wear and case-lid detection, firmware version display, device artwork, and interactive 3D model preview.
+- **Noise Control**: Switch between Active Noise Cancellation (with multi-level intensity), Transparency mode (including Vocal Enhancement), and Adaptive noise control.
+- **Sound & Audio Effects**: Built-in sound presets, custom multi-band Equalizer (EQ), Spatial Audio (Fixed / Head Tracking), and low-latency Game Mode.
+- **Controls & Utilities**: Customize left/right touch and call gestures, long-press noise-control cycling, dual-device connection and paired-host switching, in-ear auto-pause, sleep detection, earbud fit test, Find My Earbuds, and prompt volume adjustment (available features depend on headset model).
+- **Desktop Integration**: Native GTK4 / Libadwaita UI with English/Chinese localization, selectable app icon styles, background mode and silent login autostart, plus a companion GNOME Shell Quick Settings extension (GNOME 45–51).
+
+## Installation
 
 ### Arch Linux (AUR)
 
-Arch Linux 及其衍生发行版用户可直接通过 AUR 安装 [`wavetune-git`](https://aur.archlinux.org/packages/wavetune-git)：
+Users on Arch Linux and its derivatives can install [`wavetune-git`](https://aur.archlinux.org/packages/wavetune-git) from the AUR:
 
 ```bash
 paru -S wavetune-git
-# 或使用 yay
+# or with yay
 yay -S wavetune-git
 ```
 
-也可以手动克隆 AUR 仓库构建安装：
+Or clone and build manually:
 
 ```bash
 git clone https://aur.archlinux.org/wavetune-git.git
@@ -27,139 +34,66 @@ cd wavetune-git
 makepkg -si
 ```
 
-使用前请确保系统 `bluetooth` 服务已启用，并先在桌面蓝牙设置中配对连接耳机：
+Before launching WaveTune, make sure the system `bluetooth` service is running and pair/connect your headset via your desktop's Bluetooth settings first (WaveTune attaches to already-connected headsets rather than handling OS-level pairing):
 
 ```bash
 sudo systemctl enable --now bluetooth
 ```
 
-## Arch Linux 开发依赖
+## GNOME Quick Settings Extension
 
-当前开发环境已检查为：
+A companion extension for GNOME 45–51 is included at `gnome-shell/wavetune@onlymash.github.com` (automatically installed to the system extensions directory by distribution packages).
 
-- Arch Linux `gtk4` 包：`1:4.24.1-1`（`pkg-config` 报告 GTK `4.24.1`）
-- Arch Linux `libadwaita` 包：`1.10.0`（项目需要系统 libadwaita `1.9` 或更新版本）
-- Rust stable：`rustc 1.99.1`、`cargo 1.99.1`
-- Rust GTK 绑定：`gtk4 0.11.5`
-
-可使用以下命令检查本机环境与软件包版本：
-
-```bash
-pacman -Qi gtk4 libadwaita
-pkg-config --modversion gtk4
-pkg-config --modversion libadwaita-1
-rustup show active-toolchain
-rustc --version
-cargo --version
-```
-
-安装 GTK4、libadwaita 开发库、pkg-config 和 Rustup（如果尚未安装）：
-
-```bash
-sudo pacman -S --needed bluez gtk4 libadwaita pkgconf rustup
-rustup toolchain install stable
-rustup default stable
-```
-
-启用 BlueZ 服务：
-
-```bash
-sudo systemctl enable --now bluetooth
-systemctl is-active bluetooth
-```
-
-GTK Rust 绑定使用 crates.io 上的最新稳定版 `0.11.5`；系统 GTK4 由 Arch 的 `gtk4` 包提供。
-更新 Arch 软件包和 Rust stable 工具链：
-
-```bash
-sudo pacman -Syu
-rustup update stable
-```
-
-## 构建与运行
-
-```bash
-cargo build
-cargo test
-cargo run
-```
-
-`cargo run` 会编译并启动 GTK 应用；在 GNOME Wayland 会话中正常从终端启动即可。传入
-`--background`（或 `-b`）可静默在后台启动而不弹出主窗口。要构建优化后的发布版本，可运行
-`cargo build --release`，生成文件位于 `target/release/wavetune`。如果 GTK 或 libadwaita
-系统依赖缺失，确认 `pkg-config --modversion gtk4` 和 `pkg-config --modversion libadwaita-1`
-能正常输出版本，再重新构建。
-
-## GNOME 右上角快捷面板（Quick Settings）集成
-
-仓库内置适用于 GNOME 45–51 的配套快捷设置扩展 `gnome-shell/wavetune@onlymash.github.com`
-（打包安装时会自动部署到 `/usr/share/gnome-shell/extensions/wavetune@onlymash.github.com`）。
-
-本地开发安装与启用：
+For local installation from source:
 
 ```bash
 ./gnome-shell/install-local.sh
 gnome-extensions enable wavetune@onlymash.github.com
 ```
 
-> 在 Wayland 会话下首次安装新扩展时，若 `gnome-extensions` 尚未索引到该 UUID，重新登录一次桌面会话后再执行 `gnome-extensions enable wavetune@onlymash.github.com` 即可。
+> In a Wayland session, if `gnome-extensions` does not recognize the UUID on first install, log out and back into your desktop session once before running the enable command.
 
-当 WaveTune 连接上受支持的耳机控制通道时，右上角快捷设置面板会自动显示耳机磁贴（点击左侧开关在「开启 ↔ 关闭」降噪间切换，点击右侧箭头查看实时电量、切换一级/二级降噪模式或唤起 WaveTune 主窗口）。默认开启「保持后台运行」（关闭主窗口隐藏到后台，可通过主菜单「退出」或 `Ctrl+Q` 完全退出），并可在首选项中开启「登录时后台自启」。
+When a supported headset is connected, a headset tile appears in the GNOME Quick Settings panel for toggling noise cancellation, checking live battery levels, switching noise-control sub-modes, or opening the main window. "Keep Running in Background" is enabled by default (closing the window hides it to the background; choose "Quit" from the main menu or press `Ctrl+Q` to exit completely), and "Start in Background on Login" can be toggled in Preferences.
 
-## 打包
+## Building from Source
 
-打包配置位于 `packaging/`：
-
-- `packaging/arch/generate.sh` 与 `packaging/arch/publish.sh`：Arch Linux / AUR 打包生成与一键发布脚本，支持维护正式版（`release` -> `packaging/arch/wavetune/`）与开发版（`git` -> `packaging/arch/wavetune-git/`）两套独立的 AUR Git 仓库（生成目录已被主仓库 `.gitignore` 忽略），详见 [`packaging/arch/README.md`](packaging/arch/README.md)。
-- `packaging/debian/`：`.deb` 的 `control` 模板和版权文件。
-- `packaging/install.sh`：两种格式共用的安装文件布局。
-
-使用打包脚本从当前工作区快速打包（包含未提交修改和未被 `.gitignore` 忽略的新文件）：
+Requires `bluez`, `gtk4`, `libadwaita` (`>= 1.9`), `pkgconf`, and the Rust `stable` toolchain. On Arch Linux:
 
 ```bash
-packaging/package.sh            # 有 makepkg 时构建 Arch 包，否则构建 deb
-packaging/package.sh arch       # 仅 Arch 包
-packaging/package.sh git        # wavetune-git，从本地仓库已提交的 HEAD 构建
-packaging/package.sh deb        # 仅 deb（需要 dpkg-deb）
-packaging/package.sh all --no-check
+sudo pacman -S --needed bluez gtk4 libadwaita pkgconf rustup
+rustup default stable
 ```
 
-产物输出到 `target/dist/`，中间文件位于 `target/dist/<格式>/`，不会污染项目根目录。
-`.deb` 链接的是构建主机的 glibc/GTK/libadwaita，发布用的 deb 应在目标 Debian/Ubuntu
-发行版上构建（需要 libadwaita >= 1.9）。发布新版本时，更新 `Cargo.toml` 中的版本号后直接执行
-`packaging/arch/publish.sh release --tag` 即可自动完成打 tag、更新校验和并推送到 AUR。
-
-## OnePlus/OPPO/realme 控制通道连接
-
-确保耳机先在 GNOME 蓝牙设置中配对并连接。应用启动后会自动连接第一台发现的、提供控制服务的
-耳机（若暂未发现，会在后续定期刷新中继续尝试，直到连接或用户手动选择）；也可在设备列表中手动
-选择并切换。未连接控制通道时，四个导航页面均显示空白状态并提示连接耳机。列表会定期及按需刷新。应用不会主动
-配对或连接尚未由 GNOME/BlueZ 连接的设备。候选列表按 BlueZ 耳机类型以及 OPPO/OnePlus/realme
-Bluetooth Company ID（`0x079A` / `0x072F` / `0x08A4`）或已验证的 OPPO 控制服务 UUID 筛选，而不是按
-设备名称筛选；名称只作显示。BlueZ `Modalias` 描述的可能是芯片厂商，不作为耳机品牌依据。
-所有识别出的 OnePlus/OPPO/realme 耳机都可尝试连接；控制通道按 SDP 中的 `ELNK` 服务记录解析，
-不会猜测 RFCOMM 通道。`--probe` 是一次性只读探测，多台设备时无法交互选择：
+Build and run:
 
 ```bash
-cargo run -- --probe
+cargo build --release   # Release binary at target/release/wavetune
+cargo test
+cargo run
 ```
 
-当前静态目录包含 131 个型号：EncoDeck 主目录 85 项、补充目录 46 项；其中 43 个型号含降噪模式树，
-51 个型号声明双设备管理。数据来源、修订版本与导入范围见[协议记录](docs/OPPO_BLUETOOTH_API.md)。
-目录描述型号配置，不代表该型号已通过硬件验证。已知型号可依据目录开放现有功能，具体按钮仍须通过
-耳机能力位图、运行时模式支持清单或双设备开关状态。X4 的 `0x010C` 子类型 3 实测返回空 bitmap，
-故回退到 X4 目录；X3 的 RFCOMM、握手和产品识别已验证，但其设置控制尚未真机验证。未知产品 ID
-只进行握手和产品识别。降噪操作仍需 capability bit 8、至少一耳入耳、成功 ACK 和匹配回读；
-EQ、手势等目录中的其他功能尚未实现。型号兼容配置位于 `src/compatibility/catalog.rs` 和
-`src/compatibility/mod.rs`；不会从 X4 推断其他型号的能力。
+CLI options:
 
-首页降噪模式下方的“设备管理”以列表显示耳机上报的已配对主机，每项依次显示设备 emoji、名称和连接/断开按钮，
-并标记当前电脑。该列表通过 Enco X4 的 `0x0112` 查询和设备列表事件更新；当前会话仅在内存中短暂保留目标蓝牙地址
-以发送用户点击的连接/断开命令，不显示或记录地址，也不导出或持久化。仅当耳机报告双设备连接已启用时开放操作；
-当前电脑不可从此列表断开。写命令需收到耳机 ACK，并通过 `0x0112` 列表回读确认状态。
-已在 OPPO Enco X4 上验证对一台非当前主机断开后立即重连，两个操作均收到 ACK 且列表回读状态一致
-（2026-10-22；本次操作验证未记录耳机固件版本）。
+- `--background` / `-b`: Start silently in the background without opening the main window.
+- `--probe`: Run a one-shot read-only diagnostic query against a connected headset and print a summary.
 
-## 许可证
+## Packaging
 
-GPL-3.0-only。
+Packaging scripts and templates live under `packaging/`:
+
+```bash
+packaging/package.sh            # Build Arch package if makepkg is available, otherwise deb
+packaging/package.sh arch       # Build Arch package from working tree snapshot
+packaging/package.sh git        # Build wavetune-git from local committed HEAD
+packaging/package.sh deb        # Build Debian/Ubuntu .deb package (requires dpkg-deb and libadwaita >= 1.9)
+```
+
+Built packages are written to `target/dist/`. For AUR repository generation and publishing workflows, see [`packaging/arch/README.md`](packaging/arch/README.md).
+
+## Compatibility
+
+The built-in compatibility catalog covers 130+ OPPO, OnePlus, and realme headset models. Supported controls are enabled dynamically based on each headset's reported product ID, capability flags, and model profile; unrecognized models connect in a safe read-only mode limited to handshake and product identification.
+
+## License
+
+GPL-3.0-only
