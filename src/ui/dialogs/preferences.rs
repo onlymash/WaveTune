@@ -75,6 +75,53 @@ pub fn show_preferences_dialog(parent: &impl IsA<gtk::Widget>) {
     });
 
     group.add(&language_row);
+
+    let icon_labels = [
+        crate::t!("pref-app-icon-default"),
+        crate::t!("pref-app-icon-circle"),
+        crate::t!("pref-app-icon-tws"),
+        crate::t!("pref-app-icon-tws-circle"),
+    ];
+    let icon_list =
+        gtk::StringList::new(&icon_labels.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+
+    let current_icon_style = crate::resources::get_configured_icon_style();
+    let initial_icon_index = current_icon_style.to_index();
+
+    let icon_preview = gtk::Image::builder()
+        .icon_name(current_icon_style.icon_name())
+        .pixel_size(32)
+        .build();
+
+    let icon_row = adw::ComboRow::builder()
+        .title(&crate::t!("pref-app-icon"))
+        .subtitle(&crate::t!("pref-app-icon-desc"))
+        .model(&icon_list)
+        .selected(initial_icon_index)
+        .build();
+    icon_row.add_prefix(&icon_preview);
+
+    let initial_icon_selected = std::cell::Cell::new(initial_icon_index);
+    let dialog_weak_for_icon = dialog.downgrade();
+    icon_row.connect_selected_notify(move |row| {
+        let selected = row.selected();
+        if selected == initial_icon_selected.get() {
+            return;
+        }
+        initial_icon_selected.set(selected);
+        let style = crate::resources::AppIconStyle::from_index(selected);
+        icon_preview.set_icon_name(Some(style.icon_name()));
+
+        let message = match crate::resources::set_configured_icon_style(style) {
+            Ok(()) => crate::t!("pref-app-icon-applied-hint"),
+            Err(err) => crate::t!("pref-app-icon-apply-failed", err),
+        };
+        if let Some(dialog) = dialog_weak_for_icon.upgrade() {
+            dialog.add_toast(adw::Toast::new(&message));
+        }
+    });
+
+    group.add(&icon_row);
     page.add(&group);
     dialog.add(&page);
 

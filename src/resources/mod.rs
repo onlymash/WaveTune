@@ -15,11 +15,216 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::{fs, io, path::PathBuf, sync::mpsc::Sender, thread, time::Duration};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::mpsc::Sender,
+    thread,
+    time::{Duration, SystemTime},
+};
 
 use crate::app::events::UiUpdate;
 
 const GENERIC_HEADSET_SVG_TEMPLATE: &str = include_str!("../../assets/images/generic_headset.svg");
+const APP_ICON_DEFAULT_SVG: &str =
+    include_str!("../../assets/icons/io.github.onlymash.WaveTune.svg");
+const APP_ICON_CIRCLE_SVG: &str =
+    include_str!("../../assets/icons/io.github.onlymash.WaveTune-circle.svg");
+const APP_ICON_TWS_SVG: &str =
+    include_str!("../../assets/icons/io.github.onlymash.WaveTune-tws.svg");
+const APP_ICON_TWS_CIRCLE_SVG: &str =
+    include_str!("../../assets/icons/io.github.onlymash.WaveTune-tws-circle.svg");
+const APP_ICON_SYMBOLIC_SVG: &str =
+    include_str!("../../assets/icons/io.github.onlymash.WaveTune-symbolic.svg");
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AppIconStyle {
+    #[default]
+    Default,
+    Circle,
+    Tws,
+    TwsCircle,
+}
+
+impl AppIconStyle {
+    pub const ALL: [Self; 4] = [Self::Default, Self::Circle, Self::Tws, Self::TwsCircle];
+
+    pub fn from_config_str(value: &str) -> Self {
+        match value.trim() {
+            "circle" => Self::Circle,
+            "tws" => Self::Tws,
+            "tws-circle" => Self::TwsCircle,
+            _ => Self::Default,
+        }
+    }
+
+    pub fn as_config_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Circle => "circle",
+            Self::Tws => "tws",
+            Self::TwsCircle => "tws-circle",
+        }
+    }
+
+    pub fn from_index(index: u32) -> Self {
+        match index {
+            1 => Self::Circle,
+            2 => Self::Tws,
+            3 => Self::TwsCircle,
+            _ => Self::Default,
+        }
+    }
+
+    pub fn to_index(self) -> u32 {
+        match self {
+            Self::Default => 0,
+            Self::Circle => 1,
+            Self::Tws => 2,
+            Self::TwsCircle => 3,
+        }
+    }
+
+    pub fn icon_name(self) -> &'static str {
+        match self {
+            Self::Default => "io.github.onlymash.WaveTune",
+            Self::Circle => "io.github.onlymash.WaveTune-circle",
+            Self::Tws => "io.github.onlymash.WaveTune-tws",
+            Self::TwsCircle => "io.github.onlymash.WaveTune-tws-circle",
+        }
+    }
+
+    pub fn svg_content(self) -> &'static str {
+        match self {
+            Self::Default => APP_ICON_DEFAULT_SVG,
+            Self::Circle => APP_ICON_CIRCLE_SVG,
+            Self::Tws => APP_ICON_TWS_SVG,
+            Self::TwsCircle => APP_ICON_TWS_CIRCLE_SVG,
+        }
+    }
+}
+
+fn config_file_path() -> PathBuf {
+    gtk::glib::user_config_dir()
+        .join("wavetune")
+        .join("settings.ini")
+}
+
+pub fn get_configured_icon_style() -> AppIconStyle {
+    let path = config_file_path();
+    if !path.exists() {
+        return AppIconStyle::Default;
+    }
+    let keyfile = gtk::glib::KeyFile::new();
+    if keyfile
+        .load_from_file(&path, gtk::glib::KeyFileFlags::NONE)
+        .is_ok()
+    {
+        if let Ok(value) = keyfile.string("General", "icon_style") {
+            return AppIconStyle::from_config_str(&value);
+        }
+    }
+    AppIconStyle::Default
+}
+
+fn write_if_changed(path: &Path, content: &str) -> io::Result<()> {
+    let needs_write = match fs::read_to_string(path) {
+        Ok(existing) => existing != content,
+        Err(_) => true,
+    };
+    if needs_write {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(path, content)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn apply_user_icon_override_to_dir(
+    data_dir: &Path,
+    style: AppIconStyle,
+) -> io::Result<()> {
+    let hicolor_dir = data_dir.join("icons").join("hicolor");
+    let target_svg = hicolor_dir
+        .join("scalable")
+        .join("apps")
+        .join("io.github.onlymash.WaveTune.svg");
+
+    match style {
+        AppIconStyle::Default => {
+            if target_svg.exists() {
+                fs::remove_file(&target_svg)?;
+            }
+        }
+        AppIconStyle::Circle | AppIconStyle::Tws | AppIconStyle::TwsCircle => {
+            write_if_changed(&target_svg, style.svg_content())?;
+        }
+    }
+
+    if hicolor_dir.exists() {
+        if let Ok(dir_file) = fs::File::open(&hicolor_dir) {
+            let _ = dir_file.set_modified(SystemTime::now());
+        }
+        if hicolor_dir.join("index.theme").exists() || hicolor_dir.join("icon-theme.cache").exists()
+        {
+            let _ = Command::new("gtk-update-icon-cache")
+                .args(["-f", "-q"])
+                .arg(&hicolor_dir)
+                .status();
+        }
+    }
+
+    Ok(())
+}
+
+pub fn set_configured_icon_style(style: AppIconStyle) -> io::Result<()> {
+    let path = config_file_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let keyfile = gtk::glib::KeyFile::new();
+    let _ = keyfile.load_from_file(&path, gtk::glib::KeyFileFlags::NONE);
+    keyfile.set_string("General", "icon_style", style.as_config_str());
+    let _ = keyfile.save_to_file(&path);
+
+    apply_user_icon_override_to_dir(&gtk::glib::user_data_dir(), style)?;
+    gtk::Window::set_default_icon_name(style.icon_name());
+    Ok(())
+}
+
+pub fn init_app_icons() {
+    let icon_search_root = gtk::glib::user_cache_dir().join("wavetune").join("icons");
+    let scalable_dir = icon_search_root
+        .join("hicolor")
+        .join("scalable")
+        .join("apps");
+    let symbolic_dir = icon_search_root
+        .join("hicolor")
+        .join("symbolic")
+        .join("apps");
+
+    for style in AppIconStyle::ALL {
+        let path = scalable_dir.join(format!("{}.svg", style.icon_name()));
+        let _ = write_if_changed(&path, style.svg_content());
+    }
+    let _ = write_if_changed(
+        &symbolic_dir.join("io.github.onlymash.WaveTune-symbolic.svg"),
+        APP_ICON_SYMBOLIC_SVG,
+    );
+
+    if let Some(display) = gtk::gdk::Display::default() {
+        let theme = gtk::IconTheme::for_display(&display);
+        theme.add_search_path(&icon_search_root);
+    }
+
+    let style = get_configured_icon_style();
+    if style != AppIconStyle::Default {
+        let _ = apply_user_icon_override_to_dir(&gtk::glib::user_data_dir(), style);
+    }
+    gtk::Window::set_default_icon_name(style.icon_name());
+}
 
 pub fn cache_dir() -> PathBuf {
     let wavetune_path = gtk::glib::user_cache_dir().join("wavetune").join("devices");
@@ -378,6 +583,51 @@ mod tests {
         assert!(dark_path.exists());
         let meta_dark = fs::metadata(&dark_path).expect("should read metadata");
         assert!(meta_dark.len() > 0);
+    }
+
+    #[test]
+    fn app_icon_style_round_trips_and_writes_user_hicolor_override() {
+        for (idx, style) in AppIconStyle::ALL.into_iter().enumerate() {
+            assert_eq!(style.to_index(), idx as u32);
+            assert_eq!(AppIconStyle::from_index(idx as u32), style);
+            assert_eq!(AppIconStyle::from_config_str(style.as_config_str()), style);
+            assert!(style.svg_content().contains("<svg"));
+        }
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "wavetune_icon_test_{}_{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let target_svg = temp_dir
+            .join("icons")
+            .join("hicolor")
+            .join("scalable")
+            .join("apps")
+            .join("io.github.onlymash.WaveTune.svg");
+
+        apply_user_icon_override_to_dir(&temp_dir, AppIconStyle::Circle)
+            .expect("circle override should succeed");
+        assert_eq!(
+            fs::read_to_string(&target_svg).expect("override svg should exist"),
+            AppIconStyle::Circle.svg_content()
+        );
+
+        apply_user_icon_override_to_dir(&temp_dir, AppIconStyle::TwsCircle)
+            .expect("tws-circle override should succeed");
+        assert_eq!(
+            fs::read_to_string(&target_svg).expect("override svg should update"),
+            AppIconStyle::TwsCircle.svg_content()
+        );
+
+        apply_user_icon_override_to_dir(&temp_dir, AppIconStyle::Default)
+            .expect("default cleanup should succeed");
+        assert!(!target_svg.exists());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]

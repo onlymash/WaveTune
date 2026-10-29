@@ -118,6 +118,7 @@ impl ConnectionStateWidgets {
 }
 
 pub fn build(app: &adw::Application) {
+    crate::resources::init_app_icons();
     components::install_styles();
 
     let window = adw::ApplicationWindow::builder()

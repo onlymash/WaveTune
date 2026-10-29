@@ -18,9 +18,12 @@
 use adw::prelude::*;
 
 pub fn show_about_dialog(parent: &impl IsA<gtk::Widget>) {
+    let preferred_icon = crate::resources::get_configured_icon_style().icon_name();
     let icon_name = if let Some(display) = gtk::gdk::Display::default() {
         let theme = gtk::IconTheme::for_display(&display);
-        if theme.has_icon("io.github.onlymash.WaveTune") {
+        if theme.has_icon(preferred_icon) {
+            preferred_icon
+        } else if theme.has_icon("io.github.onlymash.WaveTune") {
             "io.github.onlymash.WaveTune"
         } else {
             "audio-headphones-symbolic"

@@ -57,5 +57,11 @@ install -Dm644 "$root/data/$app.metainfo.xml" \
 # Application icons
 install -Dm644 "$root/assets/icons/$app.svg" \
     "$destdir$prefix/share/icons/hicolor/scalable/apps/$app.svg"
+install -Dm644 "$root/assets/icons/$app-circle.svg" \
+    "$destdir$prefix/share/icons/hicolor/scalable/apps/$app-circle.svg"
+install -Dm644 "$root/assets/icons/$app-tws.svg" \
+    "$destdir$prefix/share/icons/hicolor/scalable/apps/$app-tws.svg"
+install -Dm644 "$root/assets/icons/$app-tws-circle.svg" \
+    "$destdir$prefix/share/icons/hicolor/scalable/apps/$app-tws-circle.svg"
 install -Dm644 "$root/assets/icons/$app-symbolic.svg" \
     "$destdir$prefix/share/icons/hicolor/symbolic/apps/$app-symbolic.svg"
