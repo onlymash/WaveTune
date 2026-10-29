@@ -53,6 +53,7 @@ use super::{
         QuickSettingsService, build_snapshot, is_non_off_writable_mode, resolve_toggle_target,
     },
     device_manager::{start_device_discovery, start_monitor_for_device},
+    tray_service::TrayService,
 };
 
 #[derive(Default)]
@@ -70,13 +71,14 @@ struct QuickSettingsControllerState {
     modes: Vec<crate::compatibility::NoiseMode>,
 }
 
-fn sync_quick_settings(
-    service: &Option<Rc<QuickSettingsService>>,
+fn sync_desktop_services(
+    quick_settings: &Option<Rc<QuickSettingsService>>,
+    tray: &Option<Rc<TrayService>>,
     state: &RefCell<QuickSettingsControllerState>,
 ) {
-    let Some(svc) = service else {
+    if quick_settings.is_none() && tray.is_none() {
         return;
-    };
+    }
     let st = state.borrow();
     let snap = build_snapshot(
         st.connected,
@@ -91,7 +93,12 @@ fn sync_quick_settings(
         &st.modes,
     );
     drop(st);
-    svc.update(snap);
+    if let Some(service) = quick_settings {
+        service.update(snap.clone());
+    }
+    if let Some(tray) = tray {
+        tray.update(snap);
+    }
 }
 
 pub(crate) fn wire_bluetooth_controls(
@@ -101,7 +108,9 @@ pub(crate) fn wire_bluetooth_controls(
     device_widgets: DevicesWidgets,
     connection_state: ConnectionStateWidgets,
     quick_settings: Option<Rc<QuickSettingsService>>,
-    present_window: Rc<dyn Fn()>,
+    tray: Option<Rc<TrayService>>,
+    present_window: Rc<dyn Fn(Option<&str>)>,
+    quit_app: Rc<dyn Fn()>,
 ) {
     let (updates_tx, updates_rx) = mpsc::channel();
     let worker_commands: Rc<RefCell<Option<mpsc::Sender<WorkerCommand>>>> =
@@ -1370,53 +1379,53 @@ pub(crate) fn wire_bluetooth_controls(
         supports_wear_detection: true,
         ..Default::default()
     }));
-    if let Some(ref svc) = quick_settings {
-        let send_mode = {
-            let worker_commands = Rc::clone(&worker_commands);
-            let updates_tx = updates_tx.clone();
-            let noise_buttons = primary_buttons.clone();
-            let noise_row = widgets.noise_option_row.clone();
-            let qs_state = Rc::clone(&qs_state);
-            Rc::new(move |protocol_index: u8| -> Result<(), String> {
-                {
-                    let st = qs_state.borrow();
-                    if !st.connected {
-                        return Err(crate::t!("channel-not-connected"));
-                    }
-                    let worn = !st.supports_wear_detection || st.wear.any_earbud_in_ear();
-                    if !worn {
-                        return Err(crate::t!("wear-earbuds-not-in-ear"));
-                    }
-                    if !st.noise_controls_enabled {
-                        return Err(crate::t!("noise-mode-blocked"));
-                    }
+    let send_mode = {
+        let worker_commands = Rc::clone(&worker_commands);
+        let updates_tx = updates_tx.clone();
+        let noise_buttons = primary_buttons.clone();
+        let noise_row = widgets.noise_option_row.clone();
+        let qs_state = Rc::clone(&qs_state);
+        Rc::new(move |protocol_index: u8| -> Result<(), String> {
+            {
+                let st = qs_state.borrow();
+                if !st.connected {
+                    return Err(crate::t!("channel-not-connected"));
                 }
-                let command_result = worker_commands
-                    .borrow()
-                    .as_ref()
-                    .map(|sender| sender.send(WorkerCommand::SetNoiseMode(protocol_index)));
-                match command_result {
-                    Some(Ok(())) => {
-                        for (_, button) in &noise_buttons {
-                            button.set_sensitive(false);
-                        }
-                        noise_row.set_sensitive(false);
-                        Ok(())
-                    }
-                    Some(Err(error)) => {
-                        let msg = crate::t!("noise-mode-send-failed", error);
-                        let _ = updates_tx.send(UiUpdate::Status(msg.clone()));
-                        Err(msg)
-                    }
-                    None => {
-                        let msg = crate::t!("channel-not-connected");
-                        let _ = updates_tx.send(UiUpdate::Status(msg.clone()));
-                        Err(msg)
-                    }
+                let worn = !st.supports_wear_detection || st.wear.any_earbud_in_ear();
+                if !worn {
+                    return Err(crate::t!("wear-earbuds-not-in-ear"));
                 }
-            })
-        };
+                if !st.noise_controls_enabled {
+                    return Err(crate::t!("noise-mode-blocked"));
+                }
+            }
+            let command_result = worker_commands
+                .borrow()
+                .as_ref()
+                .map(|sender| sender.send(WorkerCommand::SetNoiseMode(protocol_index)));
+            match command_result {
+                Some(Ok(())) => {
+                    for (_, button) in &noise_buttons {
+                        button.set_sensitive(false);
+                    }
+                    noise_row.set_sensitive(false);
+                    Ok(())
+                }
+                Some(Err(error)) => {
+                    let msg = crate::t!("noise-mode-send-failed", error);
+                    let _ = updates_tx.send(UiUpdate::Status(msg.clone()));
+                    Err(msg)
+                }
+                None => {
+                    let msg = crate::t!("channel-not-connected");
+                    let _ = updates_tx.send(UiUpdate::Status(msg.clone()));
+                    Err(msg)
+                }
+            }
+        })
+    };
 
+    if let Some(ref svc) = quick_settings {
         let send_mode_for_set = Rc::clone(&send_mode);
         let send_mode_for_toggle = Rc::clone(&send_mode);
         let qs_state_for_toggle = Rc::clone(&qs_state);
@@ -1439,7 +1448,18 @@ pub(crate) fn wire_bluetooth_controls(
                     None => Err(crate::t!("noise-mode-blocked")),
                 }
             },
-            move || present_window(),
+            move || present_window(None),
+        );
+    }
+
+    if let Some(ref tray_service) = tray {
+        let send_mode_for_tray = Rc::clone(&send_mode);
+        let present_window = Rc::clone(&present_window);
+        let quit_app = Rc::clone(&quit_app);
+        tray_service.set_handlers(
+            move |activation_token| present_window(activation_token),
+            move || quit_app(),
+            move |mode_idx| send_mode_for_tray(mode_idx),
         );
     }
 
@@ -1767,7 +1787,7 @@ pub(crate) fn wire_bluetooth_controls(
                             ..Default::default()
                         };
                     }
-                    sync_quick_settings(&quick_settings, &qs_state);
+                    sync_desktop_services(&quick_settings, &tray, &qs_state);
                     update_noise_controls(
                         &widgets,
                         &noise_mode_indices,
@@ -1873,7 +1893,7 @@ pub(crate) fn wire_bluetooth_controls(
                             .set_text(&crate::t!("wear-status-not-supported"));
                     }
                     qs_state.borrow_mut().supports_wear_detection = supports_wear_detection;
-                    sync_quick_settings(&quick_settings, &qs_state);
+                    sync_desktop_services(&quick_settings, &tray, &qs_state);
                     let supports_dual_device =
                         profile.is_some_and(|profile| profile.supports_dual_device);
                     widgets
@@ -2037,7 +2057,7 @@ pub(crate) fn wire_bluetooth_controls(
                         &updating_noise_option_selector,
                     );
                     qs_state.borrow_mut().wear = wear.clone();
-                    sync_quick_settings(&quick_settings, &qs_state);
+                    sync_desktop_services(&quick_settings, &tray, &qs_state);
                 }
                 Ok(UiUpdate::Battery(update)) => {
                     if update.case.is_some() {
@@ -2054,7 +2074,7 @@ pub(crate) fn wire_bluetooth_controls(
                         st.battery = battery.clone();
                         st.case_battery_stale = case_battery_is_stale;
                     }
-                    sync_quick_settings(&quick_settings, &qs_state);
+                    sync_desktop_services(&quick_settings, &tray, &qs_state);
                 }
                 Ok(UiUpdate::PairedDevices(result)) => {
                     paired_devices = result.clone();
@@ -2128,7 +2148,7 @@ pub(crate) fn wire_bluetooth_controls(
                             st.last_non_off_mode = Some(index);
                         }
                     }
-                    sync_quick_settings(&quick_settings, &qs_state);
+                    sync_desktop_services(&quick_settings, &tray, &qs_state);
                 }
                 Ok(UiUpdate::NoiseControlsEnabled(enabled)) => {
                     noise_controls_enabled = enabled;
@@ -2144,7 +2164,7 @@ pub(crate) fn wire_bluetooth_controls(
                         &updating_noise_option_selector,
                     );
                     qs_state.borrow_mut().noise_controls_enabled = enabled && connected;
-                    sync_quick_settings(&quick_settings, &qs_state);
+                    sync_desktop_services(&quick_settings, &tray, &qs_state);
                 }
                 Ok(UiUpdate::NoiseModeOptions {
                     indices,
@@ -2175,7 +2195,7 @@ pub(crate) fn wire_bluetooth_controls(
                             st.last_non_off_mode = Some(idx);
                         }
                     }
-                    sync_quick_settings(&quick_settings, &qs_state);
+                    sync_desktop_services(&quick_settings, &tray, &qs_state);
                 }
                 Ok(UiUpdate::SoundFeatures {
                     supports_equalizer,
@@ -2542,7 +2562,7 @@ pub(crate) fn wire_bluetooth_controls(
                         *connected_device_for_updates.borrow_mut() = None;
                     }
                     *qs_state.borrow_mut() = QuickSettingsControllerState::default();
-                    sync_quick_settings(&quick_settings, &qs_state);
+                    sync_desktop_services(&quick_settings, &tray, &qs_state);
                     widgets
                         .connection_tag
                         .set_text(&crate::t!("common-disconnected"));

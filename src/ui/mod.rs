@@ -120,6 +120,7 @@ impl ConnectionStateWidgets {
 pub fn build(
     app: &adw::Application,
     quick_settings: Option<std::rc::Rc<crate::app::dbus_service::QuickSettingsService>>,
+    tray: Option<std::rc::Rc<crate::app::tray_service::TrayService>>,
 ) -> adw::ApplicationWindow {
     crate::resources::init_app_icons();
     components::install_styles();
@@ -351,9 +352,20 @@ pub fn build(
     }
 
     let window_weak_for_present = window.downgrade();
-    let present_window = std::rc::Rc::new(move || {
-        if let Some(win) = window_weak_for_present.upgrade() {
-            win.present();
+    let present_window: std::rc::Rc<dyn Fn(Option<&str>)> =
+        std::rc::Rc::new(move |activation_token| {
+            if let Some(win) = window_weak_for_present.upgrade() {
+                if let Some(token) = activation_token {
+                    win.set_startup_id(token);
+                }
+                win.present();
+            }
+        });
+
+    let app_weak_for_quit = app.downgrade();
+    let quit_app: std::rc::Rc<dyn Fn()> = std::rc::Rc::new(move || {
+        if let Some(app) = app_weak_for_quit.upgrade() {
+            app.quit();
         }
     });
 
@@ -364,7 +376,9 @@ pub fn build(
         device_widgets,
         connection_state,
         quick_settings,
+        tray,
         present_window,
+        quit_app,
     );
 
     window

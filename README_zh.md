@@ -12,7 +12,7 @@
 - **噪声控制**：支持主动降噪（多档降噪深度）、通透模式（含人声增强）与自适应降噪切换。
 - **音质与音效**：支持内置调音预设切换、自定义多段均衡器（EQ）、空间音频（固定 / 头部追踪）以及低延迟游戏模式。
 - **触控与实用工具**：支持自定义左右耳触控与通话手势、长按降噪循环模式、双设备连接与已配对主机切换、入耳检测、入睡检测、耳塞贴合度检测、查找耳机及提示音音量调节（具体可用功能视耳机型号而定）。
-- **桌面集成**：原生 GTK4 / Libadwaita 自适应界面，内置中英双语与多款应用图标样式切换，支持后台常驻、登录静默自启，并提供配套 GNOME Shell 右上角快捷面板（Quick Settings）扩展（支持 GNOME 45–51）。
+- **桌面集成**：原生 GTK4 / Libadwaita 自适应界面，内置中英双语与多款应用图标样式切换，支持后台常驻与 StatusNotifierItem 系统托盘、登录静默自启，并提供配套 GNOME Shell 右上角快捷面板（Quick Settings）扩展（支持 GNOME 45–51）。
 
 ## 安装
 
@@ -54,6 +54,12 @@ gnome-extensions enable wavetune@onlymash.github.com
 > Wayland 会话下首次安装新扩展时，若 `gnome-extensions` 尚未识别该 UUID，重新登录一次桌面会话后再执行启用命令即可。
 
 连接受支持的耳机后，右上角快捷设置面板会自动显示耳机磁贴，支持一键开关降噪、查看实时电量、切换降噪子模式或唤起主窗口。应用默认开启「保持后台运行」（关闭窗口隐藏至后台，可通过主菜单「退出」或 `Ctrl+Q` 完全退出），并可在首选项中开启「登录时后台自启」。
+
+## 系统托盘
+
+WaveTune 运行期间会在会话总线上导出 StatusNotifierItem 与 DBusMenu，因此主窗口隐藏到后台后仍可通过托盘访问。托盘使用单色 `io.github.onlymash.WaveTune-symbolic` 图标，提供打开主窗口、查看设备与电量信息、切换降噪模式（需耳机已佩戴且控制可用）以及退出应用等菜单项。
+
+GNOME 默认不提供系统托盘，请安装 [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) 扩展。KDE Plasma、XFCE、Waybar（Sway/Hyprland/Niri）、COSMIC 等支持 StatusNotifierItem 的桌面环境无需额外软件即可显示。该实现复用现有的 `gio::DBusConnection`，不增加任何运行时或构建依赖。
 
 ## 从源码构建
 

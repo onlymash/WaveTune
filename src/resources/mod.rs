@@ -37,6 +37,24 @@ const APP_ICON_TWS_CIRCLE_SVG: &str =
     include_str!("../../assets/icons/io.github.onlymash.WaveTune-tws-circle.svg");
 const APP_ICON_SYMBOLIC_SVG: &str =
     include_str!("../../assets/icons/io.github.onlymash.WaveTune-symbolic.svg");
+const APP_ICON_THEME_INDEX: &str = "\
+[Icon Theme]
+Name=Hicolor
+Comment=WaveTune application icons
+Directories=scalable/apps,symbolic/apps
+
+[scalable/apps]
+Size=48
+Type=Scalable
+MinSize=1
+MaxSize=512
+
+[symbolic/apps]
+Size=16
+Type=Scalable
+MinSize=1
+MaxSize=512
+";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AppIconStyle {
@@ -297,8 +315,16 @@ pub fn set_configured_icon_style(style: AppIconStyle) -> io::Result<()> {
     Ok(())
 }
 
-pub fn init_app_icons() {
-    let icon_search_root = gtk::glib::user_cache_dir().join("wavetune").join("icons");
+pub(crate) fn app_icon_cache_root() -> PathBuf {
+    gtk::glib::user_cache_dir().join("wavetune").join("icons")
+}
+
+/// Writes the application icons into the private cache icon theme and returns its search root.
+///
+/// The system tray exports this path as `IconThemePath`, so it must be populated even when the
+/// GTK icon theme is not available yet (for example while `TrayService` is being constructed).
+pub(crate) fn ensure_app_icon_cache() -> PathBuf {
+    let icon_search_root = app_icon_cache_root();
     let scalable_dir = icon_search_root
         .join("hicolor")
         .join("scalable")
@@ -307,6 +333,10 @@ pub fn init_app_icons() {
         .join("hicolor")
         .join("symbolic")
         .join("apps");
+    let _ = write_if_changed(
+        &icon_search_root.join("hicolor").join("index.theme"),
+        APP_ICON_THEME_INDEX,
+    );
 
     for style in AppIconStyle::ALL {
         let path = scalable_dir.join(format!("{}.svg", style.icon_name()));
@@ -316,6 +346,12 @@ pub fn init_app_icons() {
         &symbolic_dir.join("io.github.onlymash.WaveTune-symbolic.svg"),
         APP_ICON_SYMBOLIC_SVG,
     );
+
+    icon_search_root
+}
+
+pub fn init_app_icons() {
+    let icon_search_root = ensure_app_icon_cache();
 
     if let Some(display) = gtk::gdk::Display::default() {
         let theme = gtk::IconTheme::for_display(&display);

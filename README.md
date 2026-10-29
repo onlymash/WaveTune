@@ -12,7 +12,7 @@ An unofficial multi-brand wireless headset control center for the Linux desktop 
 - **Noise Control**: Switch between Active Noise Cancellation (with multi-level intensity), Transparency mode (including Vocal Enhancement), and Adaptive noise control.
 - **Sound & Audio Effects**: Built-in sound presets, custom multi-band Equalizer (EQ), Spatial Audio (Fixed / Head Tracking), and low-latency Game Mode.
 - **Controls & Utilities**: Customize left/right touch and call gestures, long-press noise-control cycling, dual-device connection and paired-host switching, in-ear auto-pause, sleep detection, earbud fit test, Find My Earbuds, and prompt volume adjustment (available features depend on headset model).
-- **Desktop Integration**: Native GTK4 / Libadwaita UI with English/Chinese localization, selectable app icon styles, background mode and silent login autostart, plus a companion GNOME Shell Quick Settings extension (GNOME 45–51).
+- **Desktop Integration**: Native GTK4 / Libadwaita UI with English/Chinese localization, selectable app icon styles, background mode with a StatusNotifierItem system tray, silent login autostart, plus a companion GNOME Shell Quick Settings extension (GNOME 45–51).
 
 ## Installation
 
@@ -54,6 +54,12 @@ gnome-extensions enable wavetune@onlymash.github.com
 > In a Wayland session, if `gnome-extensions` does not recognize the UUID on first install, log out and back into your desktop session once before running the enable command.
 
 When a supported headset is connected, a headset tile appears in the GNOME Quick Settings panel for toggling noise cancellation, checking live battery levels, switching noise-control sub-modes, or opening the main window. "Keep Running in Background" is enabled by default (closing the window hides it to the background; choose "Quit" from the main menu or press `Ctrl+Q` to exit completely), and "Start in Background on Login" can be toggled in Preferences.
+
+## System Tray
+
+While WaveTune is running it exports a StatusNotifierItem and DBusMenu on the session bus, so the app remains reachable after its window is hidden to the background. The tray uses the monochrome `io.github.onlymash.WaveTune-symbolic` icon and offers opening the main window, live device/battery information, noise-mode switching (when the headset is worn and controls are available), and quitting.
+
+GNOME does not provide a system tray by default; install the [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/) extension. KDE Plasma, XFCE, Waybar (Sway/Hyprland/Niri), COSMIC, and other StatusNotifierItem hosts consume the same protocol without additional software. The implementation reuses the existing `gio::DBusConnection`, so it adds no runtime or build dependencies.
 
 ## Building from Source
 

@@ -62,8 +62,8 @@ OPPO 协议依据见 [OPPO 蓝牙 API 记录](OPPO_BLUETOOTH_API.md)。协议为
   Edifier 等多品牌耳机建立了清晰的可扩展边界。
 - 已完成控制页面（Controls Page）完整功能移植：
   包括左右耳手势触控定制（单击/双击/三击/长按/滑动/通话控制）、长按噪声控制模式循环（Noise Cycle）、双设备连接开关与首选连接设备下拉（Preferred Device）、佩戴检测自动暂停恢复开关、入睡检测开关、头部动作接听控制、耳机实用工具（查找耳机铃声播放与入耳防伤耳警告弹窗、耳塞贴合度气密性测试 Fit Test）以及提示音音量滑块防抖控制。相关协议编解码、后台会话轮询、UI 控件生命周期与回读门控均已完整贯通并通过单元测试。
-- 已完成后台驻留与 GNOME 快捷设置面板（Quick Settings）集成：
-  应用支持 `--background` 静默启动、关闭主窗口隐藏驻留（`Ctrl+Q` / 主菜单完全退出）及可选登录后台自启，并在耳机断开后重新武装自动重连；通过内置 `gtk::gio` 在 Session D-Bus（`io.github.onlymash.WaveTune` -> `/io/github/onlymash/WaveTune/QuickSettings`）暴露经确认的只读设备状态与降噪切换方法（不含任何蓝牙地址等隐私信息）；配套 GNOME 45–51 ESM 扩展 `wavetune@onlymash.github.com` 以非乐观更新方式集成到右上角快捷面板，并随打包脚本一并分发。
+- 已完成后台驻留、系统托盘与 GNOME 快捷设置面板（Quick Settings）集成：
+  应用支持 `--background` 静默启动、关闭主窗口隐藏驻留（`Ctrl+Q` / 主菜单完全退出）及可选登录后台自启，并在耳机断开后重新武装自动重连；通过内置 `gtk::gio` 在 Session D-Bus（`io.github.onlymash.WaveTune` -> `/io/github/onlymash/WaveTune/QuickSettings`）暴露经确认的只读设备状态与降噪切换方法（不含任何蓝牙地址等隐私信息）；同时导出 StatusNotifierItem（`/StatusNotifierItem`）与 DBusMenu（`/io/github/onlymash/WaveTune/Menu`），在后台模式下提供单色符号托盘图标、设备/电量摘要、受佩戴门控的降噪切换及打开/退出菜单项，兼容 GNOME AppIndicator 扩展、KDE Plasma、XFCE、Waybar 等 SNI 宿主；配套 GNOME 45–51 ESM 扩展 `wavetune@onlymash.github.com` 以非乐观更新方式集成到右上角快捷面板，并随打包脚本一并分发。
 
 ## 首版明确不做
 
@@ -158,7 +158,7 @@ Linux Bluetooth adapter (BlueZ D-Bus + RFCOMM socket / SDP)
 - 提供连接错误、缺少系统依赖和权限不足的可操作提示；关闭窗口、取消异步任务与释放
   socket 的生命周期清晰。
 - 添加键盘导航、无障碍标签、系统深浅色适配和至少简体中文/英文文本资源。
-- 评估托盘/后台常驻是否属于首版；Linux 桌面环境对托盘支持不一致，需以可选功能处理。
+- 托盘/后台常驻已完成：基于现有 `gio::DBusConnection` 导出 StatusNotifierItem + DBusMenu，复用降噪写入门控与后台会话状态；GNOME 需安装 AppIndicator and KStatusNotifierItem Support 扩展，其他 SNI 桌面原生兼容。
 
 **完成标准：** 连续断连/重连无死锁、重复订阅或后台泄漏；桌面主循环保持响应。
 
@@ -196,4 +196,4 @@ Linux Bluetooth adapter (BlueZ D-Bus + RFCOMM socket / SDP)
 ## 建议开发顺序
 
 先完成里程碑 0 的 Linux 蓝牙最小验证，再进入协议核心和只读 MVP。设置控制根据型号兼容配置、
-设备能力和支持列表开放；其他型号、复杂 EQ/手势配置及托盘常驻留到后续版本。
+设备能力和支持列表开放；其他型号、复杂 EQ/手势配置留到后续版本。
