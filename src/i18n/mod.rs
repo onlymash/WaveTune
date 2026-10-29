@@ -213,6 +213,18 @@ impl ToFluentValue for &std::io::Error {
     }
 }
 
+impl ToFluentValue for crate::protocol::OppoProtocolError {
+    fn to_fluent_value(&self) -> FluentValue<'static> {
+        FluentValue::from(self.to_string())
+    }
+}
+
+impl ToFluentValue for &crate::protocol::OppoProtocolError {
+    fn to_fluent_value(&self) -> FluentValue<'static> {
+        FluentValue::from(self.to_string())
+    }
+}
+
 macro_rules! impl_to_fluent_value_num {
     ($($t:ty),*) => {
         $(

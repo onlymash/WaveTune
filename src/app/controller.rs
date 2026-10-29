@@ -27,7 +27,7 @@ use adw::prelude::*;
 use gtk::{Button, Label};
 
 use crate::{
-    app::events::{UiUpdate, WorkerCommand},
+    app::events::{SettingDomain, UiUpdate, WorkerCommand},
     bluetooth,
     compatibility::{EqualizerPreset, GestureRow},
     protocol::{
@@ -198,12 +198,16 @@ pub(crate) fn wire_bluetooth_controls(
                 match command_result {
                     Some(Ok(())) => {}
                     Some(Err(error)) => {
-                        let _ = updates_tx
-                            .send(UiUpdate::Status(crate::t!("noise-mode-send-failed", error)));
+                        let _ = updates_tx.send(UiUpdate::SettingError {
+                            domain: SettingDomain::NoiseMode,
+                            message: crate::t!("noise-mode-send-failed", error),
+                        });
                     }
                     None => {
-                        let _ =
-                            updates_tx.send(UiUpdate::Status(crate::t!("channel-not-connected")));
+                        let _ = updates_tx.send(UiUpdate::SettingError {
+                            domain: SettingDomain::NoiseMode,
+                            message: crate::t!("channel-not-connected"),
+                        });
                     }
                 }
             });
@@ -356,16 +360,22 @@ pub(crate) fn wire_bluetooth_controls(
                 return;
             }
             let mut max_num = 0;
+            let localized_prefix = crate::t!("equalizer-custom-default-prefix");
             for p in existing.iter() {
-                if let Some(rest) = p.name.strip_prefix("自定义") {
-                    if let Ok(n) = rest.parse::<usize>() {
+                if let Some(rest) = p
+                    .name
+                    .strip_prefix(localized_prefix.as_str())
+                    .or_else(|| p.name.strip_prefix("自定义"))
+                    .or_else(|| p.name.strip_prefix("Custom"))
+                {
+                    if let Ok(n) = rest.trim().parse::<usize>() {
                         if n > max_num {
                             max_num = n;
                         }
                     }
                 }
             }
-            let default_name = format!("自定义{}", max_num + 1);
+            let default_name = crate::t!("equalizer-custom-default-name", max_num + 1);
             drop(existing);
 
             let worker_commands = Rc::clone(&worker_commands);
@@ -416,13 +426,16 @@ pub(crate) fn wire_bluetooth_controls(
                     );
                 }
                 Some(Err(error)) => {
-                    let _ = updates_tx.send(UiUpdate::Status(crate::t!(
-                        "spatial-audio-send-failed",
-                        error
-                    )));
+                    let _ = updates_tx.send(UiUpdate::SettingError {
+                        domain: SettingDomain::SpatialAudio,
+                        message: crate::t!("spatial-audio-send-failed", error),
+                    });
                 }
                 None => {
-                    let _ = updates_tx.send(UiUpdate::Status(crate::t!("channel-not-connected")));
+                    let _ = updates_tx.send(UiUpdate::SettingError {
+                        domain: SettingDomain::SpatialAudio,
+                        message: crate::t!("channel-not-connected"),
+                    });
                 }
             }
         });
@@ -497,12 +510,16 @@ pub(crate) fn wire_bluetooth_controls(
                         switch.set_sensitive(false);
                     }
                     Some(Err(error)) => {
-                        let _ = updates_tx
-                            .send(UiUpdate::Status(crate::t!("game-mode-send-failed", error)));
+                        let _ = updates_tx.send(UiUpdate::SettingError {
+                            domain: SettingDomain::GameMode,
+                            message: crate::t!("game-mode-send-failed", error),
+                        });
                     }
                     None => {
-                        let _ =
-                            updates_tx.send(UiUpdate::Status(crate::t!("channel-not-connected")));
+                        let _ = updates_tx.send(UiUpdate::SettingError {
+                            domain: SettingDomain::GameMode,
+                            message: crate::t!("channel-not-connected"),
+                        });
                     }
                 }
                 gtk::glib::Propagation::Stop
@@ -1531,25 +1548,13 @@ pub(crate) fn wire_bluetooth_controls(
                     device_widgets
                         .connection
                         .set_text(&crate::t!("common-status", message));
-                    let is_err = message.contains("失败")
-                        || message.contains("无法")
-                        || message.to_ascii_lowercase().contains("failed")
-                        || message.to_ascii_lowercase().contains("error");
-                    if is_err {
-                        let is_eq = message.contains("均衡器")
-                            || message.to_ascii_lowercase().contains("equalizer");
-                        let is_spatial = message.contains("空间音频")
-                            || message.to_ascii_lowercase().contains("spatial");
-                        let is_game = message.contains("游戏模式")
-                            || message.to_ascii_lowercase().contains("game");
-                        let is_bass = message.contains("低音")
-                            || message.to_ascii_lowercase().contains("bass");
-                        let is_hires = message.contains("高解析")
-                            || message.to_ascii_lowercase().contains("hires")
-                            || message.to_ascii_lowercase().contains("hi-res");
-                        let is_noise = message.contains("降噪")
-                            || message.to_ascii_lowercase().contains("noise mode");
-                        if is_noise {
+                }
+                Ok(UiUpdate::SettingError { domain, message }) => {
+                    device_widgets
+                        .connection
+                        .set_text(&crate::t!("common-status", message));
+                    match domain {
+                        SettingDomain::NoiseMode => {
                             update_noise_controls(
                                 &widgets,
                                 &noise_mode_indices,
@@ -1561,7 +1566,8 @@ pub(crate) fn wire_bluetooth_controls(
                                 &noise_modes,
                                 &updating_noise_option_selector,
                             );
-                        } else if is_eq {
+                        }
+                        SettingDomain::Equalizer => {
                             update_equalizer(
                                 &widgets,
                                 current_eq_preset.get(),
@@ -1573,7 +1579,8 @@ pub(crate) fn wire_bluetooth_controls(
                                 current_eq_preset.get(),
                                 &updating_sound_eq,
                             );
-                        } else if is_spatial {
+                        }
+                        SettingDomain::SpatialAudio => {
                             update_spatial_audio(
                                 &widgets,
                                 current_spatial_mode.get(),
@@ -1587,7 +1594,8 @@ pub(crate) fn wire_bluetooth_controls(
                                 current_spatial_mode.get(),
                                 &updating_sound_spatial,
                             );
-                        } else if is_game {
+                        }
+                        SettingDomain::GameMode => {
                             update_game_mode(
                                 &widgets,
                                 current_game_mode.get(),
@@ -1596,7 +1604,8 @@ pub(crate) fn wire_bluetooth_controls(
                             widgets
                                 .game_mode_switch
                                 .set_sensitive(current_supports_game_mode.get());
-                        } else if is_bass {
+                        }
+                        SettingDomain::BassEngine => {
                             if let Some(enabled) = current_bass_engine_enabled.get() {
                                 sound_state::update_sound_page_bass_enabled(
                                     &sound_widgets,
@@ -1617,7 +1626,8 @@ pub(crate) fn wire_bluetooth_controls(
                             sound_widgets
                                 .bass_switch_row
                                 .set_sensitive(current_supports_bass_engine.get());
-                        } else if is_hires {
+                        }
+                        SettingDomain::HiRes => {
                             if let Some(enabled) = current_hi_res_enabled.get() {
                                 sound_state::update_sound_page_hi_res(
                                     &sound_widgets,
@@ -1632,29 +1642,30 @@ pub(crate) fn wire_bluetooth_controls(
                                 .hires_switch_row
                                 .set_sensitive(current_supports_hi_res.get());
                         }
-
-                        for (_, combo) in &controls_widgets.gesture_combos {
-                            combo.set_sensitive(true);
-                        }
-                        controls_widgets.cycle_check_anc.set_sensitive(true);
-                        controls_widgets
-                            .cycle_check_transparency
-                            .set_sensitive(true);
-                        controls_widgets.cycle_check_off.set_sensitive(true);
-                        controls_widgets.find_btn.set_sensitive(true);
-                        controls_widgets.fit_btn.set_sensitive(true);
-                        controls_widgets.dual_switch.set_sensitive(true);
-                        controls_widgets.dual_row.set_sensitive(true);
-                        controls_widgets.in_ear_switch.set_sensitive(true);
-                        controls_widgets.in_ear_row.set_sensitive(true);
-                        controls_widgets.sleep_switch.set_sensitive(true);
-                        controls_widgets.sleep_row.set_sensitive(true);
-                        controls_widgets.head_switch.set_sensitive(true);
-                        controls_widgets.head_switch_row.set_sensitive(true);
-                        controls_widgets.head_motion_row.set_sensitive(true);
-                        controls_widgets.preferred_row.set_sensitive(true);
-                        controls_widgets.prompt_volume_scale.set_sensitive(true);
+                        SettingDomain::Controls => {}
                     }
+
+                    for (_, combo) in &controls_widgets.gesture_combos {
+                        combo.set_sensitive(true);
+                    }
+                    controls_widgets.cycle_check_anc.set_sensitive(true);
+                    controls_widgets
+                        .cycle_check_transparency
+                        .set_sensitive(true);
+                    controls_widgets.cycle_check_off.set_sensitive(true);
+                    controls_widgets.find_btn.set_sensitive(true);
+                    controls_widgets.fit_btn.set_sensitive(true);
+                    controls_widgets.dual_switch.set_sensitive(true);
+                    controls_widgets.dual_row.set_sensitive(true);
+                    controls_widgets.in_ear_switch.set_sensitive(true);
+                    controls_widgets.in_ear_row.set_sensitive(true);
+                    controls_widgets.sleep_switch.set_sensitive(true);
+                    controls_widgets.sleep_row.set_sensitive(true);
+                    controls_widgets.head_switch.set_sensitive(true);
+                    controls_widgets.head_switch_row.set_sensitive(true);
+                    controls_widgets.head_motion_row.set_sensitive(true);
+                    controls_widgets.preferred_row.set_sensitive(true);
+                    controls_widgets.prompt_volume_scale.set_sensitive(true);
                 }
                 Ok(UiUpdate::Devices(result)) => {
                     scanning_for_updates.set(false);

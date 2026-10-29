@@ -46,9 +46,32 @@ configured control service for the connected model. An Enco X4 SDP record does n
 The reference app expects the headset to have already been paired and connected by the operating
 system (ACL link); it does not page/connect a disconnected headset itself. On Linux, a suitable
 implementation is to use BlueZ D-Bus for paired-device discovery and connection state, then a
-Linux RFCOMM socket for the control channel. SDP lookup is needed to resolve a channel unless an
-explicit, device-tested channel is configured. These are Linux integration decisions, not
-vendor-defined API requirements.
+Linux RFCOMM socket for the control channel.
+
+### RFCOMM channel resolution and candidate hierarchy (Linux implementation note)
+
+Because headset firmware implementations differ across the OPPO / OnePlus / realme families,
+channel resolution uses a priority cascade rather than hardcoding a single channel:
+
+1. **128-bit Control Service UUIDs via SDP**: Headsets often register a custom 128-bit service class
+   (e.g., `0000079A-D102-11E1-9B23-00025B00A5A5` or `00001107-D102-11E1-9B23-00025B00A5A5`). BlueZ
+   SDP record searches for these 128-bit UUIDs are attempted first (prioritizing UUIDs exposed in
+   BlueZ device properties).
+2. **SPP 0x1101 Service Name Matching**: If no channel was resolved by 128-bit UUID, the generic Serial
+   Port profile (`0x1101`) records are examined:
+   - Primary names: `ELNK`, `Enco Link`, `EncoLink` (standard OPPO/OnePlus control service).
+   - Secondary names: `JL_SPP` (observed on JieLi-chipset realme models such as Buds T200 Lite where
+     the control protocol runs on RFCOMM channel 1).
+3. **Unambiguous Single SPP Channel**: If no known service names match but exactly one RFCOMM channel
+   is advertised under SPP `0x1101`, that channel is selected.
+4. **Fallback Channel 15**: If SDP lookup returns no candidates, RFCOMM channel 15 is tried as a
+   last-resort fallback.
+
+When multiple candidate channels are discovered (for example, a 128-bit UUID on channel 11 and a
+`JL_SPP` service on channel 1), the connection logic attempts to connect to each candidate in
+priority order. Since Linux `AF_BLUETOOTH` sockets cannot be reused after a failed `connect()` (the
+socket transitions to `BT_CLOSED` and subsequent calls fail with `EBADFD`), a fresh socket must be
+created for each candidate attempt.
 
 ## 2. Link framing
 
@@ -123,7 +146,7 @@ where the response includes one.
 | Feature | Query / event | Setting | Payload facts and evidence |
 |---|---|---|---|
 | Color ID | Query `0x010B` | — | Response `[status][color_id]`. Device-tested in EncoDeck on X4; always allowed without capability bit gating. |
-| Battery | Query `0x0106`; event `0x0204`, event ID `01` | — | `[status][count]{component,value}`; component `1` left, `2` right, `3` case; value bit 7 is charging and bits 0–6 are percentage. Device-tested. |
+| Battery | Query `0x0106`; event `0x0204`, event ID `01` | — | `[status][count]{component,value}`; component `1` left, `2` right, `3` case; value bit 7 is charging and bits 0–6 are percentage. Note on case component `3`: a raw value of `0x00` (`0%` while not charging) indicates the case battery is unreported/unsupported by hardware, whereas `0x80` indicates `0%` while actively charging. Device-tested. |
 | Wear / position | Query `0x0109`; event `0x0204`, event ID `02` | — | `[status][count]{component,flags}`; bit 0 out of case, bit 1 in ear, bit 2 zero means case lid closed. Arch Enco X4 query returned `00 03 01 07 02 07 03 04` (both buds out and in ear, lid open). Device-tested; bit definitions partly official-client-derived. |
 | Noise control | Query `0x010C` | Set `0x0404` | Query payload starts with subtype. Subtype 1 current mode; subtype 2 long-press cycle; subtype 3 supported modes; subtype 4 adaptive-noise level. Set payload begins `01 01` then a little-endian bit mask for the protocol index. State changes also arrive in event ID `03`. Device-tested on X4. |
 | EQ preset | Query `0x010F`; push `0x0504` | Set `0x0406` | Current preset query and push are device-tested; write command is official-client-derived and was not write-tested on X4. |
@@ -162,6 +185,20 @@ moderate noise cancelling, smart switching, and the adaptive range options. This
 reference project's per-index evidence above. The Linux client itself was not used to independently
 run this full hardware matrix in that test; its automated write tests use a mock RFCOMM peer to check
 payload encoding, ACK handling, and readback logic.
+
+**Additional hardware evidence — realme Buds T200 Lite (user-reported, 2026-10-29, Issue #1):**
+A user tested the realme Buds T200 Lite (product ID `065052`, firmware left/right `1.1.0.47`, case `019`,
+modalias `bluetooth:v05D6p000Ad0240`):
+- BlueZ exposes vendor UUIDs `0000079A-D102-11E1-9B23-00025B00A5A5` and `DF21FE2C-2515-4FDB-8886-F12C4D67927C`.
+- SDP advertises two Serial Port (`0x1101`) records named `JL_SPP` on RFCOMM channel 1 (no `ELNK` record).
+- RFCOMM channels 1 and 11 both accept connections and speak the private control protocol:
+  - Handshake `0x0100`: `AA 0E 04 00 00 81 F0 07 00 00 BF 5C C0 20 45 00` (success).
+  - Product ID `0x0103`: `52 50 06` (matches `0x065052`).
+  - Firmware `0x0105`: left/right `1.1.0.47`, case `019`.
+  - Battery `0x0106`: left 80%, right 80%, case reports `0x00` (indicates unsupported/unreported case battery).
+- Channel 10 exposes a separate JieLi binary service that does not use this framing.
+- The model profile in `DEVICE_PROFILES` has no noise modes or setting controls enabled, functioning
+  as read-only. Live notifications (`0x0204` battery/wear) are supported and parsed.
 
 The supported-mode query is `0x010C [03 01]`. EncoDeck reports that the Enco X4 responds with an
 all-zero bitmap, so this query is not a usable list of supported options on the tested X4 firmware.

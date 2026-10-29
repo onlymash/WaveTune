@@ -17,9 +17,8 @@
 
 use crate::protocol::{BatteryState, WearState};
 
-use super::brands::oppo::{OppoDeviceSnapshot, initialize_oppo_session};
+use super::brands::oppo::{OppoDeviceSnapshot, initialize_oppo_session, open_oppo_rfcomm};
 use super::discovery::find_devices;
-use super::transport::open_rfcomm;
 
 pub fn probe() -> Result<(), String> {
     let mut devices = find_devices()?;
@@ -31,7 +30,7 @@ pub fn probe() -> Result<(), String> {
         });
     }
     let device = devices.remove(0);
-    let mut stream = open_rfcomm(device.address)
+    let mut stream = open_oppo_rfcomm(&device)
         .map_err(|error| crate::t!("channel-unable-to-open-rfcomm", error))?;
     let (snapshot, _) = initialize_oppo_session(&mut stream, &device.name, None)?;
     print_snapshot(&snapshot);
@@ -40,7 +39,10 @@ pub fn probe() -> Result<(), String> {
 
 fn print_snapshot(snapshot: &OppoDeviceSnapshot) {
     println!("{}", crate::t!("probe-device", snapshot.name.as_str()));
-    println!("{}", crate::t!("probe-model-profile", snapshot.model));
+    println!(
+        "{}",
+        crate::t!("probe-model-profile", snapshot.model.as_str())
+    );
     println!(
         "{}",
         crate::t!("probe-product-id", format!("{:06X}", snapshot.product_id))

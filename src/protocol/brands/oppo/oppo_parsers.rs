@@ -311,7 +311,11 @@ fn parse_battery_components(payload: &[u8]) -> Result<BatteryState, OppoProtocol
         match record[0] {
             1 => state.left = Some(part),
             2 => state.right = Some(part),
-            3 => state.case = Some(part),
+            // Many OPPO/realme firmwares send [0x03, 0x00] when case battery cannot be read
+            // (e.g., both earbuds removed from case or case lacks fuel-gauge telemetry).
+            // A depleted case on the charger sets bit 7 (0x80) and is still preserved.
+            3 if record[1] != 0 => state.case = Some(part),
+            3 => {}
             _ => {}
         }
     }

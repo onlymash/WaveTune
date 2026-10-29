@@ -24,3 +24,5 @@ pub use oppo_session::{
     set_game_mode, set_hi_res, set_noise_mode, set_paired_device, set_spatial_audio, spawn_monitor,
     spawn_oppo_monitor,
 };
+#[allow(unused_imports)]
+pub(crate) use oppo_session::{open_oppo_rfcomm, oppo_candidate_service_uuids};

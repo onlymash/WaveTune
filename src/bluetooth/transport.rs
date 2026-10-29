@@ -24,7 +24,7 @@ use std::{
     time::Duration,
 };
 
-use bluer::Address;
+use bluer::{Address, Uuid};
 
 const SPP_SERVICE_UUID: u16 = 0x1101;
 const RFCOMM_PROTOCOL_UUID: c_int = 0x0003;
@@ -33,6 +33,13 @@ const SDP_ATTR_REQ_RANGE: c_int = 2;
 const SDP_ATTR_SVCNAME_PRIMARY: u16 = 0x0100;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SOCKET_POLL_TIMEOUT: Duration = Duration::from_millis(250);
+
+pub(crate) struct RfcommServiceQuery<'a> {
+    pub service_uuids: &'a [Uuid],
+    pub primary_spp_names: &'a [&'a str],
+    pub secondary_spp_names: &'a [&'a str],
+    pub fallback_channel: Option<u8>,
+}
 
 #[repr(C)]
 struct BluetoothAddress([u8; 6]);
@@ -51,7 +58,7 @@ union SdpUuidValue {
 }
 
 #[repr(C)]
-struct SdpUuid {
+pub(super) struct SdpUuid {
     kind: u8,
     value: SdpUuidValue,
 }
@@ -65,6 +72,9 @@ unsafe extern "C" {
     ) -> *mut c_void;
     fn sdp_close(session: *mut c_void);
     fn sdp_uuid16_create(uuid: *mut SdpUuid, value: u16) -> *mut SdpUuid;
+    fn sdp_uuid128_create(uuid: *mut SdpUuid, value: *const c_void) -> *mut SdpUuid;
+    #[cfg(test)]
+    fn sdp_uuid2strn(uuid: *const SdpUuid, buf: *mut c_char, length: usize) -> c_int;
     fn sdp_list_append(list: *mut SdpList, data: *mut c_void) -> *mut SdpList;
     fn sdp_list_free(list: *mut SdpList, free_data: Option<unsafe extern "C" fn(*mut c_void)>);
     fn sdp_service_search_attr_req(
@@ -97,7 +107,23 @@ unsafe extern "C" fn free_nested_sdp_list(data: *mut c_void) {
     unsafe { sdp_list_free(data.cast(), None) };
 }
 
-pub(super) fn open_rfcomm(address: Address) -> std::io::Result<File> {
+pub(crate) fn open_rfcomm(
+    address: Address,
+    query: &RfcommServiceQuery<'_>,
+) -> std::io::Result<File> {
+    let channels = resolve_rfcomm_channels(address, query)?;
+    let mut last_error = None;
+    for channel in channels {
+        match connect_rfcomm_channel(address, channel) {
+            Ok(file) => return Ok(file),
+            Err(error) => last_error = Some(error),
+        }
+    }
+    Err(last_error
+        .unwrap_or_else(|| std::io::Error::other(crate::t!("channel-elnk-rfcomm-not-found"))))
+}
+
+fn connect_rfcomm_channel(address: Address, channel: u8) -> std::io::Result<File> {
     #[repr(C)]
     struct SockAddrRc {
         family: libc::sa_family_t,
@@ -117,7 +143,6 @@ pub(super) fn open_rfcomm(address: Address) -> std::io::Result<File> {
     }
     let owned_fd = unsafe { OwnedFd::from_raw_fd(raw_fd) };
     set_socket_timeout(raw_fd, libc::SO_SNDTIMEO, CONNECT_TIMEOUT)?;
-    let channel = resolve_elink_channel(address)?;
     let mut bluetooth_address = address.0;
     bluetooth_address.reverse();
     let socket_address = SockAddrRc {
@@ -143,39 +168,114 @@ pub(super) fn open_rfcomm(address: Address) -> std::io::Result<File> {
     Ok(File::from(owned_fd))
 }
 
-const FALLBACK_RFCOMM_CHANNEL: u8 = 15;
-
-fn is_control_service_name(name: &str) -> bool {
-    let normalized = name.trim().to_ascii_lowercase();
-    normalized == "elnk" || normalized == "enco link" || normalized == "encolink"
+fn matches_service_name(name: &str, patterns: &[&str]) -> bool {
+    let normalized = name.trim();
+    patterns
+        .iter()
+        .any(|pattern| normalized.eq_ignore_ascii_case(pattern))
 }
 
-fn resolve_elink_channel(address: Address) -> std::io::Result<u8> {
+pub(super) fn create_sdp_uuid128(uuid: Uuid) -> Option<SdpUuid> {
+    let mut sdp_uuid = SdpUuid {
+        kind: 0,
+        value: SdpUuidValue { uuid128: [0; 16] },
+    };
+    let created = unsafe { sdp_uuid128_create(&mut sdp_uuid, uuid.as_bytes().as_ptr().cast()) };
+    if created.is_null() {
+        None
+    } else {
+        Some(sdp_uuid)
+    }
+}
+
+#[cfg(test)]
+pub(super) fn format_sdp_uuid(uuid: &SdpUuid) -> Option<String> {
+    let mut buffer = [0 as c_char; 64];
+    let result = unsafe { sdp_uuid2strn(uuid, buffer.as_mut_ptr(), buffer.len()) };
+    if result < 0 {
+        return None;
+    }
+    Some(
+        unsafe { CStr::from_ptr(buffer.as_ptr()) }
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
+fn resolve_rfcomm_channels(
+    address: Address,
+    query: &RfcommServiceQuery<'_>,
+) -> std::io::Result<Vec<u8>> {
+    let fallback_or_err = || -> std::io::Result<Vec<u8>> {
+        query
+            .fallback_channel
+            .map(|ch| vec![ch])
+            .ok_or_else(|| std::io::Error::other(crate::t!("channel-elnk-rfcomm-not-found")))
+    };
+
     let local_address = BluetoothAddress([0; 6]);
     let mut remote_bytes = address.0;
     remote_bytes.reverse();
     let remote_address = BluetoothAddress(remote_bytes);
     let session = unsafe { sdp_connect(&local_address, &remote_address, SDP_RETRY_IF_BUSY) };
     if session.is_null() {
-        return Ok(FALLBACK_RFCOMM_CHANNEL);
+        return fallback_or_err();
     }
     let session = SdpSession(session);
 
-    let mut service_uuid = SdpUuid {
+    let mut uuid_channels = Vec::new();
+    let mut any_query_succeeded = false;
+
+    for &uuid in query.service_uuids {
+        let Some(mut sdp_uuid) = create_sdp_uuid128(uuid) else {
+            continue;
+        };
+        if let Some(records) = query_sdp_records(session.0, &mut sdp_uuid) {
+            any_query_succeeded = true;
+            for (_, channel) in records {
+                if (1..=30).contains(&channel) && !uuid_channels.contains(&channel) {
+                    uuid_channels.push(channel);
+                }
+            }
+        }
+    }
+
+    let mut spp_uuid = SdpUuid {
         kind: 0,
         value: SdpUuidValue { uuid16: 0 },
     };
-    if unsafe { sdp_uuid16_create(&mut service_uuid, SPP_SERVICE_UUID) }.is_null() {
-        return Ok(FALLBACK_RFCOMM_CHANNEL);
-    }
-    let search = unsafe {
-        sdp_list_append(
-            std::ptr::null_mut(),
-            (&mut service_uuid as *mut SdpUuid).cast(),
-        )
+    let spp_records = if !unsafe { sdp_uuid16_create(&mut spp_uuid, SPP_SERVICE_UUID) }.is_null() {
+        if let Some(records) = query_sdp_records(session.0, &mut spp_uuid) {
+            any_query_succeeded = true;
+            records
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
     };
+
+    if !any_query_succeeded {
+        return fallback_or_err();
+    }
+
+    prioritize_rfcomm_channels(
+        &uuid_channels,
+        &spp_records,
+        query.primary_spp_names,
+        query.secondary_spp_names,
+        query.fallback_channel,
+    )
+}
+
+fn query_sdp_records(
+    session: *mut c_void,
+    service_uuid: &mut SdpUuid,
+) -> Option<Vec<(Option<String>, u8)>> {
+    let search =
+        unsafe { sdp_list_append(std::ptr::null_mut(), (service_uuid as *mut SdpUuid).cast()) };
     if search.is_null() {
-        return Ok(FALLBACK_RFCOMM_CHANNEL);
+        return None;
     }
     let attribute_range: u32 = 0x0000_ffff;
     let attributes = unsafe {
@@ -186,13 +286,13 @@ fn resolve_elink_channel(address: Address) -> std::io::Result<u8> {
     };
     if attributes.is_null() {
         unsafe { sdp_list_free(search, None) };
-        return Ok(FALLBACK_RFCOMM_CHANNEL);
+        return None;
     }
 
     let mut records = std::ptr::null_mut();
     let result = unsafe {
         sdp_service_search_attr_req(
-            session.0,
+            session,
             search,
             SDP_ATTR_REQ_RANGE,
             attributes,
@@ -204,55 +304,122 @@ fn resolve_elink_channel(address: Address) -> std::io::Result<u8> {
         sdp_list_free(attributes, None);
     }
     if result < 0 {
-        return Ok(FALLBACK_RFCOMM_CHANNEL);
+        return None;
     }
 
-    let mut selected_channel = None;
-    let mut ambiguous_channel = false;
+    let mut parsed = Vec::new();
     let mut record_node = records;
     while !record_node.is_null() {
         let record = unsafe { (*record_node).data };
         let mut name = [0 as c_char; 257];
-        let name_res = unsafe {
+        let service_name = if unsafe {
             sdp_get_string_attr(
                 record,
                 SDP_ATTR_SVCNAME_PRIMARY,
                 name.as_mut_ptr(),
                 name.len() - 1,
             )
-        };
-        let is_control = if name_res == 0 {
-            let name_str = unsafe { CStr::from_ptr(name.as_ptr()) }.to_string_lossy();
-            is_control_service_name(&name_str)
+        } == 0
+        {
+            Some(
+                unsafe { CStr::from_ptr(name.as_ptr()) }
+                    .to_string_lossy()
+                    .into_owned(),
+            )
         } else {
-            false
+            None
         };
 
-        if is_control {
-            let mut protocols = std::ptr::null_mut();
-            if unsafe { sdp_get_access_protos(record, &mut protocols) } == 0 {
-                let channel = unsafe { sdp_get_proto_port(protocols, RFCOMM_PROTOCOL_UUID) };
-                unsafe { sdp_list_free(protocols, Some(free_nested_sdp_list)) };
-                if (1..=30).contains(&channel) {
-                    let channel = channel as u8;
-                    if selected_channel.is_some_and(|existing| existing != channel) {
-                        ambiguous_channel = true;
-                    } else {
-                        selected_channel = Some(channel);
-                    }
-                }
+        let mut protocols = std::ptr::null_mut();
+        if unsafe { sdp_get_access_protos(record, &mut protocols) } == 0 {
+            let channel = unsafe { sdp_get_proto_port(protocols, RFCOMM_PROTOCOL_UUID) };
+            unsafe { sdp_list_free(protocols, Some(free_nested_sdp_list)) };
+            if (1..=30).contains(&channel) {
+                parsed.push((service_name, channel as u8));
             }
         }
         unsafe { sdp_record_free(record) };
         record_node = unsafe { (*record_node).next };
     }
     unsafe { sdp_list_free(records, None) };
-    if ambiguous_channel {
-        return Err(std::io::Error::other(
-            "SDP returned multiple conflicting ELNK RFCOMM channels",
-        ));
+    Some(parsed)
+}
+
+pub(super) fn prioritize_rfcomm_channels(
+    uuid_channels: &[u8],
+    spp_records: &[(Option<String>, u8)],
+    primary_spp_names: &[&str],
+    secondary_spp_names: &[&str],
+    fallback_channel: Option<u8>,
+) -> std::io::Result<Vec<u8>> {
+    let mut candidates = Vec::new();
+    let push_unique = |candidates: &mut Vec<u8>, channel: u8| {
+        if (1..=30).contains(&channel) && !candidates.contains(&channel) {
+            candidates.push(channel);
+        }
+    };
+
+    for &channel in uuid_channels {
+        push_unique(&mut candidates, channel);
     }
-    Ok(selected_channel.unwrap_or(FALLBACK_RFCOMM_CHANNEL))
+
+    let mut primary_channels = Vec::new();
+    let mut secondary_channels = Vec::new();
+    let mut all_spp_channels = Vec::new();
+
+    for (name, channel) in spp_records {
+        if !(1..=30).contains(channel) {
+            continue;
+        }
+        if !all_spp_channels.contains(channel) {
+            all_spp_channels.push(*channel);
+        }
+        if let Some(name) = name {
+            if matches_service_name(name, primary_spp_names) {
+                if !primary_channels.contains(channel) {
+                    primary_channels.push(*channel);
+                }
+            } else if matches_service_name(name, secondary_spp_names)
+                && !secondary_channels.contains(channel)
+            {
+                secondary_channels.push(*channel);
+            }
+        }
+    }
+
+    if candidates.is_empty() && primary_channels.len() > 1 {
+        return Err(std::io::Error::other(crate::t!(
+            "channel-sdp-conflicting-rfcomm"
+        )));
+    }
+
+    for &channel in &primary_channels {
+        push_unique(&mut candidates, channel);
+    }
+
+    if primary_channels.is_empty() {
+        for &channel in &secondary_channels {
+            push_unique(&mut candidates, channel);
+        }
+    }
+
+    if candidates.is_empty() && all_spp_channels.len() == 1 {
+        push_unique(&mut candidates, all_spp_channels[0]);
+    }
+
+    if candidates.is_empty()
+        && let Some(fallback) = fallback_channel
+    {
+        push_unique(&mut candidates, fallback);
+    }
+
+    if candidates.is_empty() {
+        return Err(std::io::Error::other(crate::t!(
+            "channel-elnk-rfcomm-not-found"
+        )));
+    }
+
+    Ok(candidates)
 }
 
 fn set_socket_timeout(fd: RawFd, option: libc::c_int, duration: Duration) -> std::io::Result<()> {
@@ -275,6 +442,6 @@ fn set_socket_timeout(fd: RawFd, option: libc::c_int, duration: Duration) -> std
     Ok(())
 }
 
-pub(super) fn is_socket_timeout(error: &std::io::Error) -> bool {
+pub(crate) fn is_socket_timeout(error: &std::io::Error) -> bool {
     matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut)
 }

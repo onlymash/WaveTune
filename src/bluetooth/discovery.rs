@@ -100,7 +100,12 @@ async fn find_device_async() -> Result<Vec<DeviceChoice>, String> {
             .await
             .map_err(|error| format!("Unable to read device service UUID: {error}"))?
             .unwrap_or_default();
-        let has_control_service = uuids.iter().any(|u| service_uuids.contains(u));
+        let control_service_uuids: Vec<Uuid> = service_uuids
+            .iter()
+            .copied()
+            .filter(|candidate| uuids.contains(candidate))
+            .collect();
+        let has_control_service = !control_service_uuids.is_empty();
         let Some(brand) = identify_brand(&manufacturer_data, has_control_service) else {
             continue;
         };
@@ -113,6 +118,7 @@ async fn find_device_async() -> Result<Vec<DeviceChoice>, String> {
             name: alias,
             brand,
             has_control_service,
+            control_service_uuids,
         });
     }
     candidates.sort_by(|left, right| {

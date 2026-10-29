@@ -40,16 +40,44 @@ use crate::protocol::{
     parse_wear_event, parse_wear_response,
 };
 
-use crate::bluetooth::transport::{is_socket_timeout, open_rfcomm};
+use crate::app::events::SettingDomain;
+use crate::bluetooth::transport::{RfcommServiceQuery, is_socket_timeout, open_rfcomm};
 use crate::bluetooth::{DeviceChoice, UiUpdate, WorkerCommand};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+const OPPO_FALLBACK_RFCOMM_CHANNEL: u8 = 15;
+const OPPO_PRIMARY_SPP_NAMES: &[&str] = &["elnk", "enco link", "encolink"];
+const OPPO_SECONDARY_SPP_NAMES: &[&str] = &["jl_spp"];
+
+pub(crate) fn oppo_candidate_service_uuids(discovered: &[bluer::Uuid]) -> Vec<bluer::Uuid> {
+    let mut ordered = discovered.to_vec();
+    for candidate in crate::protocol::brands::oppo::OPPO_CONTROL_SERVICE_CANDIDATES {
+        if let Ok(uuid) = bluer::Uuid::parse_str(candidate)
+            && !ordered.contains(&uuid)
+        {
+            ordered.push(uuid);
+        }
+    }
+    ordered
+}
+
+pub(crate) fn open_oppo_rfcomm(device: &DeviceChoice) -> std::io::Result<std::fs::File> {
+    let service_uuids = oppo_candidate_service_uuids(&device.control_service_uuids);
+    let query = RfcommServiceQuery {
+        service_uuids: &service_uuids,
+        primary_spp_names: OPPO_PRIMARY_SPP_NAMES,
+        secondary_spp_names: OPPO_SECONDARY_SPP_NAMES,
+        fallback_channel: Some(OPPO_FALLBACK_RFCOMM_CHANNEL),
+    };
+    open_rfcomm(device.address, &query)
+}
 
 pub struct OppoDeviceSnapshot {
     pub name: String,
     pub product_id: u32,
     pub color_id: Option<u8>,
-    pub model: &'static str,
+    pub model: String,
+    pub is_known_model: bool,
     pub read_only: bool,
     pub battery: BatteryState,
     pub firmware: FirmwareVersions,
@@ -118,13 +146,29 @@ pub fn spawn_oppo_monitor(
 
 pub use spawn_oppo_monitor as spawn_monitor;
 
+fn list_separator() -> &'static str {
+    if crate::i18n::current_locale().language.as_str() == "zh" {
+        "、"
+    } else {
+        ", "
+    }
+}
+
+fn clause_separator() -> &'static str {
+    if crate::i18n::current_locale().language.as_str() == "zh" {
+        "；"
+    } else {
+        "; "
+    }
+}
+
 fn monitor_device(
     device: DeviceChoice,
     updates: &Sender<UiUpdate>,
     commands: &Receiver<WorkerCommand>,
 ) -> Result<(), String> {
-    let mut stream = open_rfcomm(device.address)
-        .map_err(|error| format!("无法打开耳机 RFCOMM 控制通道：{error}"))?;
+    let mut stream = open_oppo_rfcomm(&device)
+        .map_err(|error| crate::t!("channel-unable-to-open-rfcomm", error))?;
     let (mut snapshot, mut decoder) = initialize_session(&mut stream, &device.name, Some(updates))?;
 
     let _ = updates.send(UiUpdate::Connected {
@@ -223,18 +267,24 @@ fn monitor_device(
 
     let _ = updates.send(UiUpdate::Status(if snapshot.read_only {
         let detected = if snapshot.detected_features.is_empty() {
-            "未确认可用的状态查询".to_string()
+            crate::t!("probe-no-queries-confirmed")
         } else {
-            format!("已检测只读功能：{}", snapshot.detected_features.join("、"))
+            crate::t!(
+                "probe-detected-read-only",
+                snapshot.detected_features.join(list_separator())
+            )
         };
-        let errors = if snapshot.probe_errors.is_empty() {
-            String::new()
+        if snapshot.probe_errors.is_empty() {
+            crate::t!("channel-connected-read-only", detected)
         } else {
-            format!("；部分探测失败：{}", snapshot.probe_errors.join("；"))
-        };
-        format!("已连接控制通道；{detected}{errors}")
+            crate::t!(
+                "channel-connected-read-only-with-errors",
+                detected,
+                snapshot.probe_errors.join(clause_separator())
+            )
+        }
     } else {
-        "已连接控制通道，正在同步耳机状态".to_string()
+        crate::t!("channel-connected-syncing")
     }));
     let mut current_wear = snapshot.wear.clone();
     let mut current_custom_equalizers = snapshot.custom_equalizers.clone();
@@ -250,36 +300,40 @@ fn monitor_device(
     loop {
         match commands.try_recv() {
             Ok(WorkerCommand::Disconnect) => {
-                let _ = updates.send(UiUpdate::Status("已断开控制通道".to_string()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("channel-disconnected")));
                 return Ok(());
             }
             Ok(WorkerCommand::SetEqualizer(preset)) => {
                 if snapshot.read_only || !snapshot.supports_equalizer {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放均衡器控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Equalizer,
+                        message: crate::t!("equalizer-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status("正在等待耳机确认均衡器预设…".to_string()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-waiting-confirm")));
                 match set_equalizer(&mut stream, &mut decoder, preset, updates) {
                     Ok(actual) => {
                         let _ = updates.send(UiUpdate::Equalizer(actual));
-                        let _ = updates.send(UiUpdate::Status("耳机已应用均衡器预设".to_string()));
+                        let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-applied")));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("切换均衡器预设失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Equalizer,
+                            message: crate::t!("equalizer-switch-failed", error),
+                        });
                     }
                 }
             }
             Ok(WorkerCommand::SelectCustomEqualizer(id)) => {
                 if snapshot.read_only || !snapshot.supports_custom_equalizer {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放自定义均衡器控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Equalizer,
+                        message: crate::t!("equalizer-custom-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status("正在切换自定义均衡器预设…".to_string()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-switching")));
                 let preset = current_custom_equalizers
                     .iter()
                     .find(|p| p.id == id)
@@ -300,23 +354,26 @@ fn monitor_device(
                             }
                             let _ = updates.send(UiUpdate::Equalizer(id));
                             let _ = updates
-                                .send(UiUpdate::Status("耳机已应用自定义均衡器预设".to_string()));
+                                .send(UiUpdate::Status(crate::t!("equalizer-custom-applied")));
                         }
                         Err(error) => {
-                            let _ = updates
-                                .send(UiUpdate::Status(format!("切换自定义均衡器失败：{error}")));
+                            let _ = updates.send(UiUpdate::SettingError {
+                                domain: SettingDomain::Equalizer,
+                                message: crate::t!("equalizer-custom-switch-failed", error),
+                            });
                         }
                     }
                 }
             }
             Ok(WorkerCommand::AddCustomEqualizer { name, bands }) => {
                 if snapshot.read_only || !snapshot.supports_custom_equalizer {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放自定义均衡器控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Equalizer,
+                        message: crate::t!("equalizer-custom-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status("正在添加自定义均衡器预设…".to_string()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-adding")));
                 let payload = encode_custom_equalizer_command(0x01, 0, &name, -6, 6, &bands);
                 match request(&mut stream, &mut decoder, 0x0418, 0, payload, Some(updates)) {
                     Ok(_) => {
@@ -328,23 +385,25 @@ fn monitor_device(
                                 let _ = updates.send(UiUpdate::CustomEqualizers(list));
                             }
                         }
-                        let _ =
-                            updates.send(UiUpdate::Status("已添加自定义均衡器预设".to_string()));
+                        let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-added")));
                     }
                     Err(error) => {
-                        let _ = updates
-                            .send(UiUpdate::Status(format!("添加自定义均衡器失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Equalizer,
+                            message: crate::t!("equalizer-custom-add-failed", error),
+                        });
                     }
                 }
             }
             Ok(WorkerCommand::SaveCustomEqualizer { id, name, bands }) => {
                 if snapshot.read_only || !snapshot.supports_custom_equalizer {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放自定义均衡器控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Equalizer,
+                        message: crate::t!("equalizer-custom-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status("正在保存自定义均衡器预设…".to_string()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-saving")));
                 let (min_gain, max_gain) = current_custom_equalizers
                     .iter()
                     .find(|p| p.id == id)
@@ -362,23 +421,25 @@ fn monitor_device(
                                 let _ = updates.send(UiUpdate::CustomEqualizers(list));
                             }
                         }
-                        let _ =
-                            updates.send(UiUpdate::Status("已修改自定义均衡器预设".to_string()));
+                        let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-saved")));
                     }
                     Err(error) => {
-                        let _ = updates
-                            .send(UiUpdate::Status(format!("修改自定义均衡器失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Equalizer,
+                            message: crate::t!("equalizer-custom-save-failed", error),
+                        });
                     }
                 }
             }
             Ok(WorkerCommand::DeleteCustomEqualizer(id)) => {
                 if snapshot.read_only || !snapshot.supports_custom_equalizer {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放自定义均衡器控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Equalizer,
+                        message: crate::t!("equalizer-custom-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status("正在删除自定义均衡器预设…".to_string()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-deleting")));
                 let (name, min_gain, max_gain, bands) = current_custom_equalizers
                     .iter()
                     .find(|p| p.id == id)
@@ -397,44 +458,47 @@ fn monitor_device(
                             }
                         }
                         let _ =
-                            updates.send(UiUpdate::Status("已删除自定义均衡器预设".to_string()));
+                            updates.send(UiUpdate::Status(crate::t!("equalizer-custom-deleted")));
                     }
                     Err(error) => {
-                        let _ = updates
-                            .send(UiUpdate::Status(format!("删除自定义均衡器失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Equalizer,
+                            message: crate::t!("equalizer-custom-delete-failed", error),
+                        });
                     }
                 }
             }
             Ok(WorkerCommand::SetSpatialAudio(mode)) => {
                 if snapshot.read_only || !snapshot.supports_spatial_audio {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放空间音频控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::SpatialAudio,
+                        message: crate::t!("spatial-audio-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status(
-                    "正在等待耳机确认空间音频模式…".to_string(),
-                ));
+                let _ = updates.send(UiUpdate::Status(crate::t!("spatial-audio-waiting-confirm")));
                 match set_spatial_audio(&mut stream, &mut decoder, mode, updates) {
                     Ok(actual) => {
                         let _ = updates.send(UiUpdate::SpatialAudio(actual));
-                        let _ =
-                            updates.send(UiUpdate::Status("耳机已应用空间音频模式".to_string()));
+                        let _ = updates.send(UiUpdate::Status(crate::t!("spatial-audio-applied")));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("切换空间音频失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::SpatialAudio,
+                            message: crate::t!("spatial-audio-switch-failed", error),
+                        });
                     }
                 }
             }
             Ok(WorkerCommand::SetGameMode(enabled)) => {
                 if snapshot.read_only || !snapshot.supports_game_mode {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放游戏模式控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::GameMode,
+                        message: crate::t!("game-mode-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status("正在等待耳机确认游戏模式…".to_string()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("game-mode-waiting-confirm")));
                 match set_game_mode(
                     &mut stream,
                     &mut decoder,
@@ -445,48 +509,52 @@ fn monitor_device(
                     Ok(actual) => {
                         let _ = updates.send(UiUpdate::GameMode(actual));
                         let _ = updates.send(UiUpdate::Status(if actual {
-                            "已开启游戏模式".to_string()
+                            crate::t!("game-mode-state-enabled")
                         } else {
-                            "已关闭游戏模式".to_string()
+                            crate::t!("game-mode-state-disabled")
                         }));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("切换游戏模式失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::GameMode,
+                            message: crate::t!("game-mode-switch-failed", error),
+                        });
                     }
                 }
             }
             Ok(WorkerCommand::SetBassEngineEnabled(enabled)) => {
                 if snapshot.read_only || !snapshot.supports_bass_engine {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放低音增强控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::BassEngine,
+                        message: crate::t!("bass-engine-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status(
-                    "正在等待耳机确认低音增强开关…".to_string(),
-                ));
+                let _ = updates.send(UiUpdate::Status(crate::t!("bass-engine-waiting-confirm")));
                 match set_bass_engine_enabled(&mut stream, &mut decoder, enabled, updates) {
                     Ok(actual) => {
                         snapshot.bass_engine_enabled = Some(actual);
                         let _ = updates.send(UiUpdate::BassEngineEnabled(actual));
                         let _ = updates.send(UiUpdate::Status(if actual {
-                            "已开启低音增强".to_string()
+                            crate::t!("bass-engine-state-enabled")
                         } else {
-                            "已关闭低音增强".to_string()
+                            crate::t!("bass-engine-state-disabled")
                         }));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("切换低音增强失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::BassEngine,
+                            message: crate::t!("bass-engine-switch-failed", error),
+                        });
                     }
                 }
             }
             Ok(WorkerCommand::SetBassEngineLevel(level)) => {
                 if snapshot.read_only || !snapshot.supports_bass_engine {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放低音增强档位控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::BassEngine,
+                        message: crate::t!("bass-engine-level-blocked"),
+                    });
                     continue;
                 }
                 let (min, max) = snapshot
@@ -494,56 +562,62 @@ fn monitor_device(
                     .as_ref()
                     .map(|b| (b.min, b.max))
                     .unwrap_or((-5, 5));
-                let _ = updates.send(UiUpdate::Status(
-                    "正在等待耳机确认低音增强档位…".to_string(),
-                ));
+                let _ = updates.send(UiUpdate::Status(crate::t!(
+                    "bass-engine-level-waiting-confirm"
+                )));
                 match set_bass_engine_level(&mut stream, &mut decoder, min, max, level, updates) {
                     Ok(actual) => {
                         snapshot.bass_engine_level = Some(actual);
                         let _ = updates.send(UiUpdate::BassEngineLevel(actual));
-                        let _ = updates.send(UiUpdate::Status(format!(
-                            "低音增强档位已设置为 {}",
+                        let _ = updates.send(UiUpdate::Status(crate::t!(
+                            "bass-engine-level-applied",
                             actual.current
                         )));
                     }
                     Err(error) => {
-                        let _ = updates
-                            .send(UiUpdate::Status(format!("切换低音增强档位失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::BassEngine,
+                            message: crate::t!("bass-engine-level-switch-failed", error),
+                        });
                     }
                 }
             }
             Ok(WorkerCommand::SetHiRes(enabled)) => {
                 if snapshot.read_only || !snapshot.supports_hi_res {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放高解析模式控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::HiRes,
+                        message: crate::t!("hi-res-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status("正在等待耳机确认高解析模式…".to_string()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("hi-res-waiting-confirm")));
                 match set_hi_res(&mut stream, &mut decoder, enabled, updates) {
                     Ok(actual) => {
                         snapshot.hi_res_enabled = Some(actual);
                         let _ = updates.send(UiUpdate::HiRes(actual));
                         let _ = updates.send(UiUpdate::Status(if actual {
-                            "已开启高解析模式".to_string()
+                            crate::t!("hi-res-state-enabled")
                         } else {
-                            "已关闭高解析模式".to_string()
+                            crate::t!("hi-res-state-disabled")
                         }));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("切换高解析模式失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::HiRes,
+                            message: crate::t!("hi-res-switch-failed", error),
+                        });
                     }
                 }
             }
             Ok(WorkerCommand::SetNoiseMode(protocol_index)) => {
                 if snapshot.read_only {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放降噪控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::NoiseMode,
+                        message: crate::t!("noise-mode-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status("正在等待耳机确认降噪模式…".to_string()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("noise-mode-waiting-confirm")));
                 let result = set_noise_mode(
                     &mut stream,
                     &mut decoder,
@@ -557,10 +631,15 @@ fn monitor_device(
                 match result {
                     Ok(actual) => {
                         let _ = updates.send(UiUpdate::NoiseMode(actual));
-                        let _ = updates.send(UiUpdate::Status("降噪模式已确认并回读".to_string()));
+                        let _ = updates.send(UiUpdate::Status(crate::t!(
+                            "noise-mode-confirmed-and-readback"
+                        )));
                     }
                     Err(error) => {
-                        let _ = updates.send(UiUpdate::Status(error));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::NoiseMode,
+                            message: error,
+                        });
                     }
                 }
                 let _ = updates.send(UiUpdate::NoiseControlsEnabled(
@@ -569,9 +648,10 @@ fn monitor_device(
             }
             Ok(WorkerCommand::SetPairedDevice { address, action }) => {
                 if snapshot.read_only || !snapshot.supports_paired_devices {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放设备管理控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("dual-device-management-blocked"),
+                    });
                     let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
                     continue;
                 }
@@ -590,16 +670,19 @@ fn monitor_device(
                         let _ = updates.send(UiUpdate::PairedDevices(Ok(devices)));
                         let message = if changed {
                             match action {
-                                PairedDeviceAction::Remove => "已从耳机中删除设备",
-                                _ => "设备连接状态已确认",
+                                PairedDeviceAction::Remove => crate::t!("dual-device-removed"),
+                                _ => crate::t!("dual-device-status-confirmed"),
                             }
                         } else {
-                            "设备已处于目标连接状态"
+                            crate::t!("dual-device-already-in-state")
                         };
-                        let _ = updates.send(UiUpdate::Status(message.to_string()));
+                        let _ = updates.send(UiUpdate::Status(message));
                     }
                     Err(error) => {
-                        let _ = updates.send(UiUpdate::Status(error));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: error,
+                        });
                         paired_devices =
                             read_paired_devices(&mut stream, &mut decoder, Some(updates));
                         let _ = updates.send(UiUpdate::PairedDevices(paired_devices.clone()));
@@ -614,12 +697,13 @@ fn monitor_device(
                 function,
             }) => {
                 if snapshot.read_only || !snapshot.supports_touch_customization {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放手势自定义，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-gesture-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status("正在修改耳机手势…".to_string()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("controls-gesture-updating")));
                 let payload = encode_set_key_function(side, button, action, function);
                 match request(&mut stream, &mut decoder, 0x0401, 0, payload, Some(updates)) {
                     Ok(_) => {
@@ -636,10 +720,14 @@ fn monitor_device(
                                 let _ = updates.send(UiUpdate::KeyFunctions(list));
                             }
                         }
-                        let _ = updates.send(UiUpdate::Status("手势设置已更新".to_string()));
+                        let _ =
+                            updates.send(UiUpdate::Status(crate::t!("controls-gesture-updated")));
                     }
                     Err(error) => {
-                        let _ = updates.send(UiUpdate::Status(format!("修改手势失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-gesture-update-failed", error),
+                        });
                         let _ = updates.send(UiUpdate::KeyFunctions(current_key_functions.clone()));
                     }
                 }
@@ -650,12 +738,13 @@ fn monitor_device(
                 is_shared,
             }) => {
                 if snapshot.read_only || snapshot.noise_modes.is_empty() {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放噪声循环控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-noise-cycle-blocked"),
+                    });
                     continue;
                 }
-                let _ = updates.send(UiUpdate::Status("正在修改噪声切换循环…".to_string()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("controls-noise-cycle-updating")));
                 let payload = encode_set_noise_cycle(side, mask, is_shared);
                 match request(&mut stream, &mut decoder, 0x0404, 0, payload, Some(updates)) {
                     Ok(_) => {
@@ -686,20 +775,24 @@ fn monitor_device(
                                 let _ = updates.send(UiUpdate::NoiseCycle(current_noise_cycle));
                             }
                         }
-                        let _ = updates.send(UiUpdate::Status("噪声切换循环已更新".to_string()));
+                        let _ = updates
+                            .send(UiUpdate::Status(crate::t!("controls-noise-cycle-updated")));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("修改噪声循环失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-noise-cycle-update-failed", error),
+                        });
                         let _ = updates.send(UiUpdate::NoiseCycle(current_noise_cycle));
                     }
                 }
             }
             Ok(WorkerCommand::FindEarbuds(ring)) => {
                 if snapshot.read_only || !snapshot.supports_find_device {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放查找耳机功能，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-find-blocked"),
+                    });
                     continue;
                 }
                 let payload = encode_find_earbuds(ring);
@@ -708,14 +801,16 @@ fn monitor_device(
                         snapshot.is_finding_earbuds = ring;
                         let _ = updates.send(UiUpdate::IsFindingEarbuds(ring));
                         let _ = updates.send(UiUpdate::Status(if ring {
-                            "耳机正在播放提示音".to_string()
+                            crate::t!("controls-find-ringing")
                         } else {
-                            "已停止播放提示音".to_string()
+                            crate::t!("controls-find-stopped")
                         }));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("查找耳机命令失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-find-failed", error),
+                        });
                         let _ =
                             updates.send(UiUpdate::IsFindingEarbuds(snapshot.is_finding_earbuds));
                     }
@@ -723,17 +818,19 @@ fn monitor_device(
             }
             Ok(WorkerCommand::RunFitTest) => {
                 if snapshot.read_only || !snapshot.supports_fit_detection {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放耳塞贴合度检测，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-fit-test-blocked"),
+                    });
                     continue;
                 }
                 if current_wear.left.is_some_and(|p| !p.in_ear)
                     || current_wear.right.is_some_and(|p| !p.in_ear)
                 {
-                    let _ = updates.send(UiUpdate::Status(
-                        "请佩戴好双耳后再进行贴合度测试".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-fit-test-wear-both"),
+                    });
                     continue;
                 }
                 let payload = encode_fit_test(true);
@@ -741,20 +838,23 @@ fn monitor_device(
                     Ok(_) => {
                         let _ = updates.send(UiUpdate::FitTestRunning(true));
                         let _ =
-                            updates.send(UiUpdate::Status("正在进行耳塞贴合度检测…".to_string()));
+                            updates.send(UiUpdate::Status(crate::t!("controls-fit-test-running")));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("启动贴合度检测失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-fit-test-start-failed", error),
+                        });
                         let _ = updates.send(UiUpdate::FitTestRunning(false));
                     }
                 }
             }
             Ok(WorkerCommand::SetPromptVolume(volume)) => {
                 if snapshot.read_only || !snapshot.supports_prompt_volume {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放提示音音量控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-prompt-volume-blocked"),
+                    });
                     continue;
                 }
                 let payload = encode_set_prompt_volume(volume);
@@ -768,11 +868,15 @@ fn monitor_device(
                                 let _ = updates.send(UiUpdate::PromptVolume(actual));
                             }
                         }
-                        let _ = updates.send(UiUpdate::Status("提示音音量已更新".to_string()));
+                        let _ = updates.send(UiUpdate::Status(crate::t!(
+                            "controls-prompt-volume-updated"
+                        )));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("调节提示音音量失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-prompt-volume-update-failed", error),
+                        });
                         if let Some(v) = current_prompt_volume {
                             let _ = updates.send(UiUpdate::PromptVolume(v));
                         }
@@ -781,9 +885,10 @@ fn monitor_device(
             }
             Ok(WorkerCommand::SetHeadMotionType(motion_type)) => {
                 if snapshot.read_only || !snapshot.supports_head_motion {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放头部动作控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-head-motion-blocked"),
+                    });
                     continue;
                 }
                 let payload = encode_set_head_motion_type(motion_type);
@@ -797,11 +902,14 @@ fn monitor_device(
                                 let _ = updates.send(UiUpdate::HeadMotionType(actual));
                             }
                         }
-                        let _ = updates.send(UiUpdate::Status("头部控制动作已更新".to_string()));
+                        let _ = updates
+                            .send(UiUpdate::Status(crate::t!("controls-head-motion-updated")));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("修改头部动作失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-head-motion-update-failed", error),
+                        });
                         if let Some(m) = current_head_motion {
                             let _ = updates.send(UiUpdate::HeadMotionType(m));
                         }
@@ -810,9 +918,10 @@ fn monitor_device(
             }
             Ok(WorkerCommand::SetDualDeviceConnection(enabled)) => {
                 if snapshot.read_only || !snapshot.supports_paired_devices {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放双设备连接控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("dual-device-toggle-blocked"),
+                    });
                     continue;
                 }
                 let payload = vec![17, if enabled { 1 } else { 0 }];
@@ -831,11 +940,14 @@ fn monitor_device(
                                 let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(actual));
                             }
                         }
-                        let _ = updates.send(UiUpdate::Status("双设备连接设置已更新".to_string()));
+                        let _ =
+                            updates.send(UiUpdate::Status(crate::t!("dual-device-toggle-updated")));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("设置双设备连接失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("dual-device-toggle-failed", error),
+                        });
                         if let Some(d) = current_dual_device {
                             let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(d));
                         }
@@ -844,9 +956,10 @@ fn monitor_device(
             }
             Ok(WorkerCommand::SetInEarDetection(enabled)) => {
                 if snapshot.read_only || !snapshot.supports_wear_detection {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放佩戴检测控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("wear-detection-blocked"),
+                    });
                     continue;
                 }
                 let payload = vec![0x04, if enabled { 1 } else { 0 }];
@@ -865,11 +978,13 @@ fn monitor_device(
                                 let _ = updates.send(UiUpdate::InEarDetectionEnabled(actual));
                             }
                         }
-                        let _ = updates.send(UiUpdate::Status("佩戴检测设置已更新".to_string()));
+                        let _ = updates.send(UiUpdate::Status(crate::t!("wear-detection-updated")));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("设置佩戴检测失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("wear-detection-update-failed", error),
+                        });
                         if let Some(w) = current_in_ear_detection {
                             let _ = updates.send(UiUpdate::InEarDetectionEnabled(w));
                         }
@@ -878,9 +993,10 @@ fn monitor_device(
             }
             Ok(WorkerCommand::SetSleepDetection(enabled)) => {
                 if snapshot.read_only || !snapshot.supports_sleep_detection {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放入睡检测控制，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-sleep-detection-blocked"),
+                    });
                     continue;
                 }
                 let payload = vec![0x3a, if enabled { 1 } else { 0 }];
@@ -899,11 +1015,15 @@ fn monitor_device(
                                 let _ = updates.send(UiUpdate::SleepDetectionEnabled(actual));
                             }
                         }
-                        let _ = updates.send(UiUpdate::Status("入睡检测设置已更新".to_string()));
+                        let _ = updates.send(UiUpdate::Status(crate::t!(
+                            "controls-sleep-detection-updated"
+                        )));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("设置入睡检测失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-sleep-detection-update-failed", error),
+                        });
                         if let Some(s) = current_sleep_detection {
                             let _ = updates.send(UiUpdate::SleepDetectionEnabled(s));
                         }
@@ -912,9 +1032,10 @@ fn monitor_device(
             }
             Ok(WorkerCommand::SetPreferredDevice(addr)) => {
                 if snapshot.read_only || !snapshot.supports_paired_devices {
-                    let _ = updates.send(UiUpdate::Status(
-                        "该型号未开放首选设备设置，已阻止发送".to_string(),
-                    ));
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-preferred-device-blocked"),
+                    });
                     continue;
                 }
                 let payload = encode_set_priority_device(addr);
@@ -928,11 +1049,15 @@ fn monitor_device(
                                 let _ = updates.send(UiUpdate::PreferredDevice(actual));
                             }
                         }
-                        let _ = updates.send(UiUpdate::Status("首选连接设备已更新".to_string()));
+                        let _ = updates.send(UiUpdate::Status(crate::t!(
+                            "controls-preferred-device-updated"
+                        )));
                     }
                     Err(error) => {
-                        let _ =
-                            updates.send(UiUpdate::Status(format!("设置首选设备失败：{error}")));
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-preferred-device-update-failed", error),
+                        });
                         let _ = updates.send(UiUpdate::PreferredDevice(current_preferred_device));
                     }
                 }
@@ -944,19 +1069,24 @@ fn monitor_device(
         let mut bytes = [0; 1024];
         match stream.read(&mut bytes) {
             Err(error) if is_socket_timeout(&error) => continue,
-            Err(error) => return Err(format!("RFCOMM 连接中断：{error}")),
-            Ok(0) => return Err("耳机关闭了 RFCOMM 控制连接".to_string()),
+            Err(error) => return Err(crate::t!("channel-error", error)),
+            Ok(0) => return Err(crate::t!("channel-headset-closed")),
             Ok(length) => {
                 let packets = decoder
                     .push(&bytes[..length])
-                    .map_err(|error| format!("无法解析耳机数据帧：{error}"))?;
+                    .map_err(|error| crate::t!("protocol-frame-decode-failed", error))?;
                 for bytes in packets {
                     if let Ok(packet) = AppPacket::decode(&bytes) {
                         if snapshot.read_only {
-                            if snapshot.supports_paired_devices
+                            if snapshot.is_known_model
                                 && packet.command == 0x0204
                                 && matches!(packet.payload.first(), Some(1 | 2))
                             {
+                                if packet.payload.first() == Some(&2)
+                                    && let Ok(update) = parse_wear_event(&packet.payload)
+                                {
+                                    merge_wear_state(&mut current_wear, update);
+                                }
                                 publish_unsolicited(&packet, updates);
                             }
                             continue;
@@ -990,13 +1120,13 @@ pub fn initialize_oppo_session<T: Read + Write>(
 
     let handshake = request(stream, &mut decoder, 0x0100, 0, vec![], updates)?;
     if handshake.payload.len() < 2 {
-        return Err("耳机握手响应缺少能力信息".to_string());
+        return Err(crate::t!("device-handshake-missing-caps"));
     }
     let capabilities = handshake.payload[1..].to_vec();
 
     let product = request(stream, &mut decoder, 0x0103, 0, vec![], updates)?;
     if product.payload.len() < 4 {
-        return Err("耳机产品 ID 响应格式不完整".to_string());
+        return Err(crate::t!("device-product-id-incomplete"));
     }
     let product_id = u32::from_le_bytes([
         product.payload[1],
@@ -1011,7 +1141,11 @@ pub fn initialize_oppo_session<T: Read + Write>(
     let profile = compatibility::profile_for_product_id(product_id);
     let read_only = profile.is_none_or(|profile| !profile.supports_controls());
     if read_only {
-        let model = profile.map_or("未知型号", |profile| profile.model);
+        let is_known_model = profile.is_some();
+        let model = profile.map_or_else(
+            || crate::t!("device-unknown-model"),
+            |p| p.model.to_string(),
+        );
         let (battery, firmware, wear, detected_features, probe_errors) = if profile.is_some() {
             probe_read_only_features(stream, &mut decoder, updates)
         } else {
@@ -1024,18 +1158,24 @@ pub fn initialize_oppo_session<T: Read + Write>(
             )
         };
         let note = if profile.is_none() {
-            "未知型号仅验证控制通道握手和产品识别".to_string()
+            crate::t!("device-unknown-model-handshake-only")
         } else if detected_features.is_empty() {
-            format!("{model} 未能确认可用的只读状态查询")
+            crate::t!("probe-model-no-queries-confirmed", model.as_str())
         } else {
-            format!("{model} 已检测只读功能：{}", detected_features.join("、"))
+            crate::t!(
+                "probe-model-detected-read-only",
+                model.as_str(),
+                detected_features.join(list_separator())
+            )
         };
+        let noise_mode_support_note = crate::t!("probe-read-only-controls-note", note.as_str());
         return Ok((
             DeviceSnapshot {
                 name: name.to_string(),
                 product_id,
                 color_id,
                 model,
+                is_known_model,
                 read_only: true,
                 battery,
                 firmware,
@@ -1044,7 +1184,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
                     .is_some_and(|profile| profile.supports_wear_detection),
                 noise_mode: None,
                 noise_mode_indices: Vec::new(),
-                noise_mode_support_note: format!("{note}；型号配置未声明可用设置控制"),
+                noise_mode_support_note,
                 noise_modes: profile.map_or(&[], |profile| profile.noise_modes),
                 supports_paired_devices: profile
                     .is_some_and(|profile| profile.supports_dual_device),
@@ -1100,10 +1240,10 @@ pub fn initialize_oppo_session<T: Read + Write>(
     let event_ids = events
         .payload
         .get(2..)
-        .ok_or_else(|| "耳机事件列表响应格式不完整".to_string())?;
+        .ok_or_else(|| crate::t!("device-event-list-incomplete"))?;
     let event_count = events.payload[1] as usize;
     if event_ids.len() < event_count {
-        return Err("耳机事件列表长度不匹配".to_string());
+        return Err(crate::t!("device-event-list-mismatch"));
     }
     let supported_events: Vec<u8> = [1, 2, 3, 4, 6]
         .into_iter()
@@ -1124,16 +1264,16 @@ pub fn initialize_oppo_session<T: Read + Write>(
 
     let battery = request(stream, &mut decoder, 0x0106, 0xf0, vec![], updates)?;
     let battery = parse_battery_response(&battery.payload)
-        .map_err(|error| format!("电量响应格式错误：{error}"))?;
+        .map_err(|error| crate::t!("battery-response-invalid", error))?;
 
     let firmware = request(stream, &mut decoder, 0x0105, 0, vec![], updates)?;
     let firmware = parse_firmware_response(&firmware.payload)
-        .map_err(|error| format!("固件版本响应格式错误：{error}"))?;
+        .map_err(|error| crate::t!("firmware-response-invalid", error))?;
 
     let wear = if profile.supports_wear_detection {
         let wear = request(stream, &mut decoder, 0x0109, 0, vec![], updates)?;
         parse_wear_response(&wear.payload)
-            .map_err(|error| format!("佩戴状态响应格式错误：{error}"))?
+            .map_err(|error| crate::t!("wear-response-invalid", error))?
     } else {
         WearState::default()
     };
@@ -1166,7 +1306,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
     } else {
         match request(stream, &mut decoder, 0x010d, 0, vec![1, 17], updates) {
             Ok(response) => parse_feature_flags_response(&response.payload, 17)
-                .map_err(|error| format!("双设备连接状态响应格式错误：{error}")),
+                .map_err(|error| crate::t!("dual-device-response-invalid", error)),
             Err(_) => Ok(true),
         }
     };
@@ -1351,7 +1491,8 @@ pub fn initialize_oppo_session<T: Read + Write>(
             name: name.to_string(),
             product_id,
             color_id,
-            model: profile.model,
+            model: profile.model.to_string(),
+            is_known_model: true,
             read_only: false,
             battery,
             firmware,
@@ -1425,24 +1566,24 @@ pub fn probe_read_only_features<T: Read + Write>(
         Ok(response) => match parse_supported_events(&response.payload) {
             Ok(events) => {
                 let event_summary = if events.is_empty() {
-                    "未声明事件".to_string()
+                    crate::t!("device-no-declared-events")
                 } else {
                     events
                         .iter()
                         .map(|event| format!("{event:02X}"))
                         .collect::<Vec<_>>()
-                        .join("、")
+                        .join(list_separator())
                 };
-                detected_features.push(format!("事件列表读取（{event_summary}）"));
+                detected_features.push(crate::t!("event-list-read", event_summary));
                 Some(events)
             }
             Err(error) => {
-                probe_errors.push(format!("事件能力列表格式错误：{error}"));
+                probe_errors.push(crate::t!("event-list-invalid", error));
                 None
             }
         },
         Err(error) => {
-            probe_errors.push(format!("事件能力查询失败：{error}"));
+            probe_errors.push(crate::t!("event-list-query-failed", error));
             None
         }
     };
@@ -1457,16 +1598,17 @@ pub fn probe_read_only_features<T: Read + Write>(
             payload.extend_from_slice(&subscriptions);
             match request(stream, decoder, 0x0205, 0, payload, updates) {
                 Ok(response) if response.payload.first() == Some(&0) => {
-                    detected_features.push("电量/佩戴状态变化通知".to_string())
+                    detected_features.push(crate::t!("battery-wear-notifications"))
                 }
-                Ok(response) => probe_errors.push(format!(
-                    "状态变化订阅被拒绝，状态码：{}",
-                    response
+                Ok(response) => {
+                    let missing = crate::t!("common-missing");
+                    let status_str = response
                         .payload
                         .first()
-                        .map_or_else(|| "缺失".to_string(), |status| format!("0x{status:02X}"))
-                )),
-                Err(error) => probe_errors.push(format!("状态变化订阅失败：{error}")),
+                        .map_or(missing, |status| format!("0x{status:02X}"));
+                    probe_errors.push(crate::t!("event-subscribe-rejected", status_str));
+                }
+                Err(error) => probe_errors.push(crate::t!("event-subscribe-failed", error)),
             }
         }
     }
@@ -1475,41 +1617,41 @@ pub fn probe_read_only_features<T: Read + Write>(
         Ok(response) => match parse_battery_response(&response.payload) {
             Ok(state) => {
                 if state.left.is_some() || state.right.is_some() || state.case.is_some() {
-                    detected_features.push("电量读取".to_string());
+                    detected_features.push(crate::t!("battery-read"));
                     battery = state;
                 } else {
-                    probe_errors.push("电量查询未返回电池数据".to_string());
+                    probe_errors.push(crate::t!("battery-query-no-data"));
                 }
             }
-            Err(error) => probe_errors.push(format!("电量响应格式错误：{error}")),
+            Err(error) => probe_errors.push(crate::t!("battery-response-invalid", error)),
         },
-        Err(error) => probe_errors.push(format!("电量查询失败：{error}")),
+        Err(error) => probe_errors.push(crate::t!("battery-query-failed", error)),
     }
 
     match request(stream, decoder, 0x0105, 0, vec![], updates) {
         Ok(response) => match parse_firmware_response(&response.payload) {
             Ok(state) => {
-                detected_features.push("固件版本读取".to_string());
+                detected_features.push(crate::t!("firmware-version-read"));
                 firmware = state;
             }
-            Err(error) => probe_errors.push(format!("固件响应格式错误：{error}")),
+            Err(error) => probe_errors.push(crate::t!("firmware-response-invalid", error)),
         },
-        Err(error) => probe_errors.push(format!("固件版本查询失败：{error}")),
+        Err(error) => probe_errors.push(crate::t!("firmware-query-failed", error)),
     }
 
     match request(stream, decoder, 0x0109, 0, vec![], updates) {
         Ok(response) => match parse_wear_response(&response.payload) {
             Ok(state) => {
                 if state.left.is_some() || state.right.is_some() || state.case_open.is_some() {
-                    detected_features.push("佩戴/盒盖状态读取".to_string());
+                    detected_features.push(crate::t!("wear-case-lid-read"));
                     wear = state;
                 } else {
-                    probe_errors.push("佩戴状态查询未返回状态数据".to_string());
+                    probe_errors.push(crate::t!("wear-status-no-data"));
                 }
             }
-            Err(error) => probe_errors.push(format!("佩戴状态响应格式错误：{error}")),
+            Err(error) => probe_errors.push(crate::t!("wear-response-invalid", error)),
         },
-        Err(error) => probe_errors.push(format!("佩戴状态查询失败：{error}")),
+        Err(error) => probe_errors.push(crate::t!("wear-query-failed", error)),
     }
 
     (battery, firmware, wear, detected_features, probe_errors)
@@ -1517,13 +1659,13 @@ pub fn probe_read_only_features<T: Read + Write>(
 
 fn parse_supported_events(payload: &[u8]) -> Result<Vec<u8>, String> {
     if payload.first() != Some(&0) || payload.len() < 2 {
-        return Err("响应缺少成功状态或事件数量".to_string());
+        return Err(crate::t!("device-response-missing-status"));
     }
     let count = payload[1] as usize;
     let events = payload
         .get(2..)
         .filter(|events| events.len() == count)
-        .ok_or_else(|| "事件数量与响应长度不匹配".to_string())?;
+        .ok_or_else(|| crate::t!("device-event-count-mismatch"))?;
     Ok(events.to_vec())
 }
 
@@ -1538,25 +1680,28 @@ pub fn set_noise_mode<T: Read + Write>(
     updates: &Sender<UiUpdate>,
 ) -> Result<u8, String> {
     if supports_wear_detection && !current_wear.any_earbud_in_ear() {
-        return Err("未检测到耳机入耳；请佩戴耳机后再切换降噪模式".to_string());
+        return Err(crate::t!("wear-earbuds-not-in-ear"));
     }
     let (deferred_tx, deferred_rx) = mpsc::channel();
     let result = (|| {
         if !compatibility::noise_mode_supported_for(protocol_index, supported_indices, modes) {
-            return Err(format!(
-                "耳机支持模式清单中没有降噪模式索引 {protocol_index}"
+            return Err(crate::t!(
+                "noise-mode-not-in-supported-list",
+                protocol_index
             ));
         }
         let payload = noise_mode_write_payload_for(protocol_index, modes)
-            .ok_or_else(|| format!("该型号兼容配置未开放降噪模式索引 {protocol_index}"))?;
+            .ok_or_else(|| crate::t!("noise-mode-not-enabled-in-profile", protocol_index))?;
         request(stream, decoder, 0x0404, 0, payload, Some(&deferred_tx))?;
 
         let result = request(stream, decoder, 0x010c, 0, vec![1, 1], Some(&deferred_tx))?;
         let actual = parse_noise_mode_response(&result.payload)
-            .ok_or_else(|| "降噪设置已确认，但耳机回读的模式格式无法识别".to_string())?;
+            .ok_or_else(|| crate::t!("noise-mode-readback-unrecognized"))?;
         if !noise_mode_readback_matches_for(protocol_index, actual, modes) {
-            return Err(format!(
-                "耳机已确认设置，但回读模式为索引 {actual}，与请求的模式不一致；界面保留原状态"
+            return Err(crate::t!(
+                "noise-mode-readback-mismatch",
+                actual,
+                protocol_index
             ));
         }
         Ok(actual)
@@ -1583,23 +1728,22 @@ pub fn set_paired_device<T: Read + Write>(
 ) -> Result<(Vec<PairedDevice>, bool), String> {
     match controls_enabled {
         Ok(true) => {}
-        Ok(false) => return Err("耳机未启用双设备连接，无法管理已配对设备".to_string()),
-        Err(error) => return Err(format!("无法确认双设备连接状态，操作已禁用：{error}")),
+        Ok(false) => return Err(crate::t!("dual-device-not-enabled")),
+        Err(error) => return Err(crate::t!("dual-device-confirm-status-failed", error)),
     }
 
     let paired_devices = paired_devices
         .as_ref()
-        .map_err(|error| format!("无法读取已配对设备列表：{error}"))?;
+        .map_err(|error| crate::t!("dual-device-read-list-failed", error))?;
     let target = paired_devices
         .iter()
         .find(|device| device.address == address)
-        .ok_or_else(|| "该设备已不在耳机上报的列表中，请刷新后重试".to_string())?;
+        .ok_or_else(|| crate::t!("dual-device-not-in-list"))?;
     if target.is_current_host {
-        let op = match action {
-            PairedDeviceAction::Remove => "删除",
-            _ => "断开",
-        };
-        return Err(format!("不能通过此列表{op}本机"));
+        return Err(match action {
+            PairedDeviceAction::Remove => crate::t!("dual-device-this-host-cannot-remove"),
+            _ => crate::t!("dual-device-this-host-cannot-disconnect"),
+        });
     }
     match action {
         PairedDeviceAction::Connect | PairedDeviceAction::Disconnect => {
@@ -1614,20 +1758,20 @@ pub fn set_paired_device<T: Read + Write>(
             let updated_target = updated
                 .iter()
                 .find(|device| device.address == address)
-                .ok_or_else(|| "耳机确认了操作，但设备列表回读中未找到目标设备".to_string())?;
+                .ok_or_else(|| crate::t!("dual-device-target-missing"))?;
             if updated_target.connected != expected {
-                return Err("耳机已确认操作，但设备列表回读状态不匹配".to_string());
+                return Err(crate::t!("dual-device-readback-mismatch"));
             }
             Ok((updated, true))
         }
         PairedDeviceAction::Remove => {
             if target.connected {
-                return Err("不能删除已连接的设备，请先断开连接后再删除".to_string());
+                return Err(crate::t!("dual-device-cannot-delete-connected"));
             }
 
             let updated = issue_paired_device_action(stream, decoder, address, action, updates)?;
             if updated.iter().any(|device| device.address == address) {
-                return Err("耳机已确认删除操作，但设备列表回读中仍包含该设备".to_string());
+                return Err(crate::t!("dual-device-deletion-unconfirmed"));
             }
             Ok((updated, true))
         }
@@ -1650,7 +1794,7 @@ fn issue_paired_device_action<T: Read + Write>(
         Some(updates),
     )?;
     read_paired_devices(stream, decoder, Some(updates))
-        .map_err(|error| format!("设备操作后的列表回读失败：{error}"))
+        .map_err(|error| crate::t!("dual-device-readback-list-failed", error))
 }
 
 fn read_paired_devices<T: Read + Write>(
@@ -1660,7 +1804,7 @@ fn read_paired_devices<T: Read + Write>(
 ) -> Result<Vec<PairedDevice>, String> {
     let response = request(stream, decoder, 0x0112, 0, vec![], updates)?;
     parse_paired_devices_response(&response.payload)
-        .map_err(|error| format!("耳机已配对设备列表格式错误：{error}"))
+        .map_err(|error| crate::t!("dual-device-list-invalid", error))
 }
 
 pub fn set_equalizer<T: Read + Write>(
@@ -1672,11 +1816,9 @@ pub fn set_equalizer<T: Read + Write>(
     request(stream, decoder, 0x0406, 0, vec![preset], Some(updates))?;
     let result = request(stream, decoder, 0x010f, 0, vec![], Some(updates))?;
     let actual = parse_equalizer_response(&result.payload)
-        .map_err(|error| format!("耳机均衡器回读格式错误：{error}"))?;
+        .map_err(|error| crate::t!("equalizer-readback-invalid", error))?;
     if actual != preset {
-        return Err(format!(
-            "耳机已确认设置，但回读预设为 {actual}，与请求的预设 {preset} 不一致；界面保留原状态"
-        ));
+        return Err(crate::t!("equalizer-readback-mismatch", actual, preset));
     }
     Ok(actual)
 }
@@ -1690,11 +1832,9 @@ pub fn set_spatial_audio<T: Read + Write>(
     request(stream, decoder, 0x0422, 0, vec![mode], Some(updates))?;
     let result = request(stream, decoder, 0x012a, 0, vec![], Some(updates))?;
     let actual = parse_spatial_audio_response(&result.payload)
-        .map_err(|error| format!("耳机空间音频回读格式错误：{error}"))?;
+        .map_err(|error| crate::t!("spatial-audio-readback-invalid", error))?;
     if actual != mode {
-        return Err(format!(
-            "耳机已确认设置，但回读空间音频模式为 {actual}，与请求的模式 {mode} 不一致；界面保留原状态"
-        ));
+        return Err(crate::t!("spatial-audio-readback-mismatch", actual, mode));
     }
     Ok(actual)
 }
@@ -1706,7 +1846,14 @@ pub fn set_game_mode<T: Read + Write>(
     enabled: bool,
     updates: &Sender<UiUpdate>,
 ) -> Result<bool, String> {
-    set_feature_toggle(stream, decoder, feature_id, enabled, "游戏模式", updates)
+    set_feature_toggle(
+        stream,
+        decoder,
+        feature_id,
+        enabled,
+        &crate::t!("game-mode-title"),
+        updates,
+    )
 }
 
 pub fn set_bass_engine_enabled<T: Read + Write>(
@@ -1720,7 +1867,7 @@ pub fn set_bass_engine_enabled<T: Read + Write>(
         decoder,
         FEATURE_BASS_ENGINE,
         enabled,
-        "低音增强",
+        &crate::t!("bass-engine-title"),
         updates,
     )
 }
@@ -1744,11 +1891,12 @@ pub fn set_bass_engine_level<T: Read + Write>(
     )?;
     let result = request(stream, decoder, 0x0124, 0, vec![], Some(updates))?;
     let actual = parse_bass_engine_response(&result.payload)
-        .map_err(|error| format!("低音增强回读格式错误：{error}"))?;
+        .map_err(|error| crate::t!("bass-engine-readback-invalid", error))?;
     if actual.current != clamped {
-        return Err(format!(
-            "耳机已确认设置，但回读低音增强档位为 {}，与请求的档位 {} 不一致；界面保留原状态",
-            actual.current, clamped
+        return Err(crate::t!(
+            "bass-engine-level-readback-mismatch",
+            actual.current,
+            clamped
         ));
     }
     Ok(actual)
@@ -1765,7 +1913,7 @@ pub fn set_hi_res<T: Read + Write>(
         decoder,
         FEATURE_HI_RES,
         enabled,
-        "高解析模式",
+        &crate::t!("hi-res-title"),
         updates,
     )
 }
@@ -1796,11 +1944,9 @@ fn set_feature_toggle<T: Read + Write>(
         Some(updates),
     )?;
     let actual = parse_feature_flags_response(&result.payload, feature_id)
-        .map_err(|error| format!("{feature_name}回读格式错误：{error}"))?;
+        .map_err(|error| crate::t!("feature-readback-invalid", feature_name, error))?;
     if actual != enabled {
-        return Err(format!(
-            "耳机已确认设置，但回读{feature_name}状态为 {actual}，与请求的状态 {enabled} 不一致；界面保留原状态"
-        ));
+        return Err(crate::t!("feature-readback-mismatch", feature_name));
     }
     Ok(actual)
 }
@@ -1821,30 +1967,33 @@ fn request<T: Read + Write>(
     let frame = encode_frame(
         &packet
             .encode()
-            .map_err(|error| format!("无法编码 OPPO 命令：{error}"))?,
+            .map_err(|error| crate::t!("protocol-command-encode-failed", error))?,
     )
-    .map_err(|error| format!("无法编码 OPPO 帧：{error}"))?;
+    .map_err(|error| crate::t!("protocol-frame-encode-failed", error))?;
     stream
         .write_all(&frame)
-        .map_err(|error| format!("发送 OPPO 查询失败：{error}"))?;
+        .map_err(|error| crate::t!("protocol-query-send-failed", error))?;
 
     let deadline = Instant::now() + REQUEST_TIMEOUT;
     loop {
         let mut bytes = [0; 1024];
         let length = match stream.read(&mut bytes) {
-            Ok(0) => return Err("耳机关闭了 RFCOMM 控制连接".to_string()),
+            Ok(0) => return Err(crate::t!("channel-headset-closed")),
             Ok(length) => length,
             Err(error) if is_socket_timeout(&error) => {
                 if Instant::now() >= deadline {
-                    return Err(format!("等待耳机查询 0x{command:04X} 响应超时"));
+                    return Err(crate::t!(
+                        "protocol-query-timeout",
+                        format!("{command:04X}")
+                    ));
                 }
                 continue;
             }
-            Err(error) => return Err(format!("读取耳机响应失败：{error}")),
+            Err(error) => return Err(crate::t!("protocol-response-read-failed", error)),
         };
         let frames = decoder
             .push(&bytes[..length])
-            .map_err(|error| format!("无法解析耳机响应帧：{error}"))?;
+            .map_err(|error| crate::t!("protocol-frame-decode-failed", error))?;
         let mut response = None;
         let mut trailing_packets = Vec::new();
         for (index, frame) in frames.iter().enumerate() {
@@ -1867,19 +2016,24 @@ fn request<T: Read + Write>(
                 }
             }
             if response.payload.first() != Some(&0) {
-                return Err(format!(
-                    "耳机拒绝命令 0x{command:04X}，状态码 {}",
-                    response
-                        .payload
-                        .first()
-                        .map(|status| format!("0x{status:02X}"))
-                        .unwrap_or_else(|| "缺失".to_string())
+                let missing = crate::t!("common-missing");
+                let status_str = response
+                    .payload
+                    .first()
+                    .map_or(missing, |status| format!("0x{status:02X}"));
+                return Err(crate::t!(
+                    "protocol-command-rejected",
+                    format!("{command:04X}"),
+                    status_str
                 ));
             }
             return Ok(response);
         }
         if Instant::now() >= deadline {
-            return Err(format!("等待耳机查询 0x{command:04X} 响应超时"));
+            return Err(crate::t!(
+                "protocol-query-timeout",
+                format!("{command:04X}")
+            ));
         }
     }
 }
@@ -1960,7 +2114,7 @@ fn publish_unsolicited(packet: &AppPacket, updates: &Sender<UiUpdate>) {
         }
         Some(6) => {
             let result = parse_paired_devices_event(&packet.payload)
-                .map_err(|error| format!("耳机已配对设备事件格式错误：{error}"));
+                .map_err(|error| crate::t!("dual-device-event-invalid", error));
             let _ = updates.send(UiUpdate::PairedDevices(result));
         }
         _ => {}

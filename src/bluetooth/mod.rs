@@ -37,11 +37,13 @@ pub use probe::probe;
 
 #[derive(Clone)]
 pub struct DeviceChoice {
-    address: Address,
+    pub(crate) address: Address,
     pub name: String,
     pub brand: DeviceBrand,
     /// Whether BlueZ reports the headset control service UUID for this device.
     pub has_control_service: bool,
+    /// Control service UUIDs reported by BlueZ for this device, ordered by catalog priority.
+    pub(crate) control_service_uuids: Vec<bluer::Uuid>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

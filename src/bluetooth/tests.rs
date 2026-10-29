@@ -108,7 +108,7 @@ fn unsupported_models_stop_after_read_only_identification() {
         .expect("unknown models should connect in read-only identification mode");
     assert_eq!(snapshot.product_id, 0x123456);
     assert_eq!(snapshot.color_id, Some(1));
-    assert_eq!(snapshot.model, "未知型号");
+    assert!(snapshot.model == "未知型号" || snapshot.model == "Unknown Model");
     assert!(snapshot.read_only);
     assert!(snapshot.noise_mode_indices.is_empty());
     assert!(snapshot.paired_devices.is_err());
@@ -510,7 +510,10 @@ fn paired_device_remove_is_rejected_when_device_is_connected() {
         PairedDeviceAction::Remove,
         &mpsc::channel().0,
     );
-    assert!(result.unwrap_err().contains("不能删除已连接的设备"));
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("不能删除已连接的设备") || err.contains("Cannot delete a connected device")
+    );
 }
 
 #[test]
@@ -919,4 +922,158 @@ fn send_mock_response(stream: &mut UnixStream, request: &AppPacket, payload: Vec
     };
     let frame = encode_frame(&response.encode().unwrap()).unwrap();
     stream.write_all(&frame).unwrap();
+}
+
+#[test]
+fn sdp_uuid128_round_trips_through_libbluetooth() {
+    use super::transport::{create_sdp_uuid128, format_sdp_uuid};
+
+    for uuid_str in [
+        "0000079a-d102-11e1-9b23-00025b00a5a5",
+        "00001107-d102-11e1-9b23-00025b00a5a5",
+    ] {
+        let uuid = bluer::Uuid::parse_str(uuid_str).unwrap();
+        let sdp_uuid = create_sdp_uuid128(uuid).expect("sdp_uuid128_create should succeed");
+        let formatted = format_sdp_uuid(&sdp_uuid).expect("sdp_uuid2strn should format");
+        assert_eq!(
+            formatted.to_ascii_lowercase(),
+            uuid_str.to_ascii_lowercase()
+        );
+    }
+}
+
+#[test]
+fn candidate_service_uuids_prioritizes_device_uuids() {
+    use super::brands::oppo::oppo_candidate_service_uuids;
+
+    let device_uuid = bluer::Uuid::parse_str("0000079a-d102-11e1-9b23-00025b00a5a5").unwrap();
+    let candidates = oppo_candidate_service_uuids(&[device_uuid]);
+    assert_eq!(candidates.first(), Some(&device_uuid));
+    assert!(candidates.len() >= 2);
+}
+
+#[test]
+fn prioritize_rfcomm_channels_handles_t200_lite_and_fallbacks() {
+    use super::transport::prioritize_rfcomm_channels;
+
+    let primary_names = &["elnk", "enco link", "encolink"];
+    let secondary_names = &["jl_spp"];
+
+    // 1. realme Buds T200 Lite: 128-bit UUID on channel 11 + two JL_SPP records on channel 1
+    let spp_t200 = vec![
+        (Some("JL_SPP".to_string()), 1),
+        (Some("JL_SPP".to_string()), 1),
+    ];
+    let channels =
+        prioritize_rfcomm_channels(&[11], &spp_t200, primary_names, secondary_names, Some(15))
+            .unwrap();
+    assert_eq!(channels, vec![11, 1]);
+
+    // 2. realme Buds T200 Lite when SDP UUID channel query is empty: picks JL_SPP on channel 1
+    let channels_no_uuid =
+        prioritize_rfcomm_channels(&[], &spp_t200, primary_names, secondary_names, Some(15))
+            .unwrap();
+    assert_eq!(channels_no_uuid, vec![1]);
+
+    // 3. Standard OPPO/OnePlus: ELNK on channel 15 takes precedence over JL_SPP
+    let mixed_spp = vec![
+        (Some("JL_SPP".to_string()), 1),
+        (Some("ELNK".to_string()), 15),
+    ];
+    let channels_elnk =
+        prioritize_rfcomm_channels(&[], &mixed_spp, primary_names, secondary_names, Some(15))
+            .unwrap();
+    assert_eq!(channels_elnk, vec![15]);
+
+    // 4. Conflicting ELNK channels without UUID return error
+    let conflicting_elnk = vec![
+        (Some("ELNK".to_string()), 15),
+        (Some("ELNK".to_string()), 16),
+    ];
+    assert!(
+        prioritize_rfcomm_channels(
+            &[],
+            &conflicting_elnk,
+            primary_names,
+            secondary_names,
+            Some(15)
+        )
+        .is_err()
+    );
+
+    // 5. Unambiguous single SPP channel fallback when no names match
+    let unknown_spp = vec![(Some("SerialPort".to_string()), 5)];
+    let channels_unknown =
+        prioritize_rfcomm_channels(&[], &unknown_spp, primary_names, secondary_names, Some(15))
+            .unwrap();
+    assert_eq!(channels_unknown, vec![5]);
+
+    // 6. Fallback channel 15 when no SDP records exist
+    let channels_empty =
+        prioritize_rfcomm_channels(&[], &[], primary_names, secondary_names, Some(15)).unwrap();
+    assert_eq!(channels_empty, vec![15]);
+}
+
+#[test]
+fn probe_read_only_features_translates_under_english_locale() {
+    crate::i18n::set_locale("en-US");
+
+    let (mut client, mut device) = UnixStream::pair().unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .unwrap();
+    device
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .unwrap();
+
+    let device_thread = thread::spawn(move || {
+        let events = read_mock_request(&mut device);
+        assert_eq!(events.command, 0x0200);
+        send_mock_response(&mut device, &events, vec![0, 1, 1]);
+
+        let subscribe = read_mock_request(&mut device);
+        assert_eq!(subscribe.command, 0x0205);
+        send_mock_response(&mut device, &subscribe, vec![0]);
+
+        let battery = read_mock_request(&mut device);
+        assert_eq!(battery.command, 0x0106);
+        send_mock_response(&mut device, &battery, vec![0, 3, 1, 80, 2, 80, 3, 0]);
+
+        let fw = read_mock_request(&mut device);
+        assert_eq!(fw.command, 0x0105);
+        let mut fw_payload = vec![0, 3];
+        fw_payload.extend_from_slice(b"1,1,1.1.0,2,1,1.1.0,3,1,019");
+        send_mock_response(&mut device, &fw, fw_payload);
+
+        let wear = read_mock_request(&mut device);
+        assert_eq!(wear.command, 0x0109);
+        send_mock_response(&mut device, &wear, vec![0, 1, 1, 3]);
+    });
+
+    let (battery, firmware, wear, detected_features, probe_errors) =
+        super::session::probe_read_only_features(&mut client, &mut FrameDecoder::default(), None);
+
+    device_thread.join().unwrap();
+
+    assert!(battery.left.is_some());
+    assert!(battery.right.is_some());
+    assert!(battery.case.is_none()); // 0x00 case battery treated as None
+    assert!(firmware.left.is_some());
+    assert!(wear.left.is_some());
+    assert!(probe_errors.is_empty());
+
+    for feature in &detected_features {
+        // Assert no Chinese characters in English probe strings
+        assert!(
+            !feature
+                .chars()
+                .any(|c| ('\u{4e00}'..='\u{9fa5}').contains(&c))
+        );
+    }
+    assert!(
+        detected_features
+            .iter()
+            .any(|f| f.contains("Event list read"))
+    );
+    assert!(detected_features.iter().any(|f| f.contains("Battery read")));
 }

@@ -18,6 +18,7 @@ common-options = { $param0 }选项
 common-status = 状态：{ $param0 }
 common-not-reported = 未上报
 common-unconfirmed = 未确认
+common-missing = 缺失
 common-current-state = 当前状态：{ $param0 }
 common-current-state-unread = 当前状态：尚未读取
 common-current-state-syncing = 当前状态：正在同步
@@ -92,6 +93,15 @@ channel-sdp-attr-search-failed = 无法创建 SDP 属性搜索
 channel-sdp-service-search-failed = 无法创建 SDP 服务搜索
 channel-sdp-spp-uuid-failed = 无法创建 SPP 服务 UUID
 channel-start-task-failed = 无法启动蓝牙后台任务：{ $param0 }
+channel-connected-read-only = 已连接控制通道；{ $param0 }
+channel-connected-read-only-with-errors = 已连接控制通道；{ $param0 }；部分探测失败：{ $param1 }
+protocol-command-encode-failed = 无法编码 OPPO 命令：{ $param0 }
+protocol-frame-encode-failed = 无法编码 OPPO 帧：{ $param0 }
+protocol-frame-decode-failed = 无法解析耳机数据帧：{ $param0 }
+protocol-query-send-failed = 发送耳机命令失败：{ $param0 }
+protocol-response-read-failed = 读取耳机响应失败：{ $param0 }
+protocol-query-timeout = 等待耳机查询 0x{ $param0 } 响应超时
+protocol-command-rejected = 耳机拒绝命令 0x{ $param0 }，状态码 { $param1 }
 
 # ==============================================================================
 # Device Management
@@ -139,6 +149,11 @@ device-no-declared-events = 未声明事件
 device-event-count-mismatch = 事件数量与响应长度不匹配
 device-response-missing-status = 响应缺少成功状态或事件数量
 device-reading-configuration = 正在读取耳机配置…
+event-list-read = 事件列表读取（{ $param0 }）
+event-list-invalid = 事件能力列表格式错误：{ $param0 }
+event-list-query-failed = 事件能力查询失败：{ $param0 }
+event-subscribe-rejected = 状态变化订阅被拒绝，状态码：{ $param0 }
+event-subscribe-failed = 状态变化订阅失败：{ $param0 }
 
 # ==============================================================================
 # Battery
@@ -153,6 +168,8 @@ battery-last-read = 上次读取的电量
 battery-query-no-data = 电量查询未返回任何电量数据
 battery-read = 电量读取
 battery-wear-notifications = 电量/佩戴状态变更通知
+battery-response-invalid = 电量响应格式错误：{ $param0 }
+battery-query-failed = 电量查询失败：{ $param0 }
 
 # ==============================================================================
 # Wear & Case Lid
@@ -182,6 +199,11 @@ wear-earbuds-not-in-ear = 未检测到耳机入耳；请先佩戴耳机再切换
 wear-auto-pause-resume = 自动暂停与恢复
 wear-auto-pause-resume-desc = 摘下任意耳机时自动暂停媒体播放，重新佩戴后自动恢复播放。
 wear-fit-test = 耳塞贴合度检测
+wear-response-invalid = 佩戴状态响应格式错误：{ $param0 }
+wear-query-failed = 佩戴状态查询失败：{ $param0 }
+wear-detection-blocked = 该型号未开放佩戴检测控制，已阻止发送
+wear-detection-updated = 佩戴检测设置已更新
+wear-detection-update-failed = 设置佩戴检测失败：{ $param0 }
 
 # ==============================================================================
 # Firmware
@@ -191,6 +213,8 @@ firmware-version-single = 固件版本：{ $param0 }
 firmware-version-left-right = 固件版本：左耳 { $param0 } · 右耳 { $param1 }
 firmware-version-full = 固件版本：左耳 { $param0 } · 右耳 { $param1 } · 充电盒 { $param2 }
 firmware-version-read = 固件版本读取
+firmware-response-invalid = 固件版本响应格式错误：{ $param0 }
+firmware-query-failed = 固件版本查询失败：{ $param0 }
 
 # ==============================================================================
 # Noise Mode
@@ -228,6 +252,9 @@ noise-mode-profile-missing = 型号配置未声明降噪模式
 noise-mode-transparency-title = 通透模式
 noise-mode-protocol-mode = 协议模式 { $param0 }
 noise-mode-numbered = 模式 { $param0 }
+noise-mode-not-in-supported-list = 耳机支持模式清单中没有降噪模式索引 { $param0 }
+noise-mode-not-enabled-in-profile = 该型号兼容配置未开放降噪模式索引 { $param0 }
+noise-mode-readback-mismatch = 耳机已确认设置，但回读模式为索引 { $param0 }，与请求的模式不一致；界面保留原状态
 
 # ==============================================================================
 # Dual Device Connection
@@ -269,6 +296,15 @@ dual-device-state-unavailable = 双设备连接状态不可用：{ $param0 }
 dual-device-confirm-status-failed = 无法确认双设备连接状态，已禁止操作：{ $param0 }
 dual-device-profile-missing = 型号配置未声明双设备连接管理
 dual-device-management-blocked = 该型号未开放已配对设备管理，已阻止发送
+dual-device-response-invalid = 双设备连接状态响应格式错误：{ $param0 }
+dual-device-read-list-failed = 无法读取已配对设备列表：{ $param0 }
+dual-device-readback-list-failed = 设备操作后的列表回读失败：{ $param0 }
+dual-device-list-invalid = 耳机已配对设备列表格式错误：{ $param0 }
+dual-device-event-invalid = 耳机已配对设备事件格式错误：{ $param0 }
+dual-device-this-host-cannot-remove = 不能通过此列表删除本机
+dual-device-toggle-blocked = 该型号未开放双设备连接控制，已阻止发送
+dual-device-toggle-updated = 双设备连接设置已更新
+dual-device-toggle-failed = 设置双设备连接失败：{ $param0 }
 
 # ==============================================================================
 # Equalizer
@@ -305,6 +341,23 @@ equalizer-applied = 耳机已应用均衡器预设
 equalizer-waiting-confirm = 正在等待耳机确认均衡器预设…
 equalizer-send-failed = 无法发送均衡器设置命令：{ $param0 }
 equalizer-switch-failed = 切换均衡器预设失败：{ $param0 }
+equalizer-custom-default-prefix = 自定义
+equalizer-custom-default-name = 自定义{ $param0 }
+equalizer-custom-blocked = 该型号未开放自定义均衡器控制，已阻止发送
+equalizer-custom-switching = 正在切换自定义均衡器预设…
+equalizer-custom-applied = 耳机已应用自定义均衡器预设
+equalizer-custom-switch-failed = 切换自定义均衡器失败：{ $param0 }
+equalizer-custom-adding = 正在添加自定义均衡器预设…
+equalizer-custom-added = 已添加自定义均衡器预设
+equalizer-custom-add-failed = 添加自定义均衡器失败：{ $param0 }
+equalizer-custom-saving = 正在保存自定义均衡器预设…
+equalizer-custom-saved = 已修改自定义均衡器预设
+equalizer-custom-save-failed = 修改自定义均衡器失败：{ $param0 }
+equalizer-custom-deleting = 正在删除自定义均衡器预设…
+equalizer-custom-deleted = 已删除自定义均衡器预设
+equalizer-custom-delete-failed = 删除自定义均衡器失败：{ $param0 }
+equalizer-readback-invalid = 耳机均衡器回读格式错误：{ $param0 }
+equalizer-readback-mismatch = 耳机已确认设置，但回读预设为 { $param0 }，与请求的预设 { $param1 } 不一致；界面保留原状态
 
 
 # ==============================================================================
@@ -321,6 +374,8 @@ spatial-audio-applied = 耳机已应用空间音频模式
 spatial-audio-waiting-confirm = 正在等待耳机确认空间音频模式…
 spatial-audio-send-failed = 无法发送空间音频设置命令：{ $param0 }
 spatial-audio-switch-failed = 切换空间音频失败：{ $param0 }
+spatial-audio-readback-invalid = 耳机空间音频回读格式错误：{ $param0 }
+spatial-audio-readback-mismatch = 耳机已确认设置，但回读空间音频模式为 { $param0 }，与请求的模式 { $param1 } 不一致；界面保留原状态
 
 # ==============================================================================
 # Game Mode
@@ -346,6 +401,17 @@ bass-engine-weak = 弱
 bass-engine-strong = 强
 bass-engine-not-returned = 动态低音：设备未返回
 bass-engine-send-failed = 无法发送低音增强设置命令：{ $param0 }
+bass-engine-blocked = 该型号未开放低音增强控制，已阻止发送
+bass-engine-waiting-confirm = 正在等待耳机确认低音增强开关…
+bass-engine-state-enabled = 已开启低音增强
+bass-engine-state-disabled = 已关闭低音增强
+bass-engine-switch-failed = 切换低音增强失败：{ $param0 }
+bass-engine-level-blocked = 该型号未开放低音增强档位控制，已阻止发送
+bass-engine-level-waiting-confirm = 正在等待耳机确认低音增强档位…
+bass-engine-level-applied = 低音增强档位已设置为 { $param0 }
+bass-engine-level-switch-failed = 切换低音增强档位失败：{ $param0 }
+bass-engine-readback-invalid = 低音增强回读格式错误：{ $param0 }
+bass-engine-level-readback-mismatch = 耳机已确认设置，但回读低音增强档位为 { $param0 }，与请求的档位 { $param1 } 不一致；界面保留原状态
 
 # ==============================================================================
 # Hi-Res Mode
@@ -354,6 +420,13 @@ hi-res-title = Hi-Res 高解析模式
 hi-res-summary = 启用高规格高清音频传输，呈现更丰富的声音细节
 hi-res-not-returned = 高解析模式：设备未返回
 hi-res-send-failed = 无法发送高解析模式设置命令：{ $param0 }
+hi-res-blocked = 该型号未开放高解析模式控制，已阻止发送
+hi-res-waiting-confirm = 正在等待耳机确认高解析模式…
+hi-res-state-enabled = 已开启高解析模式
+hi-res-state-disabled = 已关闭高解析模式
+hi-res-switch-failed = 切换高解析模式失败：{ $param0 }
+feature-readback-invalid = { $param0 }回读格式错误：{ $param1 }
+feature-readback-mismatch = 耳机已确认设置，但回读{ $param0 }状态与请求的状态不一致；界面保留原状态
 
 # ==============================================================================
 # Sound Quality & Audio Effects
@@ -438,6 +511,32 @@ controls-sleep-detection-desc = 监测到入睡后自动暂停音乐播放以保
 controls-preferred-device-title = 首选连接设备
 controls-preferred-device-desc = 开启双设备连接后，在连接范围内耳机将优先回连该设备。
 controls-preferred-device-auto = 自动选择
+controls-gesture-blocked = 该型号未开放手势自定义，已阻止发送
+controls-gesture-updating = 正在修改耳机手势…
+controls-gesture-updated = 手势设置已更新
+controls-gesture-update-failed = 修改手势失败：{ $param0 }
+controls-noise-cycle-blocked = 该型号未开放噪声循环控制，已阻止发送
+controls-noise-cycle-updating = 正在修改噪声切换循环…
+controls-noise-cycle-updated = 噪声切换循环已更新
+controls-noise-cycle-update-failed = 修改噪声循环失败：{ $param0 }
+controls-find-blocked = 该型号未开放查找耳机功能，已阻止发送
+controls-find-ringing = 耳机正在播放提示音
+controls-find-stopped = 已停止播放提示音
+controls-find-failed = 查找耳机命令失败：{ $param0 }
+controls-fit-test-blocked = 该型号未开放耳塞贴合度检测，已阻止发送
+controls-fit-test-start-failed = 启动贴合度检测失败：{ $param0 }
+controls-prompt-volume-blocked = 该型号未开放提示音音量控制，已阻止发送
+controls-prompt-volume-updated = 提示音音量已更新
+controls-prompt-volume-update-failed = 调节提示音音量失败：{ $param0 }
+controls-head-motion-blocked = 该型号未开放头部动作控制，已阻止发送
+controls-head-motion-updated = 头部控制动作已更新
+controls-head-motion-update-failed = 修改头部动作失败：{ $param0 }
+controls-sleep-detection-blocked = 该型号未开放入睡检测控制，已阻止发送
+controls-sleep-detection-updated = 入睡检测设置已更新
+controls-sleep-detection-update-failed = 设置入睡检测失败：{ $param0 }
+controls-preferred-device-blocked = 该型号未开放首选设备设置，已阻止发送
+controls-preferred-device-updated = 首选连接设备已更新
+controls-preferred-device-update-failed = 设置首选设备失败：{ $param0 }
 
 
 # ==============================================================================
@@ -462,3 +561,6 @@ probe-no-queries-confirmed = 未确认任何可用的状态查询
 probe-note = 探测提示：{ $param0 }
 probe-custom-eq-list = 自定义均衡器：{ $param0 }
 probe-custom-eq-none = 自定义均衡器：未添加自定义预设
+probe-model-no-queries-confirmed = { $param0 } 未能确认可用的只读状态查询
+probe-model-detected-read-only = { $param0 } 已检测只读功能：{ $param1 }
+probe-read-only-controls-note = { $param0 }；型号配置未声明可用设置控制

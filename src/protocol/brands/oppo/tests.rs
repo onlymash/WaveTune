@@ -128,6 +128,37 @@ fn parses_x4_battery_response_and_retains_missing_case_as_unknown() {
 }
 
 #[test]
+fn treats_zero_unplugged_case_battery_as_unreported_while_preserving_charging_zero() {
+    let unreported = parse_oppo_battery_response(&[0, 3, 1, 0x50, 2, 0x50, 3, 0x00]).unwrap();
+    assert_eq!(
+        unreported,
+        BatteryState {
+            left: Some(BatteryPart {
+                percentage: 80,
+                charging: false,
+            }),
+            right: Some(BatteryPart {
+                percentage: 80,
+                charging: false,
+            }),
+            case: None,
+        }
+    );
+
+    let unreported_event = parse_oppo_battery_event(&[1, 3, 1, 0x50, 2, 0x50, 3, 0x00]).unwrap();
+    assert_eq!(unreported_event.case, None);
+
+    let charging_zero = parse_oppo_battery_response(&[0, 3, 1, 0x50, 2, 0x50, 3, 0x80]).unwrap();
+    assert_eq!(
+        charging_zero.case,
+        Some(BatteryPart {
+            percentage: 0,
+            charging: true,
+        })
+    );
+}
+
+#[test]
 fn parses_noise_control_bitmap_indices() {
     assert_eq!(parse_oppo_noise_mode_response(&[0, 1, 0, 0x40]), Some(6));
     assert_eq!(parse_oppo_noise_mode_event(&[3, 1, 1, 0x20]), Some(5));

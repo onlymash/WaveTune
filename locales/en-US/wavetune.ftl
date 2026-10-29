@@ -18,6 +18,7 @@ common-options = { $param0 } Options
 common-status = Status: { $param0 }
 common-not-reported = Not reported
 common-unconfirmed = Unconfirmed
+common-missing = missing
 common-current-state = Current State: { $param0 }
 common-current-state-unread = Current state: Not read yet
 common-current-state-syncing = Current state: Synchronizing
@@ -92,6 +93,15 @@ channel-sdp-attr-search-failed = Unable to create SDP attribute search
 channel-sdp-service-search-failed = Unable to create SDP service search
 channel-sdp-spp-uuid-failed = Unable to create SPP service UUID
 channel-start-task-failed = Failed to start Bluetooth background task: { $param0 }
+channel-connected-read-only = Control channel connected; { $param0 }
+channel-connected-read-only-with-errors = Control channel connected; { $param0 }; partial probe errors: { $param1 }
+protocol-command-encode-failed = Unable to encode OPPO command: { $param0 }
+protocol-frame-encode-failed = Unable to encode OPPO frame: { $param0 }
+protocol-frame-decode-failed = Unable to decode headset frame: { $param0 }
+protocol-query-send-failed = Failed to send headset command: { $param0 }
+protocol-response-read-failed = Failed to read headset response: { $param0 }
+protocol-query-timeout = Timed out waiting for headset response to 0x{ $param0 }
+protocol-command-rejected = Headset rejected command 0x{ $param0 }, status { $param1 }
 
 # ==============================================================================
 # Device Management
@@ -139,6 +149,11 @@ device-no-declared-events = No declared events
 device-event-count-mismatch = Event count does not match response length
 device-response-missing-status = Response missing success status or event count
 device-reading-configuration = Reading headset configuration…
+event-list-read = Event list read ({ $param0 })
+event-list-invalid = Invalid event capability list: { $param0 }
+event-list-query-failed = Event capability query failed: { $param0 }
+event-subscribe-rejected = Status notification subscription rejected, status: { $param0 }
+event-subscribe-failed = Status notification subscription failed: { $param0 }
 
 # ==============================================================================
 # Battery
@@ -153,6 +168,8 @@ battery-last-read = Last read battery level
 battery-query-no-data = Battery query returned no battery data
 battery-read = Battery read
 battery-wear-notifications = Battery/wear status change notifications
+battery-response-invalid = Invalid battery response: { $param0 }
+battery-query-failed = Battery query failed: { $param0 }
 
 # ==============================================================================
 # Wear & Case Lid
@@ -182,6 +199,11 @@ wear-earbuds-not-in-ear = Earbuds not detected in-ear; please put on earbuds bef
 wear-auto-pause-resume = Auto Pause &amp; Resume
 wear-auto-pause-resume-desc = Automatically pauses playback when either earbud is removed, and resumes when put back on.
 wear-fit-test = Ear Tip Fit Test
+wear-response-invalid = Invalid wear status response: { $param0 }
+wear-query-failed = Wear status query failed: { $param0 }
+wear-detection-blocked = Wear detection control is not enabled for this model; command blocked
+wear-detection-updated = Wear detection setting updated
+wear-detection-update-failed = Failed to update wear detection: { $param0 }
 
 # ==============================================================================
 # Firmware
@@ -191,6 +213,8 @@ firmware-version-single = Firmware Version: { $param0 }
 firmware-version-left-right = Firmware Version: Left { $param0 } · Right { $param1 }
 firmware-version-full = Firmware Version: Left { $param0 } · Right { $param1 } · Case { $param2 }
 firmware-version-read = Firmware version read
+firmware-response-invalid = Invalid firmware version response: { $param0 }
+firmware-query-failed = Firmware version query failed: { $param0 }
 
 # ==============================================================================
 # Noise Mode
@@ -228,6 +252,9 @@ noise-mode-profile-missing = Model profile does not declare noise modes
 noise-mode-transparency-title = Transparency Mode
 noise-mode-protocol-mode = Protocol Mode { $param0 }
 noise-mode-numbered = Mode { $param0 }
+noise-mode-not-in-supported-list = Noise mode index { $param0 } is not in the headset supported mode list
+noise-mode-not-enabled-in-profile = Model compatibility profile has not enabled noise mode index { $param0 }
+noise-mode-readback-mismatch = Headset confirmed setting, but readback mode index { $param0 } mismatching requested mode; UI keeps previous state
 
 # ==============================================================================
 # Dual Device Connection
@@ -269,6 +296,15 @@ dual-device-state-unavailable = Dual-device connection state unavailable: { $par
 dual-device-confirm-status-failed = Unable to confirm dual-device connection status, operation disabled: { $param0 }
 dual-device-profile-missing = Model profile does not declare dual-device management
 dual-device-management-blocked = Paired device management is not enabled for this model; command blocked
+dual-device-response-invalid = Invalid dual-device status response: { $param0 }
+dual-device-read-list-failed = Unable to read paired device list: { $param0 }
+dual-device-readback-list-failed = Failed to read back device list after operation: { $param0 }
+dual-device-list-invalid = Invalid paired device list response: { $param0 }
+dual-device-event-invalid = Invalid paired device event: { $param0 }
+dual-device-this-host-cannot-remove = Cannot remove this device from here
+dual-device-toggle-blocked = Dual-device connection toggle is not enabled for this model; command blocked
+dual-device-toggle-updated = Dual-device connection setting updated
+dual-device-toggle-failed = Failed to update dual-device connection: { $param0 }
 
 # ==============================================================================
 # Equalizer
@@ -305,6 +341,23 @@ equalizer-applied = Headset applied equalizer preset
 equalizer-waiting-confirm = Waiting for headset to confirm equalizer preset…
 equalizer-send-failed = Failed to send equalizer command: { $param0 }
 equalizer-switch-failed = Failed to switch equalizer preset: { $param0 }
+equalizer-custom-default-prefix = Custom
+equalizer-custom-default-name = Custom { $param0 }
+equalizer-custom-blocked = Custom equalizer control is not enabled for this model; command blocked
+equalizer-custom-switching = Switching custom equalizer preset…
+equalizer-custom-applied = Headset applied custom equalizer preset
+equalizer-custom-switch-failed = Failed to switch custom equalizer: { $param0 }
+equalizer-custom-adding = Adding custom equalizer preset…
+equalizer-custom-added = Custom equalizer preset added
+equalizer-custom-add-failed = Failed to add custom equalizer: { $param0 }
+equalizer-custom-saving = Saving custom equalizer preset…
+equalizer-custom-saved = Custom equalizer preset updated
+equalizer-custom-save-failed = Failed to update custom equalizer: { $param0 }
+equalizer-custom-deleting = Deleting custom equalizer preset…
+equalizer-custom-deleted = Custom equalizer preset deleted
+equalizer-custom-delete-failed = Failed to delete custom equalizer: { $param0 }
+equalizer-readback-invalid = Invalid equalizer readback response: { $param0 }
+equalizer-readback-mismatch = Headset confirmed setting, but readback preset { $param0 } did not match requested preset { $param1 }; UI keeps previous state
 
 
 # ==============================================================================
@@ -321,6 +374,8 @@ spatial-audio-applied = Headset applied spatial audio mode
 spatial-audio-waiting-confirm = Waiting for headset to confirm spatial audio mode…
 spatial-audio-send-failed = Failed to send spatial audio command: { $param0 }
 spatial-audio-switch-failed = Failed to switch spatial audio: { $param0 }
+spatial-audio-readback-invalid = Invalid spatial audio readback response: { $param0 }
+spatial-audio-readback-mismatch = Headset confirmed setting, but readback spatial audio mode { $param0 } did not match requested mode { $param1 }; UI keeps previous state
 
 # ==============================================================================
 # Game Mode
@@ -346,6 +401,17 @@ bass-engine-weak = Weak
 bass-engine-strong = Strong
 bass-engine-not-returned = BassWave: Not returned by device
 bass-engine-send-failed = Failed to send BassWave setting command: { $param0 }
+bass-engine-blocked = BassWave control is not enabled for this model; command blocked
+bass-engine-waiting-confirm = Waiting for headset to confirm BassWave toggle…
+bass-engine-state-enabled = BassWave enabled
+bass-engine-state-disabled = BassWave disabled
+bass-engine-switch-failed = Failed to switch BassWave: { $param0 }
+bass-engine-level-blocked = BassWave level control is not enabled for this model; command blocked
+bass-engine-level-waiting-confirm = Waiting for headset to confirm BassWave level…
+bass-engine-level-applied = BassWave level set to { $param0 }
+bass-engine-level-switch-failed = Failed to switch BassWave level: { $param0 }
+bass-engine-readback-invalid = Invalid BassWave readback response: { $param0 }
+bass-engine-level-readback-mismatch = Headset confirmed setting, but readback BassWave level { $param0 } did not match requested level { $param1 }; UI keeps previous state
 
 # ==============================================================================
 # Hi-Res Mode
@@ -354,6 +420,13 @@ hi-res-title = Hi-Res Mode
 hi-res-summary = Enables high-definition audio transmission for richer details.
 hi-res-not-returned = High-Res Mode: Not returned by device
 hi-res-send-failed = Failed to send High-Res Mode setting command: { $param0 }
+hi-res-blocked = Hi-Res Mode control is not enabled for this model; command blocked
+hi-res-waiting-confirm = Waiting for headset to confirm Hi-Res Mode…
+hi-res-state-enabled = Hi-Res Mode enabled
+hi-res-state-disabled = Hi-Res Mode disabled
+hi-res-switch-failed = Failed to switch Hi-Res Mode: { $param0 }
+feature-readback-invalid = Invalid { $param0 } readback response: { $param1 }
+feature-readback-mismatch = Headset confirmed setting, but readback { $param0 } state did not match requested state; UI keeps previous state
 
 # ==============================================================================
 # Sound Quality & Audio Effects
@@ -438,6 +511,32 @@ controls-sleep-detection-desc = Automatically pauses playback when falling aslee
 controls-preferred-device-title = Preferred Connection Device
 controls-preferred-device-desc = Earbuds prioritize connecting to this device when in dual connection range.
 controls-preferred-device-auto = Auto Select
+controls-gesture-blocked = Gesture customization is not enabled for this model; command blocked
+controls-gesture-updating = Updating headset gesture…
+controls-gesture-updated = Gesture setting updated
+controls-gesture-update-failed = Failed to update gesture: { $param0 }
+controls-noise-cycle-blocked = Noise mode cycle control is not enabled for this model; command blocked
+controls-noise-cycle-updating = Updating noise mode cycle…
+controls-noise-cycle-updated = Noise mode cycle updated
+controls-noise-cycle-update-failed = Failed to update noise mode cycle: { $param0 }
+controls-find-blocked = Find Earbuds is not enabled for this model; command blocked
+controls-find-ringing = Headset is playing alert sound
+controls-find-stopped = Stopped playing alert sound
+controls-find-failed = Find Earbuds command failed: { $param0 }
+controls-fit-test-blocked = Earbud Fit Test is not enabled for this model; command blocked
+controls-fit-test-start-failed = Failed to start fit test: { $param0 }
+controls-prompt-volume-blocked = Alert sound volume control is not enabled for this model; command blocked
+controls-prompt-volume-updated = Alert sound volume updated
+controls-prompt-volume-update-failed = Failed to update alert sound volume: { $param0 }
+controls-head-motion-blocked = Head motion control is not enabled for this model; command blocked
+controls-head-motion-updated = Head motion control updated
+controls-head-motion-update-failed = Failed to update head motion control: { $param0 }
+controls-sleep-detection-blocked = Sleep detection control is not enabled for this model; command blocked
+controls-sleep-detection-updated = Sleep detection setting updated
+controls-sleep-detection-update-failed = Failed to update sleep detection: { $param0 }
+controls-preferred-device-blocked = Preferred device setting is not enabled for this model; command blocked
+controls-preferred-device-updated = Preferred connection device updated
+controls-preferred-device-update-failed = Failed to update preferred device: { $param0 }
 
 
 # ==============================================================================
@@ -462,3 +561,6 @@ probe-no-queries-confirmed = No available status queries confirmed
 probe-note = Probe note: { $param0 }
 probe-custom-eq-list = Custom equalizers: { $param0 }
 probe-custom-eq-none = Custom equalizers: None
+probe-model-no-queries-confirmed = { $param0 } could not confirm available read-only status queries
+probe-model-detected-read-only = { $param0 } detected read-only features: { $param1 }
+probe-read-only-controls-note = { $param0 }; model profile does not declare setting controls

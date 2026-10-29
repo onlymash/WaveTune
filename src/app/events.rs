@@ -25,9 +25,24 @@ use crate::{
     },
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingDomain {
+    NoiseMode,
+    Equalizer,
+    SpatialAudio,
+    GameMode,
+    BassEngine,
+    HiRes,
+    Controls,
+}
+
 #[derive(Debug, Clone)]
 pub enum UiUpdate {
     Status(String),
+    SettingError {
+        domain: SettingDomain,
+        message: String,
+    },
     Devices(Result<Vec<DeviceChoice>, String>),
     Connecting {
         device: DeviceChoice,
