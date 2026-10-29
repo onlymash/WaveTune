@@ -111,6 +111,101 @@ fn config_file_path() -> PathBuf {
         .join("settings.ini")
 }
 
+fn autostart_file_in(config_dir: &Path) -> PathBuf {
+    config_dir
+        .join("autostart")
+        .join("io.github.onlymash.WaveTune.desktop")
+}
+
+pub(crate) fn read_run_in_background_from(path: &Path) -> bool {
+    if !path.exists() {
+        return true;
+    }
+    let keyfile = gtk::glib::KeyFile::new();
+    if keyfile
+        .load_from_file(path, gtk::glib::KeyFileFlags::NONE)
+        .is_ok()
+        && let Ok(enabled) = keyfile.boolean("General", "run_in_background")
+    {
+        return enabled;
+    }
+    true
+}
+
+pub(crate) fn write_run_in_background_to(path: &Path, enabled: bool) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let keyfile = gtk::glib::KeyFile::new();
+    let _ = keyfile.load_from_file(path, gtk::glib::KeyFileFlags::NONE);
+    keyfile.set_boolean("General", "run_in_background", enabled);
+    keyfile
+        .save_to_file(path)
+        .map_err(|err| io::Error::other(err.to_string()))
+}
+
+pub fn get_run_in_background() -> bool {
+    read_run_in_background_from(&config_file_path())
+}
+
+pub fn set_run_in_background(enabled: bool) -> io::Result<()> {
+    write_run_in_background_to(&config_file_path(), enabled)
+}
+
+const AUTOSTART_DESKTOP_ENTRY: &str = "\
+[Desktop Entry]
+Type=Application
+Name=WaveTune
+Comment=Wireless headset control center background service
+Comment[zh_CN]=无线耳机控制中心后台服务
+Exec=wavetune --background
+Icon=io.github.onlymash.WaveTune
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+";
+
+pub(crate) fn get_autostart_background_in(config_dir: &Path) -> bool {
+    let path = autostart_file_in(config_dir);
+    if !path.exists() {
+        return false;
+    }
+    let keyfile = gtk::glib::KeyFile::new();
+    if keyfile
+        .load_from_file(&path, gtk::glib::KeyFileFlags::NONE)
+        .is_ok()
+    {
+        if let Ok(hidden) = keyfile.boolean("Desktop Entry", "Hidden")
+            && hidden
+        {
+            return false;
+        }
+        if let Ok(gn_enabled) = keyfile.boolean("Desktop Entry", "X-GNOME-Autostart-enabled") {
+            return gn_enabled;
+        }
+    }
+    true
+}
+
+pub(crate) fn set_autostart_background_in(config_dir: &Path, enabled: bool) -> io::Result<()> {
+    let path = autostart_file_in(config_dir);
+    if enabled {
+        write_if_changed(&path, AUTOSTART_DESKTOP_ENTRY)
+    } else if path.exists() {
+        fs::remove_file(path)
+    } else {
+        Ok(())
+    }
+}
+
+pub fn get_autostart_background() -> bool {
+    get_autostart_background_in(&gtk::glib::user_config_dir())
+}
+
+pub fn set_autostart_background(enabled: bool) -> io::Result<()> {
+    set_autostart_background_in(&gtk::glib::user_config_dir(), enabled)
+}
+
 pub fn get_configured_icon_style() -> AppIconStyle {
     let path = config_file_path();
     if !path.exists() {
@@ -626,6 +721,42 @@ mod tests {
         apply_user_icon_override_to_dir(&temp_dir, AppIconStyle::Default)
             .expect("default cleanup should succeed");
         assert!(!target_svg.exists());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn background_and_autostart_preferences_round_trip() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "wavetune_bg_pref_test_{}_{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let settings_path = temp_dir.join("wavetune").join("settings.ini");
+
+        // Default when settings.ini does not exist is true
+        assert!(read_run_in_background_from(&settings_path));
+
+        write_run_in_background_to(&settings_path, false).expect("should write false");
+        assert!(!read_run_in_background_from(&settings_path));
+
+        write_run_in_background_to(&settings_path, true).expect("should write true");
+        assert!(read_run_in_background_from(&settings_path));
+
+        // Autostart defaults to false, creates desktop entry when enabled, removes when disabled
+        assert!(!get_autostart_background_in(&temp_dir));
+        set_autostart_background_in(&temp_dir, true).expect("should create autostart file");
+        assert!(get_autostart_background_in(&temp_dir));
+        let desktop_content =
+            fs::read_to_string(autostart_file_in(&temp_dir)).expect("desktop file should exist");
+        assert!(desktop_content.contains("Exec=wavetune --background"));
+
+        set_autostart_background_in(&temp_dir, false).expect("should remove autostart file");
+        assert!(!get_autostart_background_in(&temp_dir));
+        assert!(!autostart_file_in(&temp_dir).exists());
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

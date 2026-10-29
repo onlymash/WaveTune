@@ -16,5 +16,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 pub(crate) mod controller;
+pub(crate) mod dbus_service;
 mod device_manager;
 pub mod events;

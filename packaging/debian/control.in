@@ -4,6 +4,7 @@ Architecture: @ARCH@
 Maintainer: onlymash <fiepi.dev@gmail.com>
 Installed-Size: @INSTALLED_SIZE@
 Depends: libc6, libgcc-s1, libgtk-4-1 (>= 4.10), libadwaita-1-0 (>= 1.9), libbluetooth3, libdbus-1-3, libwebp7, bluez
+Suggests: gnome-shell (>= 45)
 Section: sound
 Priority: optional
 Homepage: https://github.com/onlymash/WaveTune

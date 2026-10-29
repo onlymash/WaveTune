@@ -255,7 +255,7 @@ pub(crate) fn noise_mode_icon_name(kind: compatibility::NoiseModeKind) -> &'stat
     }
 }
 
-fn noise_options_title_for(group: u8, modes: &[compatibility::NoiseMode]) -> String {
+pub(crate) fn noise_options_title_for(group: u8, modes: &[compatibility::NoiseMode]) -> String {
     match group {
         1 => crate::t!("noise-mode-level"),
         11 => crate::t!("noise-mode-adaptive-preference"),

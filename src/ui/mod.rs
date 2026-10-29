@@ -117,7 +117,10 @@ impl ConnectionStateWidgets {
     }
 }
 
-pub fn build(app: &adw::Application) {
+pub fn build(
+    app: &adw::Application,
+    quick_settings: Option<std::rc::Rc<crate::app::dbus_service::QuickSettingsService>>,
+) -> adw::ApplicationWindow {
     crate::resources::init_app_icons();
     components::install_styles();
 
@@ -181,11 +184,17 @@ pub fn build(app: &adw::Application) {
     sidebar_header.set_title_widget(Some(&adw::WindowTitle::new("WaveTune", "")));
 
     let menu = gtk::gio::Menu::new();
-    menu.append(
+    let main_section = gtk::gio::Menu::new();
+    main_section.append(
         Some(&crate::t!("pref-preferences")),
         Some("win.preferences"),
     );
-    menu.append(Some(&crate::t!("about-title")), Some("win.about"));
+    main_section.append(Some(&crate::t!("about-title")), Some("win.about"));
+    menu.append_section(None, &main_section);
+
+    let quit_section = gtk::gio::Menu::new();
+    quit_section.append(Some(&crate::t!("nav-quit")), Some("app.quit"));
+    menu.append_section(None, &quit_section);
 
     let menu_button = gtk::MenuButton::builder()
         .icon_name("open-menu-symbolic")
@@ -212,7 +221,17 @@ pub fn build(app: &adw::Application) {
     });
     window.add_action(&about_action);
 
+    let quit_action = gtk::gio::SimpleAction::new("quit", None);
+    let app_weak = app.downgrade();
+    quit_action.connect_activate(move |_, _| {
+        if let Some(app) = app_weak.upgrade() {
+            app.quit();
+        }
+    });
+    app.add_action(&quit_action);
+
     app.set_accels_for_action("win.preferences", &["<Control>comma"]);
+    app.set_accels_for_action("app.quit", &["<Control>q"]);
 
     sidebar_toolbar.add_top_bar(&sidebar_header);
     sidebar_toolbar.set_content(Some(&sidebar));
@@ -316,7 +335,27 @@ pub fn build(app: &adw::Application) {
     });
     window.add_breakpoint(collapse_bp);
 
-    window.present();
+    {
+        let app_weak = app.downgrade();
+        window.connect_close_request(move |win| {
+            if crate::resources::get_run_in_background() {
+                win.set_visible(false);
+                gtk::glib::Propagation::Stop
+            } else {
+                if let Some(app) = app_weak.upgrade() {
+                    app.quit();
+                }
+                gtk::glib::Propagation::Proceed
+            }
+        });
+    }
+
+    let window_weak_for_present = window.downgrade();
+    let present_window = std::rc::Rc::new(move || {
+        if let Some(win) = window_weak_for_present.upgrade() {
+            win.present();
+        }
+    });
 
     crate::app::controller::wire_bluetooth_controls(
         widgets,
@@ -324,5 +363,9 @@ pub fn build(app: &adw::Application) {
         controls_widgets,
         device_widgets,
         connection_state,
+        quick_settings,
+        present_window,
     );
+
+    window
 }

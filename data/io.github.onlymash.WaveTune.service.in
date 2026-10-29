@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=io.github.onlymash.WaveTune
+Exec=@PREFIX@/bin/wavetune --background
+

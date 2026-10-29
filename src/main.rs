@@ -23,6 +23,8 @@ pub mod protocol;
 pub(crate) mod resources;
 mod ui;
 
+use std::{cell::RefCell, rc::Rc};
+
 use gtk::prelude::*;
 
 const APP_ID: &str = "io.github.onlymash.WaveTune";
@@ -38,7 +40,55 @@ fn main() -> gtk::glib::ExitCode {
         return gtk::glib::ExitCode::SUCCESS;
     }
 
-    let app = adw::Application::builder().application_id(APP_ID).build();
-    app.connect_activate(ui::build);
+    let app = adw::Application::builder()
+        .application_id(APP_ID)
+        .flags(gtk::gio::ApplicationFlags::HANDLES_COMMAND_LINE)
+        .build();
+
+    app.add_main_option(
+        "background",
+        gtk::glib::Char::from(b'b'),
+        gtk::glib::OptionFlags::NONE,
+        gtk::glib::OptionArg::None,
+        "Start silently in the background without opening the main window",
+        None,
+    );
+
+    let quick_settings = app::dbus_service::QuickSettingsService::new(
+        gtk::gio::bus_get_sync(gtk::gio::BusType::Session, gtk::gio::Cancellable::NONE).ok(),
+    );
+
+    let window_slot: Rc<RefCell<Option<adw::ApplicationWindow>>> = Rc::new(RefCell::new(None));
+    let hold_guard: Rc<RefCell<Option<gtk::gio::ApplicationHoldGuard>>> =
+        Rc::new(RefCell::new(None));
+
+    {
+        let window_slot = Rc::clone(&window_slot);
+        let hold_guard = Rc::clone(&hold_guard);
+        let quick_settings = Rc::clone(&quick_settings);
+        app.connect_startup(move |app| {
+            let window = ui::build(app, Some(Rc::clone(&quick_settings)));
+            *window_slot.borrow_mut() = Some(window);
+            *hold_guard.borrow_mut() = Some(app.hold());
+        });
+    }
+
+    {
+        let window_slot = Rc::clone(&window_slot);
+        app.connect_activate(move |_| {
+            if let Some(window) = window_slot.borrow().as_ref() {
+                window.present();
+            }
+        });
+    }
+
+    app.connect_command_line(move |app, cmdline| {
+        let background = cmdline.options_dict().contains("background");
+        if !background {
+            app.activate();
+        }
+        gtk::glib::ExitCode::SUCCESS
+    });
+
     app.run()
 }

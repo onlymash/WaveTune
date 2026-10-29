@@ -62,6 +62,8 @@ OPPO 协议依据见 [OPPO 蓝牙 API 记录](OPPO_BLUETOOTH_API.md)。协议为
   Edifier 等多品牌耳机建立了清晰的可扩展边界。
 - 已完成控制页面（Controls Page）完整功能移植：
   包括左右耳手势触控定制（单击/双击/三击/长按/滑动/通话控制）、长按噪声控制模式循环（Noise Cycle）、双设备连接开关与首选连接设备下拉（Preferred Device）、佩戴检测自动暂停恢复开关、入睡检测开关、头部动作接听控制、耳机实用工具（查找耳机铃声播放与入耳防伤耳警告弹窗、耳塞贴合度气密性测试 Fit Test）以及提示音音量滑块防抖控制。相关协议编解码、后台会话轮询、UI 控件生命周期与回读门控均已完整贯通并通过单元测试。
+- 已完成后台驻留与 GNOME 快捷设置面板（Quick Settings）集成：
+  应用支持 `--background` 静默启动、关闭主窗口隐藏驻留（`Ctrl+Q` / 主菜单完全退出）及可选登录后台自启，并在耳机断开后重新武装自动重连；通过内置 `gtk::gio` 在 Session D-Bus（`io.github.onlymash.WaveTune` -> `/io/github/onlymash/WaveTune/QuickSettings`）暴露经确认的只读设备状态与降噪切换方法（不含任何蓝牙地址等隐私信息）；配套 GNOME 45–51 ESM 扩展 `wavetune@onlymash.github.com` 以非乐观更新方式集成到右上角快捷面板，并随打包脚本一并分发。
 
 ## 首版明确不做
 

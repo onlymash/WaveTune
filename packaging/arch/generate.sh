@@ -209,6 +209,9 @@ depends=(
     'libgcc'
     'pango'
 )
+optdepends=(
+    'gnome-shell: GNOME Quick Settings panel integration'
+)
 EOF
 }
 

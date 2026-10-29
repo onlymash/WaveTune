@@ -124,6 +124,39 @@ pub fn show_preferences_dialog(parent: &impl IsA<gtk::Widget>) {
     });
 
     group.add(&icon_row);
+
+    let bg_row = adw::SwitchRow::builder()
+        .title(&crate::t!("pref-run-in-background"))
+        .subtitle(&crate::t!("pref-run-in-background-desc"))
+        .active(crate::resources::get_run_in_background())
+        .build();
+    let dialog_weak_for_bg = dialog.downgrade();
+    bg_row.connect_active_notify(move |row| {
+        if let Err(err) = crate::resources::set_run_in_background(row.is_active()) {
+            let message = crate::t!("pref-save-failed", err);
+            if let Some(dialog) = dialog_weak_for_bg.upgrade() {
+                dialog.add_toast(adw::Toast::new(&message));
+            }
+        }
+    });
+    group.add(&bg_row);
+
+    let autostart_row = adw::SwitchRow::builder()
+        .title(&crate::t!("pref-autostart-background"))
+        .subtitle(&crate::t!("pref-autostart-background-desc"))
+        .active(crate::resources::get_autostart_background())
+        .build();
+    let dialog_weak_for_autostart = dialog.downgrade();
+    autostart_row.connect_active_notify(move |row| {
+        if let Err(err) = crate::resources::set_autostart_background(row.is_active()) {
+            let message = crate::t!("pref-save-failed", err);
+            if let Some(dialog) = dialog_weak_for_autostart.upgrade() {
+                dialog.add_toast(adw::Toast::new(&message));
+            }
+        }
+    });
+    group.add(&autostart_row);
+
     page.add(&group);
     dialog.add(&page);
 

@@ -30,6 +30,7 @@ nav-sound = 音效
 nav-controls = 控制
 nav-devices = 设备
 nav-main-menu = 主菜单
+nav-quit = 退出
 
 # ==============================================================================
 # Preferences & About & Empty State
@@ -48,6 +49,15 @@ pref-app-icon-tws = 入耳式（圆角矩形）
 pref-app-icon-tws-circle = 入耳式（圆形）
 pref-app-icon-applied-hint = 应用图标已更新，桌面任务栏可能需要片刻刷新
 pref-app-icon-apply-failed = 更新用户图标失败：{ $param0 }
+pref-run-in-background = 保持后台运行
+pref-run-in-background-desc = 关闭主窗口时隐藏到后台，保持耳机控制连接与桌面快捷面板可用
+pref-autostart-background = 登录时后台自启
+pref-autostart-background-desc = 登录桌面会话时自动在后台静默启动 WaveTune
+pref-save-failed = 保存设置失败：{ $param0 }
+qs-open-app = 打开 WaveTune
+qs-not-worn = 未佩戴
+qs-syncing = 正在同步…
+qs-unavailable = 暂不可用
 about-title = 关于 WaveTune
 about-description = 面向 Linux 桌面的非官方无线耳机控制中心（支持 OPPO、OnePlus、realme）
 empty-state-no-headset-title = 未连接耳机

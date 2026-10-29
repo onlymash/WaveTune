@@ -27,6 +27,9 @@
 - 首页连接后显示真实电量和当前降噪模式；依型号目录生成模式选项，直接使用兼容配置中声明
   的模式集合，不再要求先读取耳机支持模式 API 才开放功能。设置受 capability bit 8、兼容
   配置树、入耳状态门控，并要求 ACK 和回读匹配。EQ 写入仍禁用。
+- 支持后台驻留模式（`--background` / `-b`、关闭窗口隐藏到后台及可选登录后台自启），通过
+  Session D-Bus（`io.github.onlymash.WaveTune`）向配套 GNOME Shell 快捷面板扩展
+  （`wavetune@onlymash.github.com`，支持 GNOME 45–51）同步电量与降噪模式切换。
 
 ## Arch Linux 开发依赖
 
@@ -79,10 +82,27 @@ cargo test
 cargo run
 ```
 
-`cargo run` 会编译并启动 GTK 应用；在 GNOME Wayland 会话中正常从终端启动即可。要构建
-优化后的发布版本，可运行 `cargo build --release`，生成文件位于
-`target/release/wavetune`。如果 GTK 或 libadwaita 系统依赖缺失，确认
-`pkg-config --modversion gtk4` 和 `pkg-config --modversion libadwaita-1` 能正常输出版本，再重新构建。
+`cargo run` 会编译并启动 GTK 应用；在 GNOME Wayland 会话中正常从终端启动即可。传入
+`--background`（或 `-b`）可静默在后台启动而不弹出主窗口。要构建优化后的发布版本，可运行
+`cargo build --release`，生成文件位于 `target/release/wavetune`。如果 GTK 或 libadwaita
+系统依赖缺失，确认 `pkg-config --modversion gtk4` 和 `pkg-config --modversion libadwaita-1`
+能正常输出版本，再重新构建。
+
+## GNOME 右上角快捷面板（Quick Settings）集成
+
+仓库内置适用于 GNOME 45–51 的配套快捷设置扩展 `gnome-shell/wavetune@onlymash.github.com`
+（打包安装时会自动部署到 `/usr/share/gnome-shell/extensions/wavetune@onlymash.github.com`）。
+
+本地开发安装与启用：
+
+```bash
+./gnome-shell/install-local.sh
+gnome-extensions enable wavetune@onlymash.github.com
+```
+
+> 在 Wayland 会话下首次安装新扩展时，若 `gnome-extensions` 尚未索引到该 UUID，重新登录一次桌面会话后再执行 `gnome-extensions enable wavetune@onlymash.github.com` 即可。
+
+当 WaveTune 连接上受支持的耳机控制通道时，右上角快捷设置面板会自动显示耳机磁贴（点击左侧开关在「开启 ↔ 关闭」降噪间切换，点击右侧箭头查看实时电量、切换一级/二级降噪模式或唤起 WaveTune 主窗口）。默认开启「保持后台运行」（关闭主窗口隐藏到后台，可通过主菜单「退出」或 `Ctrl+Q` 完全退出），并可在首选项中开启「登录时后台自启」。
 
 ## 打包
 

@@ -1,0 +1,17 @@
+{
+  "uuid": "wavetune@onlymash.github.com",
+  "name": "WaveTune Quick Settings",
+  "description": "Integrate WaveTune wireless headset noise control and battery status into GNOME Quick Settings",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50",
+    "51"
+  ],
+  "url": "https://github.com/onlymash/WaveTune",
+  "version": 1
+}
+

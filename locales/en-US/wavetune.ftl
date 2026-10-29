@@ -30,6 +30,7 @@ nav-sound = Sound
 nav-controls = Controls
 nav-devices = Devices
 nav-main-menu = Main Menu
+nav-quit = Quit
 
 # ==============================================================================
 # Preferences & About & Empty State
@@ -48,6 +49,15 @@ pref-app-icon-tws = Earbuds (Rounded Square)
 pref-app-icon-tws-circle = Earbuds (Circle)
 pref-app-icon-applied-hint = Application icon updated; desktop dock may take a moment to refresh
 pref-app-icon-apply-failed = Failed to update user icon: { $param0 }
+pref-run-in-background = Keep Running in Background
+pref-run-in-background-desc = Hide the main window instead of quitting so headset control and Quick Settings stay active
+pref-autostart-background = Start in Background on Login
+pref-autostart-background-desc = Automatically launch WaveTune silently in the background when logging in
+pref-save-failed = Failed to save setting: { $param0 }
+qs-open-app = Open WaveTune
+qs-not-worn = Not in ear
+qs-syncing = Syncing…
+qs-unavailable = Unavailable
 about-title = About WaveTune
 about-description = Unofficial wireless headset control center for Linux (OPPO, OnePlus, realme)
 empty-state-no-headset-title = No Headset Connected

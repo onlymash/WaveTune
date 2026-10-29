@@ -65,3 +65,16 @@ install -Dm644 "$root/assets/icons/$app-tws-circle.svg" \
     "$destdir$prefix/share/icons/hicolor/scalable/apps/$app-tws-circle.svg"
 install -Dm644 "$root/assets/icons/$app-symbolic.svg" \
     "$destdir$prefix/share/icons/hicolor/symbolic/apps/$app-symbolic.svg"
+
+# Session D-Bus activation service
+mkdir -p "$destdir$prefix/share/dbus-1/services"
+sed "s|@PREFIX@|$prefix|g" "$root/data/$app.service.in" \
+    >"$destdir$prefix/share/dbus-1/services/$app.service"
+chmod 644 "$destdir$prefix/share/dbus-1/services/$app.service"
+
+# GNOME Shell Quick Settings extension
+ext_uuid=wavetune@onlymash.github.com
+install -Dm644 "$root/gnome-shell/$ext_uuid/metadata.json" \
+    "$destdir$prefix/share/gnome-shell/extensions/$ext_uuid/metadata.json"
+install -Dm644 "$root/gnome-shell/$ext_uuid/extension.js" \
+    "$destdir$prefix/share/gnome-shell/extensions/$ext_uuid/extension.js"
