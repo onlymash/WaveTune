@@ -117,6 +117,9 @@ impl ConnectionStateWidgets {
     }
 }
 
+pub(crate) type PresentWindowFn = std::rc::Rc<dyn Fn(Option<&str>)>;
+pub(crate) type QuitAppFn = std::rc::Rc<dyn Fn()>;
+
 pub fn build(
     app: &adw::Application,
     quick_settings: Option<std::rc::Rc<crate::app::dbus_service::QuickSettingsService>>,
@@ -352,18 +355,17 @@ pub fn build(
     }
 
     let window_weak_for_present = window.downgrade();
-    let present_window: std::rc::Rc<dyn Fn(Option<&str>)> =
-        std::rc::Rc::new(move |activation_token| {
-            if let Some(win) = window_weak_for_present.upgrade() {
-                if let Some(token) = activation_token {
-                    win.set_startup_id(token);
-                }
-                win.present();
+    let present_window: PresentWindowFn = std::rc::Rc::new(move |activation_token| {
+        if let Some(win) = window_weak_for_present.upgrade() {
+            if let Some(token) = activation_token.filter(|token| !token.is_empty()) {
+                win.set_startup_id(token);
             }
-        });
+            win.present();
+        }
+    });
 
     let app_weak_for_quit = app.downgrade();
-    let quit_app: std::rc::Rc<dyn Fn()> = std::rc::Rc::new(move || {
+    let quit_app: QuitAppFn = std::rc::Rc::new(move || {
         if let Some(app) = app_weak_for_quit.upgrade() {
             app.quit();
         }

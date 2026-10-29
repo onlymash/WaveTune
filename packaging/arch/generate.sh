@@ -211,6 +211,7 @@ depends=(
 )
 optdepends=(
     'gnome-shell: GNOME Quick Settings panel integration'
+    'gnome-shell-extension-appindicator: system tray icon support on GNOME'
 )
 EOF
 }

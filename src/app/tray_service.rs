@@ -43,19 +43,24 @@ const MENU_INTERFACE: &str = "com.canonical.dbusmenu";
 pub(crate) const SNI_OBJECT_PATH: &str = "/StatusNotifierItem";
 pub(crate) const MENU_OBJECT_PATH: &str = "/io/github/onlymash/WaveTune/Menu";
 
+const TRAY_APP_ID: &str = "io.github.onlymash.WaveTune";
 const TRAY_ICON_NAME: &str = "io.github.onlymash.WaveTune-symbolic";
 const TRAY_TITLE: &str = "WaveTune";
-const DBUS_TIMEOUT_MS: i32 = -1;
+const DBUS_TIMEOUT_MS: i32 = 5_000;
+const DBUSMENU_PROTOCOL_VERSION: u32 = 3;
 
 const ROOT_ID: i32 = 0;
 const OPEN_ID: i32 = 1;
 const STATUS_ID: i32 = 2;
 const BATTERY_ID: i32 = 3;
+const HINT_ID: i32 = 8;
 const NOISE_SEPARATOR_ID: i32 = 4;
 const NOISE_HEADER_ID: i32 = 5;
+const SUB_MODES_SUBMENU_ID: i32 = 9;
 const QUIT_SEPARATOR_ID: i32 = 6;
 const QUIT_ID: i32 = 7;
 const MODE_ID_BASE: i32 = 100;
+const SUB_MODE_ID_BASE: i32 = 400;
 
 const SNI_INTROSPECTION_XML: &str = r#"
 <node>
@@ -169,6 +174,9 @@ const MENU_INTROSPECTION_XML: &str = r#"
 type PresentCallback = Rc<dyn Fn(Option<&str>)>;
 type QuitCallback = Rc<dyn Fn()>;
 type SetModeCallback = Rc<dyn Fn(u8) -> Result<(), String>>;
+type UpdatedProperties = Vec<(i32, HashMap<String, glib::Variant>)>;
+type RemovedProperties = Vec<(i32, Vec<String>)>;
+type MenuDiff = (bool, UpdatedProperties, RemovedProperties);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MenuItemKind {
@@ -185,6 +193,11 @@ struct TrayMenuItem {
     /// `Some(checked)` renders a DBusMenu radio item with the given state.
     toggle_state: Option<bool>,
     children: Vec<TrayMenuItem>,
+}
+
+/// Escapes literal underscores so DBusMenu clients do not strip them as mnemonics.
+fn escape_dbusmenu_label(label: &str) -> String {
+    label.replace('_', "__")
 }
 
 impl TrayMenuItem {
@@ -217,14 +230,36 @@ impl TrayMenuItem {
         }
     }
 
-    fn mode(index: u8, label: impl Into<String>, enabled: bool, checked: bool) -> Self {
+    fn mode(
+        id_base: i32,
+        index: u8,
+        label: impl Into<String>,
+        enabled: bool,
+        checked: bool,
+    ) -> Self {
         Self {
-            id: MODE_ID_BASE + i32::from(index),
+            id: id_base + i32::from(index),
             label: label.into(),
             enabled,
             kind: MenuItemKind::Standard,
             toggle_state: Some(checked),
             children: Vec::new(),
+        }
+    }
+
+    fn submenu(
+        id: i32,
+        label: impl Into<String>,
+        enabled: bool,
+        children: Vec<TrayMenuItem>,
+    ) -> Self {
+        Self {
+            id,
+            label: label.into(),
+            enabled,
+            kind: MenuItemKind::Standard,
+            toggle_state: None,
+            children,
         }
     }
 
@@ -235,8 +270,32 @@ impl TrayMenuItem {
         self.children.iter().find_map(|child| child.find(id))
     }
 
+    fn collect_items<'a>(&'a self, out: &mut HashMap<i32, &'a Self>) {
+        out.insert(self.id, self);
+        for child in &self.children {
+            child.collect_items(out);
+        }
+    }
+
+    fn structure_matches(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.kind == other.kind
+            && self.children.is_empty() == other.children.is_empty()
+            && self.children.len() == other.children.len()
+            && self
+                .children
+                .iter()
+                .zip(&other.children)
+                .all(|(lhs, rhs)| lhs.structure_matches(rhs))
+    }
+
     fn properties(&self) -> HashMap<String, glib::Variant> {
         let mut properties = HashMap::new();
+        if self.id == ROOT_ID {
+            properties.insert("children-display".to_string(), "submenu".to_variant());
+            return properties;
+        }
+
         match self.kind {
             MenuItemKind::Separator => {
                 properties.insert("type".to_string(), "separator".to_variant());
@@ -244,7 +303,10 @@ impl TrayMenuItem {
             }
             MenuItemKind::Standard => {
                 if !self.label.is_empty() {
-                    properties.insert("label".to_string(), self.label.clone().to_variant());
+                    properties.insert(
+                        "label".to_string(),
+                        escape_dbusmenu_label(&self.label).to_variant(),
+                    );
                 }
                 properties.insert("enabled".to_string(), self.enabled.to_variant());
                 properties.insert("visible".to_string(), true.to_variant());
@@ -263,6 +325,14 @@ impl TrayMenuItem {
         }
         properties
     }
+
+    fn filtered_properties(&self, property_names: &[String]) -> HashMap<String, glib::Variant> {
+        let mut props = self.properties();
+        if !property_names.is_empty() {
+            props.retain(|key, _| property_names.iter().any(|wanted| wanted == key));
+        }
+        props
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -278,7 +348,12 @@ impl Default for TrayMenu {
 
 impl TrayMenu {
     fn build(snapshot: &QuickSettingsSnapshot) -> Self {
-        let mut children = vec![TrayMenuItem::standard(OPEN_ID, crate::t!("qs-open-app"))];
+        let open_label = if snapshot.open_app_label.is_empty() {
+            crate::t!("qs-open-app")
+        } else {
+            snapshot.open_app_label.clone()
+        };
+        let mut children = vec![TrayMenuItem::standard(OPEN_ID, open_label)];
 
         if snapshot.connected {
             if !snapshot.device_name.is_empty() {
@@ -289,6 +364,9 @@ impl TrayMenu {
                     BATTERY_ID,
                     snapshot.battery_summary.clone(),
                 ));
+            }
+            if !snapshot.status_hint.is_empty() {
+                children.push(TrayMenuItem::info(HINT_ID, snapshot.status_hint.clone()));
             }
         } else {
             children.push(TrayMenuItem::info(STATUS_ID, crate::t!("tray-no-device")));
@@ -303,12 +381,41 @@ impl TrayMenu {
             children.extend(snapshot.primary_modes.iter().map(|(index, label, _icon)| {
                 let index = u8::try_from(*index).unwrap_or_default();
                 TrayMenuItem::mode(
+                    MODE_ID_BASE,
                     index,
                     label.clone(),
                     snapshot.controls_enabled,
                     i32::from(index) == snapshot.active_group_index,
                 )
             }));
+
+            if !snapshot.sub_modes.is_empty() {
+                let submenu_title = if snapshot.sub_modes_title.is_empty() {
+                    crate::t!("noise-mode-options")
+                } else {
+                    snapshot.sub_modes_title.clone()
+                };
+                let sub_items = snapshot
+                    .sub_modes
+                    .iter()
+                    .map(|(index, label)| {
+                        let index = u8::try_from(*index).unwrap_or_default();
+                        TrayMenuItem::mode(
+                            SUB_MODE_ID_BASE,
+                            index,
+                            label.clone(),
+                            snapshot.controls_enabled,
+                            i32::from(index) == snapshot.active_mode_index,
+                        )
+                    })
+                    .collect();
+                children.push(TrayMenuItem::submenu(
+                    SUB_MODES_SUBMENU_ID,
+                    submenu_title,
+                    snapshot.controls_enabled,
+                    sub_items,
+                ));
+            }
         }
 
         children.push(TrayMenuItem::separator(QUIT_SEPARATOR_ID));
@@ -329,19 +436,80 @@ impl TrayMenu {
     fn find(&self, id: i32) -> Option<&TrayMenuItem> {
         self.root.find(id)
     }
+
+    fn diff_from(&self, prev: &Self) -> MenuDiff {
+        let layout_changed = !self.root.structure_matches(&prev.root);
+
+        let mut prev_items = HashMap::new();
+        prev.root.collect_items(&mut prev_items);
+        let mut next_items = HashMap::new();
+        self.root.collect_items(&mut next_items);
+
+        let mut updated_props = Vec::new();
+        let mut removed_props = Vec::new();
+
+        let mut sorted_ids: Vec<i32> = next_items.keys().copied().collect();
+        sorted_ids.sort_unstable();
+
+        for id in sorted_ids {
+            if id == ROOT_ID {
+                continue;
+            }
+            let Some(&prev_item) = prev_items.get(&id) else {
+                continue;
+            };
+            let next_item = next_items[&id];
+            if prev_item == next_item {
+                continue;
+            }
+
+            let old_map = prev_item.properties();
+            let new_map = next_item.properties();
+
+            let mut changed = HashMap::new();
+            for (key, val) in &new_map {
+                if old_map.get(key) != Some(val) {
+                    changed.insert(key.clone(), val.clone());
+                }
+            }
+            if !changed.is_empty() {
+                updated_props.push((id, changed));
+            }
+
+            let removed: Vec<String> = old_map
+                .keys()
+                .filter(|key| !new_map.contains_key(*key))
+                .cloned()
+                .collect();
+            if !removed.is_empty() {
+                removed_props.push((id, removed));
+            }
+        }
+
+        (layout_changed, updated_props, removed_props)
+    }
 }
 
 fn empty_pixmaps() -> Vec<(i32, i32, Vec<u8>)> {
     Vec::new()
 }
 
-fn menu_item_variant(item: &TrayMenuItem, recursion_depth: i32) -> glib::Variant {
+fn menu_item_variant(
+    item: &TrayMenuItem,
+    recursion_depth: i32,
+    property_names: &[String],
+) -> glib::Variant {
     let children = if recursion_depth == 0 {
         Vec::new()
     } else {
+        let next_depth = if recursion_depth < 0 {
+            -1
+        } else {
+            recursion_depth - 1
+        };
         item.children
             .iter()
-            .map(|child| menu_item_variant(child, recursion_depth - 1))
+            .map(|child| menu_item_variant(child, next_depth, property_names))
             .collect::<Vec<_>>()
     };
     let child_variants = children
@@ -353,7 +521,7 @@ fn menu_item_variant(item: &TrayMenuItem, recursion_depth: i32) -> glib::Variant
 
     glib::Variant::tuple_from_iter([
         item.id.to_variant(),
-        item.properties().to_variant(),
+        item.filtered_properties(property_names).to_variant(),
         children_variant,
     ])
 }
@@ -382,10 +550,24 @@ struct Inner {
     icon_theme_path: String,
     activation_token: Option<String>,
     watcher_owner: Option<String>,
+    unwatch_watcher: Option<Box<dyn FnOnce()>>,
     on_present: Option<PresentCallback>,
     on_quit: Option<QuitCallback>,
     on_set_mode: Option<SetModeCallback>,
     registrations: Vec<gio::RegistrationId>,
+}
+
+impl Drop for Inner {
+    fn drop(&mut self) {
+        if let Some(unwatch) = self.unwatch_watcher.take() {
+            unwatch();
+        }
+        if let Some(conn) = self.connection.take() {
+            for registration_id in self.registrations.drain(..) {
+                let _ = conn.unregister_object(registration_id);
+            }
+        }
+    }
 }
 
 pub(crate) struct TrayService {
@@ -394,9 +576,7 @@ pub(crate) struct TrayService {
 
 impl TrayService {
     pub(crate) fn new(connection: Option<gio::DBusConnection>) -> Rc<Self> {
-        let icon_theme_path = crate::resources::ensure_app_icon_cache()
-            .to_string_lossy()
-            .into_owned();
+        let icon_theme_path = crate::resources::resolve_tray_icon_theme_path(TRAY_ICON_NAME);
         let service = Rc::new(Self {
             inner: RefCell::new(Inner {
                 connection: connection.clone(),
@@ -407,6 +587,7 @@ impl TrayService {
                 icon_theme_path,
                 activation_token: None,
                 watcher_owner: None,
+                unwatch_watcher: None,
                 on_present: None,
                 on_quit: None,
                 on_set_mode: None,
@@ -416,7 +597,8 @@ impl TrayService {
 
         if let Some(conn) = connection {
             register_objects(Rc::clone(&service), &conn);
-            watch_watcher(Rc::downgrade(&service), &conn);
+            let unwatch = watch_watcher(Rc::downgrade(&service), &conn);
+            service.inner.borrow_mut().unwatch_watcher = Some(unwatch);
         }
 
         service
@@ -436,27 +618,74 @@ impl TrayService {
 
     /// Refreshes the tray menu and tooltip from the same snapshot the Quick Settings service uses.
     pub(crate) fn update(&self, snapshot: QuickSettingsSnapshot) {
-        let (conn, revision) = {
+        let (conn, layout_changed, revision, updated_props, removed_props, tooltip_variant) = {
             let mut inner = self.inner.borrow_mut();
             if inner.snapshot == snapshot {
                 return;
             }
-            inner.snapshot = snapshot.clone();
-            inner.menu = TrayMenu::build(&snapshot);
-            inner.revision = inner.revision.wrapping_add(1);
-            (inner.connection.clone(), inner.revision)
+            let prev_tooltip = tooltip_subtitle(&inner.snapshot);
+            let next_tooltip = tooltip_subtitle(&snapshot);
+            let next_menu = TrayMenu::build(&snapshot);
+            let (layout_changed, updated_props, removed_props) = next_menu.diff_from(&inner.menu);
+
+            inner.snapshot = snapshot;
+            inner.menu = next_menu;
+            if layout_changed {
+                inner.revision = inner.revision.wrapping_add(1);
+            }
+            let tooltip_variant = (prev_tooltip != next_tooltip).then(|| {
+                (
+                    inner.icon_name.clone(),
+                    empty_pixmaps(),
+                    TRAY_TITLE.to_string(),
+                    next_tooltip,
+                )
+                    .to_variant()
+            });
+            (
+                inner.connection.clone(),
+                layout_changed,
+                inner.revision,
+                updated_props,
+                removed_props,
+                tooltip_variant,
+            )
         };
 
         if let Some(conn) = conn {
-            let params = (revision, ROOT_ID).to_variant();
-            let _ = conn.emit_signal(
-                None,
-                MENU_OBJECT_PATH,
-                MENU_INTERFACE,
-                "LayoutUpdated",
-                Some(&params),
-            );
-            let _ = conn.emit_signal(None, SNI_OBJECT_PATH, SNI_INTERFACE, "NewToolTip", None);
+            if !updated_props.is_empty() || !removed_props.is_empty() {
+                let params = (updated_props, removed_props).to_variant();
+                let _ = conn.emit_signal(
+                    None,
+                    MENU_OBJECT_PATH,
+                    MENU_INTERFACE,
+                    "ItemsPropertiesUpdated",
+                    Some(&params),
+                );
+            }
+            if layout_changed {
+                let params = (revision, ROOT_ID).to_variant();
+                let _ = conn.emit_signal(
+                    None,
+                    MENU_OBJECT_PATH,
+                    MENU_INTERFACE,
+                    "LayoutUpdated",
+                    Some(&params),
+                );
+            }
+            if let Some(tooltip) = tooltip_variant {
+                let _ = conn.emit_signal(None, SNI_OBJECT_PATH, SNI_INTERFACE, "NewToolTip", None);
+                let changed = HashMap::from([("ToolTip", tooltip)]);
+                let invalidated: Vec<&str> = Vec::new();
+                let params = (SNI_INTERFACE, changed, invalidated).to_variant();
+                let _ = conn.emit_signal(
+                    None,
+                    SNI_OBJECT_PATH,
+                    "org.freedesktop.DBus.Properties",
+                    "PropertiesChanged",
+                    Some(&params),
+                );
+            }
         }
     }
 
@@ -471,15 +700,32 @@ impl TrayService {
     }
 
     fn activate_item(&self, id: i32) {
+        if id == OPEN_ID {
+            self.present();
+            return;
+        }
+        // Any non-window menu action discards the token provided by the host before Event().
+        self.inner.borrow_mut().activation_token = None;
+
         match id {
-            OPEN_ID => self.present(),
             QUIT_ID => {
                 let callback = self.inner.borrow().on_quit.clone();
                 if let Some(callback) = callback {
                     callback();
                 }
             }
-            MODE_ID_BASE.. => {
+            SUB_MODE_ID_BASE.. => {
+                let Ok(index) = u8::try_from(id - SUB_MODE_ID_BASE) else {
+                    return;
+                };
+                let callback = self.inner.borrow().on_set_mode.clone();
+                if let Some(callback) = callback
+                    && let Err(error) = callback(index)
+                {
+                    eprintln!("Tray noise sub-mode request failed: {error}");
+                }
+            }
+            MODE_ID_BASE..SUB_MODE_ID_BASE => {
                 let Ok(index) = u8::try_from(id - MODE_ID_BASE) else {
                     return;
                 };
@@ -498,7 +744,7 @@ impl TrayService {
         let inner = self.inner.borrow();
         match name {
             "Category" => "ApplicationStatus".to_variant(),
-            "Id" => "wavetune".to_variant(),
+            "Id" => TRAY_APP_ID.to_variant(),
             "Title" => TRAY_TITLE.to_variant(),
             "Status" => "Active".to_variant(),
             "WindowId" => 0i32.to_variant(),
@@ -516,7 +762,7 @@ impl TrayService {
                 tooltip_subtitle(&inner.snapshot),
             )
                 .to_variant(),
-            "ItemIsMenu" => true.to_variant(),
+            "ItemIsMenu" => false.to_variant(),
             "Menu" => glib::variant::ObjectPath::try_from(MENU_OBJECT_PATH)
                 .map(|path| path.to_variant())
                 .unwrap_or_else(|_| String::new().to_variant()),
@@ -529,10 +775,15 @@ impl TrayService {
     fn menu_property(&self, name: &str) -> glib::Variant {
         let inner = self.inner.borrow();
         match name {
-            "Version" => 1u32.to_variant(),
+            "Version" => DBUSMENU_PROTOCOL_VERSION.to_variant(),
             "TextDirection" => "ltr".to_variant(),
             "Status" => "normal".to_variant(),
-            "IconThemePath" => vec![inner.icon_theme_path.clone()].to_variant(),
+            "IconThemePath" => if inner.icon_theme_path.is_empty() {
+                Vec::<String>::new()
+            } else {
+                vec![inner.icon_theme_path.clone()]
+            }
+            .to_variant(),
             _ => String::new().to_variant(),
         }
     }
@@ -550,7 +801,9 @@ impl TrayService {
             }
             "ProvideXdgActivationToken" => {
                 if let Some((token,)) = params.get::<(String,)>() {
-                    self.inner.borrow_mut().activation_token = Some(token);
+                    let trimmed = token.trim();
+                    self.inner.borrow_mut().activation_token =
+                        (!trimmed.is_empty()).then(|| trimmed.to_string());
                 }
                 invocation.return_value(None);
             }
@@ -575,27 +828,60 @@ impl TrayService {
             "Event" => {
                 if let Some((id, event_id, _data, _timestamp)) =
                     params.get::<(i32, String, glib::Variant, u32)>()
-                    && event_id == "clicked"
                 {
-                    self.activate_item(id);
+                    if event_id == "clicked" {
+                        self.activate_item(id);
+                    } else {
+                        self.inner.borrow_mut().activation_token = None;
+                    }
                 }
                 invocation.return_value(None);
             }
             "EventGroup" => {
+                let mut id_errors = Vec::<i32>::new();
                 if let Some((events,)) = params.get::<(Vec<(i32, String, glib::Variant, u32)>,)>() {
                     for (id, event_id, _data, _timestamp) in events {
-                        if event_id == "clicked" {
+                        let known = self.inner.borrow().menu.find(id).is_some();
+                        if !known {
+                            id_errors.push(id);
+                            self.inner.borrow_mut().activation_token = None;
+                        } else if event_id == "clicked" {
                             self.activate_item(id);
+                        } else {
+                            self.inner.borrow_mut().activation_token = None;
                         }
                     }
                 }
-                invocation.return_value(Some(&(Vec::<i32>::new(),).to_variant()));
+                invocation.return_value(Some(&(id_errors,).to_variant()));
             }
             "AboutToShow" => {
+                let Some((id,)) = params.get::<(i32,)>() else {
+                    invocation.return_dbus_error(
+                        "org.freedesktop.DBus.Error.InvalidArgs",
+                        "Expected AboutToShow(i)",
+                    );
+                    return;
+                };
+                if self.inner.borrow().menu.find(id).is_none() {
+                    invocation.return_dbus_error(
+                        "org.freedesktop.DBus.Error.InvalidArgs",
+                        &format!("Unknown DBusMenu item ID: {id}"),
+                    );
+                    return;
+                }
                 invocation.return_value(Some(&(false,).to_variant()));
             }
             "AboutToShowGroup" => {
-                invocation.return_value(Some(&(Vec::<i32>::new(), Vec::<i32>::new()).to_variant()));
+                let mut id_errors = Vec::<i32>::new();
+                if let Some((ids,)) = params.get::<(Vec<i32>,)>() {
+                    let inner = self.inner.borrow();
+                    for id in ids {
+                        if inner.menu.find(id).is_none() {
+                            id_errors.push(id);
+                        }
+                    }
+                }
+                invocation.return_value(Some(&(Vec::<i32>::new(), id_errors).to_variant()));
             }
             _ => invocation.return_dbus_error(
                 "org.freedesktop.DBus.Error.UnknownMethod",
@@ -605,7 +891,7 @@ impl TrayService {
     }
 
     fn handle_get_layout(&self, params: &glib::Variant, invocation: gio::DBusMethodInvocation) {
-        let Some((parent_id, recursion_depth, _property_names)) =
+        let Some((parent_id, recursion_depth, property_names)) =
             params.get::<(i32, i32, Vec<String>)>()
         else {
             invocation.return_dbus_error(
@@ -615,10 +901,21 @@ impl TrayService {
             return;
         };
 
-        let (revision, layout) = {
+        let result = {
             let inner = self.inner.borrow();
-            let item = inner.menu.find(parent_id).unwrap_or(&inner.menu.root);
-            (inner.revision, menu_item_variant(item, recursion_depth))
+            inner.menu.find(parent_id).map(|item| {
+                (
+                    inner.revision,
+                    menu_item_variant(item, recursion_depth, &property_names),
+                )
+            })
+        };
+        let Some((revision, layout)) = result else {
+            invocation.return_dbus_error(
+                "org.freedesktop.DBus.Error.InvalidArgs",
+                &format!("Unknown DBusMenu parent ID: {parent_id}"),
+            );
+            return;
         };
         let reply = glib::Variant::tuple_from_iter([revision.to_variant(), layout]);
         invocation.return_value(Some(&reply));
@@ -629,7 +926,7 @@ impl TrayService {
         params: &glib::Variant,
         invocation: gio::DBusMethodInvocation,
     ) {
-        let Some((ids, _property_names)) = params.get::<(Vec<i32>, Vec<String>)>() else {
+        let Some((ids, property_names)) = params.get::<(Vec<i32>, Vec<String>)>() else {
             invocation.return_dbus_error(
                 "org.freedesktop.DBus.Error.InvalidArgs",
                 "Expected GetGroupProperties(ai, as)",
@@ -639,14 +936,26 @@ impl TrayService {
 
         let properties = {
             let inner = self.inner.borrow();
-            ids.iter()
-                .filter_map(|id| {
-                    inner
-                        .menu
-                        .find(*id)
-                        .map(|item| (item.id, item.properties()))
-                })
-                .collect::<Vec<_>>()
+            if ids.is_empty() {
+                let mut all_items = HashMap::new();
+                inner.menu.root.collect_items(&mut all_items);
+                let mut sorted_ids: Vec<i32> = all_items.keys().copied().collect();
+                sorted_ids.sort_unstable();
+                sorted_ids
+                    .into_iter()
+                    .filter(|id| *id != ROOT_ID)
+                    .map(|id| (id, all_items[&id].filtered_properties(&property_names)))
+                    .collect::<Vec<_>>()
+            } else {
+                ids.iter()
+                    .filter_map(|id| {
+                        inner
+                            .menu
+                            .find(*id)
+                            .map(|item| (item.id, item.filtered_properties(&property_names)))
+                    })
+                    .collect::<Vec<_>>()
+            }
         };
         invocation.return_value(Some(&(properties,).to_variant()));
     }
@@ -676,7 +985,7 @@ impl TrayService {
         }
     }
 
-    fn register_with_watcher(&self, conn: &gio::DBusConnection, owner: &str) {
+    fn register_with_watcher(self: &Rc<Self>, conn: &gio::DBusConnection, owner: &str) {
         {
             let mut inner = self.inner.borrow_mut();
             if inner.watcher_owner.as_deref() == Some(owner) {
@@ -686,11 +995,14 @@ impl TrayService {
         }
 
         let Some(unique_name) = conn.unique_name() else {
+            self.inner.borrow_mut().watcher_owner = None;
             eprintln!("Cannot register tray item: session bus has no unique name");
             return;
         };
         let parameters = (unique_name.as_str(),).to_variant();
-        match conn.call_sync(
+        let weak_service = Rc::downgrade(self);
+        let owner_owned = owner.to_string();
+        conn.call(
             Some(WATCHER_BUS_NAME),
             WATCHER_OBJECT_PATH,
             WATCHER_INTERFACE,
@@ -700,18 +1012,35 @@ impl TrayService {
             gio::DBusCallFlags::NONE,
             DBUS_TIMEOUT_MS,
             None::<&gio::Cancellable>,
-        ) {
-            Ok(_) => {
-                let _ = self.inner.borrow().connection.as_ref().map(|conn| {
-                    conn.emit_signal(None, SNI_OBJECT_PATH, SNI_INTERFACE, "NewIcon", None)
-                });
-            }
-            Err(error) => {
-                eprintln!(
-                    "Failed to register tray item with {WATCHER_BUS_NAME} at {WATCHER_OBJECT_PATH}: {error}"
-                );
-            }
-        }
+            move |result| {
+                let Some(service) = weak_service.upgrade() else {
+                    return;
+                };
+                match result {
+                    Ok(_) => {
+                        if let Some(conn) = service.inner.borrow().connection.clone() {
+                            let _ = conn.emit_signal(
+                                None,
+                                SNI_OBJECT_PATH,
+                                SNI_INTERFACE,
+                                "NewIcon",
+                                None,
+                            );
+                        }
+                    }
+                    Err(error) => {
+                        let mut inner = service.inner.borrow_mut();
+                        if inner.watcher_owner.as_deref() == Some(owner_owned.as_str()) {
+                            inner.watcher_owner = None;
+                        }
+                        drop(inner);
+                        eprintln!(
+                            "Failed to register tray item with {WATCHER_BUS_NAME} at {WATCHER_OBJECT_PATH}: {error}"
+                        );
+                    }
+                }
+            },
+        );
     }
 }
 
@@ -796,10 +1125,10 @@ fn register_menu(service: Rc<TrayService>, conn: &gio::DBusConnection) {
     }
 }
 
-fn watch_watcher(service: Weak<TrayService>, conn: &gio::DBusConnection) {
+fn watch_watcher(service: Weak<TrayService>, conn: &gio::DBusConnection) -> Box<dyn FnOnce()> {
     let appeared_service = service.clone();
-    let vanished_service = service.clone();
-    let _watcher_id = gio::bus_watch_name_on_connection(
+    let vanished_service = service;
+    let watcher_id = gio::bus_watch_name_on_connection(
         conn,
         WATCHER_BUS_NAME,
         gio::BusNameWatcherFlags::NONE,
@@ -814,10 +1143,13 @@ fn watch_watcher(service: Weak<TrayService>, conn: &gio::DBusConnection) {
             }
         },
     );
+    Box::new(move || gio::bus_unwatch_name(watcher_id))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
     use super::*;
 
     fn connected_snapshot() -> QuickSettingsSnapshot {
@@ -826,6 +1158,7 @@ mod tests {
             device_name: "OPPO Enco X4".to_string(),
             controls_enabled: true,
             active_group_index: 1,
+            active_mode_index: 13,
             primary_modes: vec![
                 (
                     0,
@@ -901,8 +1234,14 @@ mod tests {
         crate::i18n::set_locale("en-US");
         let mut snapshot = connected_snapshot();
         snapshot.controls_enabled = false;
+        snapshot.status_hint = "Wear at least one earbud".to_string();
         let menu = TrayMenu::build(&snapshot);
 
+        assert_eq!(
+            menu.find(HINT_ID).unwrap().label,
+            "Wear at least one earbud"
+        );
+        assert!(!menu.find(HINT_ID).unwrap().enabled);
         for (index, _, _) in &snapshot.primary_modes {
             assert!(!menu.find(MODE_ID_BASE + *index).unwrap().enabled);
         }
@@ -911,23 +1250,125 @@ mod tests {
     }
 
     #[test]
-    fn layout_variant_uses_dbusmenu_signature() {
+    fn exposes_sub_modes_submenu_and_escapes_underscore_mnemonics() {
+        crate::i18n::set_locale("en-US");
+        let mut snapshot = connected_snapshot();
+        snapshot.device_name = "OPPO_Enco_X4".to_string();
+        snapshot.sub_modes_title = "Noise cancelling level".to_string();
+        snapshot.sub_modes = vec![(11, "Mild".to_string()), (13, "Max".to_string())];
+        let menu = TrayMenu::build(&snapshot);
+
+        let status_props = menu.find(STATUS_ID).unwrap().properties();
+        assert_eq!(
+            status_props.get("label").and_then(glib::Variant::str),
+            Some("OPPO__Enco__X4")
+        );
+
+        let submenu = menu.find(SUB_MODES_SUBMENU_ID).unwrap();
+        assert_eq!(
+            submenu
+                .properties()
+                .get("children-display")
+                .and_then(glib::Variant::str),
+            Some("submenu")
+        );
+        assert_eq!(
+            menu.find(SUB_MODE_ID_BASE + 11).unwrap().toggle_state,
+            Some(false)
+        );
+        assert_eq!(
+            menu.find(SUB_MODE_ID_BASE + 13).unwrap().toggle_state,
+            Some(true)
+        );
+
+        crate::i18n::reset_locale();
+    }
+
+    #[test]
+    fn layout_variant_uses_dbusmenu_signature_and_filters_properties() {
         let menu = TrayMenu::build(&connected_snapshot());
-        let layout = menu_item_variant(&menu.root, -1);
+        let layout = menu_item_variant(&menu.root, -1, &[]);
         assert_eq!(layout.type_().as_str(), "(ia{sv}av)");
 
         let root_children = layout.child_value(2);
         assert_eq!(root_children.type_().as_str(), "av");
-        assert_eq!(
-            root_children.n_children(),
-            menu.root.children.len() as usize
-        );
+        assert_eq!(root_children.n_children(), menu.root.children.len());
 
         let first_child = root_children.child_value(0).as_variant().unwrap();
         assert_eq!(first_child.type_().as_str(), "(ia{sv}av)");
 
+        let filtered = menu_item_variant(&menu.root, 1, &["label".to_string()]);
+        let open_item = filtered.child_value(2).child_value(0).as_variant().unwrap();
+        let props = open_item
+            .child_value(1)
+            .get::<HashMap<String, glib::Variant>>()
+            .unwrap();
+        assert!(props.contains_key("label"));
+        assert!(!props.contains_key("enabled"));
+
         // recursion depth 0 must not include children
-        let shallow = menu_item_variant(&menu.root, 0);
+        let shallow = menu_item_variant(&menu.root, 0, &[]);
         assert_eq!(shallow.child_value(2).n_children(), 0);
+    }
+
+    #[test]
+    fn diff_from_distinguishes_in_place_property_updates_from_layout_changes() {
+        crate::i18n::set_locale("en-US");
+        let base_snapshot = connected_snapshot();
+        let base_menu = TrayMenu::build(&base_snapshot);
+
+        let mut updated_snapshot = base_snapshot.clone();
+        updated_snapshot.battery_summary = "Left Ear 75% · Right Ear 70%".to_string();
+        updated_snapshot.active_group_index = 2;
+        let updated_menu = TrayMenu::build(&updated_snapshot);
+
+        let (layout_changed, updated_props, removed_props) = updated_menu.diff_from(&base_menu);
+        assert!(!layout_changed);
+        assert!(removed_props.is_empty());
+        let changed_ids: Vec<i32> = updated_props.iter().map(|(id, _)| *id).collect();
+        assert!(changed_ids.contains(&BATTERY_ID));
+        assert!(changed_ids.contains(&(MODE_ID_BASE + 1)));
+        assert!(changed_ids.contains(&(MODE_ID_BASE + 2)));
+
+        let disconnected_menu = TrayMenu::build(&QuickSettingsSnapshot::default());
+        let (layout_changed_on_disconnect, _, _) = disconnected_menu.diff_from(&updated_menu);
+        assert!(layout_changed_on_disconnect);
+
+        crate::i18n::reset_locale();
+    }
+
+    #[test]
+    fn non_window_actions_discard_pending_activation_token() {
+        let service = TrayService::new(None);
+        let presented_token: Rc<RefCell<Option<Option<String>>>> = Rc::new(RefCell::new(None));
+        let last_mode = Rc::new(Cell::new(None::<u8>));
+
+        let presented_clone = Rc::clone(&presented_token);
+        let mode_clone = Rc::clone(&last_mode);
+        service.set_handlers(
+            move |token| {
+                *presented_clone.borrow_mut() = Some(token.map(str::to_owned));
+            },
+            || {},
+            move |index| {
+                mode_clone.set(Some(index));
+                Ok(())
+            },
+        );
+
+        service.inner.borrow_mut().activation_token = Some("stale-token".to_string());
+        service.activate_item(SUB_MODE_ID_BASE + 13);
+        assert_eq!(last_mode.get(), Some(13));
+        assert_eq!(service.inner.borrow().activation_token, None);
+
+        service.present();
+        assert_eq!(*presented_token.borrow(), Some(None));
+
+        service.inner.borrow_mut().activation_token = Some("fresh-token".to_string());
+        service.activate_item(OPEN_ID);
+        assert_eq!(
+            *presented_token.borrow(),
+            Some(Some("fresh-token".to_string()))
+        );
     }
 }

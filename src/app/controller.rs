@@ -101,6 +101,7 @@ fn sync_desktop_services(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn wire_bluetooth_controls(
     widgets: HomeWidgets,
     sound_widgets: SoundWidgets,
@@ -109,8 +110,8 @@ pub(crate) fn wire_bluetooth_controls(
     connection_state: ConnectionStateWidgets,
     quick_settings: Option<Rc<QuickSettingsService>>,
     tray: Option<Rc<TrayService>>,
-    present_window: Rc<dyn Fn(Option<&str>)>,
-    quit_app: Rc<dyn Fn()>,
+    present_window: crate::ui::PresentWindowFn,
+    quit_app: crate::ui::QuitAppFn,
 ) {
     let (updates_tx, updates_rx) = mpsc::channel();
     let worker_commands: Rc<RefCell<Option<mpsc::Sender<WorkerCommand>>>> =

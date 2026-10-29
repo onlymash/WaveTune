@@ -319,12 +319,7 @@ pub(crate) fn app_icon_cache_root() -> PathBuf {
     gtk::glib::user_cache_dir().join("wavetune").join("icons")
 }
 
-/// Writes the application icons into the private cache icon theme and returns its search root.
-///
-/// The system tray exports this path as `IconThemePath`, so it must be populated even when the
-/// GTK icon theme is not available yet (for example while `TrayService` is being constructed).
-pub(crate) fn ensure_app_icon_cache() -> PathBuf {
-    let icon_search_root = app_icon_cache_root();
+pub(crate) fn ensure_app_icon_cache_in(icon_search_root: &Path) {
     let scalable_dir = icon_search_root
         .join("hicolor")
         .join("scalable")
@@ -339,15 +334,61 @@ pub(crate) fn ensure_app_icon_cache() -> PathBuf {
     );
 
     for style in AppIconStyle::ALL {
-        let path = scalable_dir.join(format!("{}.svg", style.icon_name()));
-        let _ = write_if_changed(&path, style.svg_content());
+        let filename = format!("{}.svg", style.icon_name());
+        let _ = write_if_changed(&scalable_dir.join(&filename), style.svg_content());
+        let _ = write_if_changed(&icon_search_root.join(&filename), style.svg_content());
     }
+    let symbolic_filename = "io.github.onlymash.WaveTune-symbolic.svg";
+    let _ = write_if_changed(&symbolic_dir.join(symbolic_filename), APP_ICON_SYMBOLIC_SVG);
     let _ = write_if_changed(
-        &symbolic_dir.join("io.github.onlymash.WaveTune-symbolic.svg"),
+        &icon_search_root.join(symbolic_filename),
         APP_ICON_SYMBOLIC_SVG,
     );
+}
 
+/// Writes the application icons into the private cache icon theme and returns its search root.
+pub(crate) fn ensure_app_icon_cache() -> PathBuf {
+    let icon_search_root = app_icon_cache_root();
+    ensure_app_icon_cache_in(&icon_search_root);
     icon_search_root
+}
+
+fn icon_exists_in_xdg_data_dir(data_dir: &Path, icon_name: &str) -> bool {
+    let hicolor = data_dir.join("icons").join("hicolor");
+    let filename = format!("{icon_name}.svg");
+    hicolor
+        .join("symbolic")
+        .join("apps")
+        .join(&filename)
+        .exists()
+        || hicolor
+            .join("scalable")
+            .join("apps")
+            .join(&filename)
+            .exists()
+}
+
+pub(crate) fn resolve_tray_icon_theme_path_with(
+    icon_name: &str,
+    xdg_data_dirs: &[PathBuf],
+    cache_icon_root: &Path,
+) -> String {
+    if xdg_data_dirs
+        .iter()
+        .any(|dir| icon_exists_in_xdg_data_dir(dir, icon_name))
+    {
+        // Returning an empty path lets GNOME Shell's AppIndicator extension load a native
+        // `Gio.ThemedIcon` from the standard icon theme so `-symbolic` icons recolor cleanly.
+        String::new()
+    } else {
+        cache_icon_root.to_string_lossy().into_owned()
+    }
+}
+
+pub(crate) fn resolve_tray_icon_theme_path(icon_name: &str) -> String {
+    let cache_icon_root = ensure_app_icon_cache();
+    let system_dirs = gtk::glib::system_data_dirs();
+    resolve_tray_icon_theme_path_with(icon_name, &system_dirs, &cache_icon_root)
 }
 
 pub fn init_app_icons() {
@@ -801,6 +842,37 @@ mod tests {
         set_autostart_background_in(&temp_dir, false).expect("should remove autostart file");
         assert!(!get_autostart_background_in(&temp_dir));
         assert!(!autostart_file_in(&temp_dir).exists());
+
+        let cache_icons = temp_dir.join("cache_icons");
+        ensure_app_icon_cache_in(&cache_icons);
+        assert!(cache_icons.join("hicolor").join("index.theme").exists());
+        assert!(
+            cache_icons
+                .join("io.github.onlymash.WaveTune-symbolic.svg")
+                .exists()
+        );
+
+        let empty_xdg = vec![temp_dir.join("empty_share")];
+        assert_eq!(
+            resolve_tray_icon_theme_path_with(
+                "io.github.onlymash.WaveTune-symbolic",
+                &empty_xdg,
+                &cache_icons,
+            ),
+            cache_icons.to_string_lossy()
+        );
+
+        let installed_share = temp_dir.join("installed_share");
+        apply_user_icon_override_to_dir(&installed_share, AppIconStyle::Circle)
+            .expect("should write symbolic icon into xdg share");
+        assert_eq!(
+            resolve_tray_icon_theme_path_with(
+                "io.github.onlymash.WaveTune-symbolic",
+                std::slice::from_ref(&installed_share),
+                &cache_icons,
+            ),
+            ""
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

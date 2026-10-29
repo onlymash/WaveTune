@@ -54,26 +54,32 @@ fn main() -> gtk::glib::ExitCode {
         None,
     );
 
-    let session_bus =
-        gtk::gio::bus_get_sync(gtk::gio::BusType::Session, gtk::gio::Cancellable::NONE).ok();
-    let quick_settings = app::dbus_service::QuickSettingsService::new(session_bus.clone());
-    let tray = app::tray_service::TrayService::new(session_bus);
+    type AppServices = (
+        Rc<app::dbus_service::QuickSettingsService>,
+        Rc<app::tray_service::TrayService>,
+    );
 
     let window_slot: Rc<RefCell<Option<adw::ApplicationWindow>>> = Rc::new(RefCell::new(None));
     let hold_guard: Rc<RefCell<Option<gtk::gio::ApplicationHoldGuard>>> =
         Rc::new(RefCell::new(None));
+    let services_slot: Rc<RefCell<Option<AppServices>>> = Rc::new(RefCell::new(None));
 
     {
         let window_slot = Rc::clone(&window_slot);
         let hold_guard = Rc::clone(&hold_guard);
-        let quick_settings = Rc::clone(&quick_settings);
-        let tray = Rc::clone(&tray);
+        let services_slot = Rc::clone(&services_slot);
         app.connect_startup(move |app| {
+            let session_bus = app.dbus_connection().or_else(|| {
+                gtk::gio::bus_get_sync(gtk::gio::BusType::Session, gtk::gio::Cancellable::NONE).ok()
+            });
+            let quick_settings = app::dbus_service::QuickSettingsService::new(session_bus.clone());
+            let tray = app::tray_service::TrayService::new(session_bus);
             let window = ui::build(
                 app,
                 Some(Rc::clone(&quick_settings)),
                 Some(Rc::clone(&tray)),
             );
+            *services_slot.borrow_mut() = Some((quick_settings, tray));
             *window_slot.borrow_mut() = Some(window);
             *hold_guard.borrow_mut() = Some(app.hold());
         });
