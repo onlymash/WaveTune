@@ -28,6 +28,8 @@ import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js'
 const BUS_NAME = 'io.github.onlymash.WaveTune';
 const OBJECT_PATH = '/io/github/onlymash/WaveTune/QuickSettings';
 
+const DEFAULT_ICON_NAME = 'audio-headphones-symbolic';
+
 const QUICK_SETTINGS_IFACE_XML = `
 <node>
   <interface name="io.github.onlymash.WaveTune.QuickSettings">
@@ -38,6 +40,7 @@ const QUICK_SETTINGS_IFACE_XML = `
     <property name="ActiveGroupIndex" type="i" access="read"/>
     <property name="ActiveModeIndex" type="i" access="read"/>
     <property name="ActiveModeLabel" type="s" access="read"/>
+    <property name="ActiveModeIcon" type="s" access="read"/>
     <property name="NoiseControlActive" type="b" access="read"/>
     <property name="PrimaryModes" type="a(iss)" access="read"/>
     <property name="SubModesTitle" type="s" access="read"/>
@@ -56,13 +59,6 @@ const QUICK_SETTINGS_IFACE_XML = `
 const WaveTuneProxy = Gio.DBusProxy.makeProxyWrapper(QUICK_SETTINGS_IFACE_XML);
 const ShellVersion = parseFloat(Config.PACKAGE_VERSION);
 
-function createHeadsetIcon() {
-    return Gio.ThemedIcon.new_from_names([
-        'io.github.onlymash.WaveTune-symbolic',
-        'audio-headphones-symbolic',
-    ]);
-}
-
 function closeQuickSettingsMenu() {
     const quickSettingsMenu = Main.panel.statusArea.quickSettings;
     if (!quickSettingsMenu?.menu)
@@ -77,15 +73,15 @@ function closeQuickSettingsMenu() {
 const WaveTuneToggle = GObject.registerClass(
 class WaveTuneToggle extends QuickSettings.QuickMenuToggle {
     _init() {
-        const icon = createHeadsetIcon();
+        const defaultIcon = Gio.ThemedIcon.new(DEFAULT_ICON_NAME);
         super._init({
             title: 'WaveTune',
             subtitle: null,
-            gicon: icon,
+            gicon: defaultIcon,
             toggleMode: false,
         });
 
-        this._headsetIcon = icon;
+        this._activeIconName = DEFAULT_ICON_NAME;
         this._proxy = null;
         this._controlsEnabled = false;
         this._primarySignature = '';
@@ -94,7 +90,7 @@ class WaveTuneToggle extends QuickSettings.QuickMenuToggle {
         this._subItems = new Map();
 
         this.visible = false;
-        this.menu.setHeader(this._headsetIcon, 'WaveTune', null);
+        this.menu.setHeader(defaultIcon, 'WaveTune', null);
 
         this._primarySection = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._primarySection);
@@ -179,12 +175,18 @@ class WaveTuneToggle extends QuickSettings.QuickMenuToggle {
         const activeGroup = proxy.ActiveGroupIndex ?? -1;
         const activeMode = proxy.ActiveModeIndex ?? -1;
         const activeLabel = proxy.ActiveModeLabel || '';
+        const activeIconName = proxy.ActiveModeIcon || DEFAULT_ICON_NAME;
         const noiseActive = Boolean(proxy.NoiseControlActive);
         const primaryModes = proxy.PrimaryModes || [];
         const subModesTitle = proxy.SubModesTitle || '';
         const subModes = proxy.SubModes || [];
         const batterySummary = proxy.BatterySummary || '';
         const openAppLabel = proxy.OpenAppLabel || 'Open WaveTune';
+
+        if (activeIconName !== this._activeIconName) {
+            this._activeIconName = activeIconName;
+            this.gicon = Gio.ThemedIcon.new(activeIconName);
+        }
 
         this._controlsEnabled = controlsEnabled;
         this.title = deviceName;
@@ -197,7 +199,7 @@ class WaveTuneToggle extends QuickSettings.QuickMenuToggle {
         }
 
         this.menu.setHeader(
-            this._headsetIcon,
+            this.gicon,
             deviceName,
             batterySummary || null
         );
@@ -219,7 +221,7 @@ class WaveTuneToggle extends QuickSettings.QuickMenuToggle {
             this._primaryItems.clear();
 
             for (const [index, label, iconName] of primaryModes) {
-                const icon = Gio.ThemedIcon.new(iconName || 'audio-headphones-symbolic');
+                const icon = Gio.ThemedIcon.new(iconName || DEFAULT_ICON_NAME);
                 const item = new PopupMenu.PopupImageMenuItem(label, icon);
                 item.connectObject('activate', () => {
                     this._selectMode(index);
@@ -298,7 +300,7 @@ class WaveTuneIndicator extends QuickSettings.SystemIndicator {
         this._proxy = null;
 
         this._indicator = this._addIndicator();
-        this._indicator.gicon = createHeadsetIcon();
+        this._indicator.gicon = Gio.ThemedIcon.new(DEFAULT_ICON_NAME);
         this._indicator.visible = false;
 
         this._toggle = new WaveTuneToggle();
@@ -332,6 +334,7 @@ class WaveTuneIndicator extends QuickSettings.SystemIndicator {
 
     _sync() {
         const visible = this._toggle.syncFromProxy();
+        this._indicator.gicon = this._toggle.gicon;
         this._indicator.visible = visible;
     }
 

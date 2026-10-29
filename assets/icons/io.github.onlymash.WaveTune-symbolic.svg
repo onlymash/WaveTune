@@ -1,17 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
-  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Headband Arch -->
-    <path d="M 2.6 8.5 C 2.6 4.4 5 1.5 8 1.5 C 11 1.5 13.4 4.4 13.4 8.5" stroke-width="1.6" />
-    
-    <!-- Left Ear Cup -->
-    <rect x="1" y="7.2" width="3.2" height="6.4" rx="1.6" stroke-width="1.4" fill="currentColor" fill-opacity="0.2" />
-    
-    <!-- Right Ear Cup -->
-    <rect x="11.8" y="7.2" width="3.2" height="6.4" rx="1.6" stroke-width="1.4" fill="currentColor" fill-opacity="0.2" />
-    
-    <!-- Equalizer Waves in Center -->
-    <line x1="6.3" y1="8.6" x2="6.3" y2="12" stroke-width="1.2" />
-    <line x1="8" y1="7.2" x2="8" y2="13.4" stroke-width="1.4" />
-    <line x1="9.7" y1="8.6" x2="9.7" y2="12" stroke-width="1.2" />
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <g fill="#2e3436">
+    <path d="M 8 1 C 4.41 1 1.5 3.91 1.5 7.5 L 1.5 8.5 L 3.1 8.5 L 3.1 7.5 C 3.1 4.79 5.29 2.6 8 2.6 C 10.71 2.6 12.9 4.79 12.9 7.5 L 12.9 8.5 L 14.5 8.5 L 14.5 7.5 C 14.5 3.91 11.59 1 8 1 Z"/>
+    <rect x="1" y="7" width="3" height="7" rx="1.5"/>
+    <rect x="12" y="7" width="3" height="7" rx="1.5"/>
+    <rect x="5.3" y="8.5" width="1.2" height="4" rx="0.6"/>
+    <rect x="7.4" y="6.6" width="1.2" height="6.8" rx="0.6"/>
+    <rect x="9.5" y="8.5" width="1.2" height="4" rx="0.6"/>
   </g>
 </svg>

@@ -246,15 +246,23 @@ pub(crate) fn apply_user_icon_override_to_dir(
         .join("scalable")
         .join("apps")
         .join("io.github.onlymash.WaveTune.svg");
+    let target_symbolic_svg = hicolor_dir
+        .join("symbolic")
+        .join("apps")
+        .join("io.github.onlymash.WaveTune-symbolic.svg");
 
     match style {
         AppIconStyle::Default => {
             if target_svg.exists() {
                 fs::remove_file(&target_svg)?;
             }
+            if target_symbolic_svg.exists() {
+                fs::remove_file(&target_symbolic_svg)?;
+            }
         }
         AppIconStyle::Circle | AppIconStyle::Tws | AppIconStyle::TwsCircle => {
             write_if_changed(&target_svg, style.svg_content())?;
+            write_if_changed(&target_symbolic_svg, APP_ICON_SYMBOLIC_SVG)?;
         }
     }
 

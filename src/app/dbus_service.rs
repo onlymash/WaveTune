@@ -38,6 +38,7 @@ const INTROSPECTION_XML: &str = r#"
     <property name="ActiveGroupIndex" type="i" access="read"/>
     <property name="ActiveModeIndex" type="i" access="read"/>
     <property name="ActiveModeLabel" type="s" access="read"/>
+    <property name="ActiveModeIcon" type="s" access="read"/>
     <property name="NoiseControlActive" type="b" access="read"/>
     <property name="PrimaryModes" type="a(iss)" access="read"/>
     <property name="SubModesTitle" type="s" access="read"/>
@@ -63,6 +64,7 @@ pub(crate) struct QuickSettingsSnapshot {
     pub(crate) active_group_index: i32,
     pub(crate) active_mode_index: i32,
     pub(crate) active_mode_label: String,
+    pub(crate) active_mode_icon: String,
     pub(crate) noise_control_active: bool,
     pub(crate) primary_modes: Vec<(i32, String, String)>,
     pub(crate) sub_modes_title: String,
@@ -82,6 +84,7 @@ impl Default for QuickSettingsSnapshot {
             active_group_index: -1,
             active_mode_index: -1,
             active_mode_label: String::new(),
+            active_mode_icon: "audio-headphones-symbolic".to_string(),
             noise_control_active: false,
             primary_modes: Vec::new(),
             sub_modes_title: String::new(),
@@ -103,6 +106,7 @@ impl QuickSettingsSnapshot {
             "ActiveGroupIndex" => Some(self.active_group_index.to_variant()),
             "ActiveModeIndex" => Some(self.active_mode_index.to_variant()),
             "ActiveModeLabel" => Some(self.active_mode_label.to_variant()),
+            "ActiveModeIcon" => Some(self.active_mode_icon.to_variant()),
             "NoiseControlActive" => Some(self.noise_control_active.to_variant()),
             "PrimaryModes" => Some(self.primary_modes.to_variant()),
             "SubModesTitle" => Some(self.sub_modes_title.to_variant()),
@@ -139,6 +143,9 @@ impl QuickSettingsSnapshot {
         }
         if self.active_mode_label != prev.active_mode_label {
             changed.insert("ActiveModeLabel", self.active_mode_label.to_variant());
+        }
+        if self.active_mode_icon != prev.active_mode_icon {
+            changed.insert("ActiveModeIcon", self.active_mode_icon.to_variant());
         }
         if self.noise_control_active != prev.noise_control_active {
             changed.insert("NoiseControlActive", self.noise_control_active.to_variant());
@@ -255,6 +262,11 @@ pub(crate) fn build_snapshot(
     let active_group_index = current_group.map(i32::from).unwrap_or(-1);
     let active_mode_index = current_noise_mode.map(i32::from).unwrap_or(-1);
     let active_mode_label = format_active_mode_label(current_noise_mode, modes);
+    let active_mode_icon = current_group
+        .and_then(|grp| compatibility::noise_mode_for(modes, grp))
+        .map(|mode| noise_mode_icon_name(mode.kind))
+        .unwrap_or("audio-headphones-symbolic")
+        .to_string();
 
     let noise_control_active = current_group
         .and_then(|grp| compatibility::noise_mode_for(modes, grp))
@@ -298,6 +310,7 @@ pub(crate) fn build_snapshot(
         active_group_index,
         active_mode_index,
         active_mode_label,
+        active_mode_icon,
         noise_control_active,
         primary_modes,
         sub_modes_title,
@@ -593,6 +606,7 @@ mod tests {
         assert_eq!(snap.active_group_index, 1);
         assert_eq!(snap.active_mode_index, 4);
         assert_eq!(snap.active_mode_label, "深度降噪");
+        assert_eq!(snap.active_mode_icon, "audio-headphones-symbolic");
         assert!(snap.noise_control_active);
         assert_eq!(snap.primary_modes.len(), 4);
         assert_eq!(snap.sub_modes.len(), 4);
@@ -613,6 +627,7 @@ mod tests {
             modes,
         );
         assert_eq!(adaptive_snap.active_mode_label, "自适应 · 标准");
+        assert_eq!(adaptive_snap.active_mode_icon, "starred-symbolic");
         assert!(adaptive_snap.noise_control_active);
 
         // Out-of-ear disables controls and sets status_hint
@@ -632,6 +647,7 @@ mod tests {
         assert_eq!(unworn_snap.status_hint, "未佩戴");
         assert!(!unworn_snap.noise_control_active);
         assert_eq!(unworn_snap.active_mode_label, "关闭");
+        assert_eq!(unworn_snap.active_mode_icon, "audio-volume-muted-symbolic");
 
         crate::i18n::reset_locale();
     }
