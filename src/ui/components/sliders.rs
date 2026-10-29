@@ -16,12 +16,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use gtk::prelude::*;
-use gtk::{Align, Box as GtkBox, Orientation, Scale};
+use gtk::{Align, Box as GtkBox, Label, Orientation, Scale};
 
-use super::styles::muted;
-
-/// Creates a horizontal slider row bounded by descriptive text labels on both sides (e.g. "弱" / "强")
-/// that are vertically aligned with the slider trough.
+/// Creates a slider layout with the slider on top and descriptive text labels underneath on both sides (e.g. "弱" / "强").
 #[allow(dead_code)]
 pub(crate) fn labeled_slider(
     min_label: &str,
@@ -30,12 +27,8 @@ pub(crate) fn labeled_slider(
     max: f64,
     step: f64,
 ) -> (GtkBox, Scale) {
-    let row = GtkBox::new(Orientation::Horizontal, 12);
-    row.set_hexpand(true);
-    row.set_valign(Align::Center);
-
-    let left = muted(min_label);
-    left.set_valign(Align::Center);
+    let container = GtkBox::new(Orientation::Vertical, 2);
+    container.set_hexpand(true);
 
     let slider = Scale::with_range(Orientation::Horizontal, min, max, step);
     slider.add_css_class("labeled-slider");
@@ -55,12 +48,34 @@ pub(crate) fn labeled_slider(
         }
     }
 
-    let right = muted(max_label);
-    right.set_valign(Align::Center);
+    let labels_row = GtkBox::new(Orientation::Horizontal, 0);
+    labels_row.set_hexpand(true);
+    labels_row.set_margin_start(6);
+    labels_row.set_margin_end(6);
+    labels_row.set_margin_top(6);
+    labels_row.set_margin_bottom(6);
 
-    row.append(&left);
-    row.append(&slider);
-    row.append(&right);
+    let left = Label::builder()
+        .label(min_label)
+        .css_classes(["dim-label", "caption"])
+        .halign(Align::Start)
+        .hexpand(true)
+        .wrap(false)
+        .build();
 
-    (row, slider)
+    let right = Label::builder()
+        .label(max_label)
+        .css_classes(["dim-label", "caption"])
+        .halign(Align::End)
+        .hexpand(true)
+        .wrap(false)
+        .build();
+
+    labels_row.append(&left);
+    labels_row.append(&right);
+
+    container.append(&slider);
+    container.append(&labels_row);
+
+    (container, slider)
 }

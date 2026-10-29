@@ -264,15 +264,22 @@ fn ui_components_layout_and_behavior() {
 
     // Verify labeled_slider
     let (slider_box, slider) = crate::ui::components::labeled_slider("Min", "Max", 0.0, 10.0, 1.0);
-    assert_eq!(slider_box.orientation(), gtk::Orientation::Horizontal);
+    assert_eq!(slider_box.orientation(), gtk::Orientation::Vertical);
     assert_eq!(slider.adjustment().lower(), 0.0);
     assert_eq!(slider.adjustment().upper(), 10.0);
     assert!(slider.draws_value());
     assert!(slider.has_css_class("labeled-slider"));
-    let left_child = slider_box.first_child().expect("left child exists");
-    assert_eq!(left_child.valign(), gtk::Align::Center);
-    let right_child = slider_box.last_child().expect("right child exists");
-    assert_eq!(right_child.valign(), gtk::Align::Center);
+    let first_child = slider_box.first_child().expect("slider exists");
+    assert_eq!(first_child, slider.upcast::<gtk::Widget>());
+    let labels_row = slider_box
+        .last_child()
+        .and_downcast::<gtk::Box>()
+        .expect("labels row exists");
+    assert_eq!(labels_row.orientation(), gtk::Orientation::Horizontal);
+    let left_child = labels_row.first_child().expect("left child exists");
+    assert_eq!(left_child.halign(), gtk::Align::Start);
+    let right_child = labels_row.last_child().expect("right child exists");
+    assert_eq!(right_child.halign(), gtk::Align::End);
 
     // Verify flow_button_box
     let fbox = crate::ui::components::flow_button_box(1, 4);

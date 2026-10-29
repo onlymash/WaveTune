@@ -190,7 +190,7 @@ pub(crate) fn build_sound_page() -> (GtkBox, SoundWidgets) {
     bass_slider_box.set_margin_start(12);
     bass_slider_box.set_margin_end(12);
     bass_slider_box.set_margin_top(4);
-    bass_slider_box.set_margin_bottom(4);
+    bass_slider_box.set_margin_bottom(6);
     let bass_slider_row = preferences_content_row(&bass_slider_box);
 
     let enhancement_list = ListBox::builder()

@@ -70,17 +70,6 @@ pub(crate) fn install_styles() {
             background-color: alpha(@theme_fg_color, 0.08);
             color: alpha(@theme_fg_color, 0.55);
         }
-        scale.labeled-slider value {
-            margin-bottom: 18px;
-            padding-bottom: 0px;
-        }
-        scale.labeled-slider marks {
-            margin-top: 4px;
-            padding-top: 0px;
-        }
-        scale.labeled-slider {
-            padding-bottom: 38px;
-        }
         ",
     );
     if let Some(display) = gtk::gdk::Display::default() {
