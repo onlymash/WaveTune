@@ -100,16 +100,12 @@ make_source_tarball() {
 
 build_arch() {
     require makepkg
-    local pkgbuild=packaging/arch/wavetune/PKGBUILD
-    local work="$dist_dir/arch" pkgbuild_ver
-    pkgbuild_ver=$(sed -n 's/^pkgver=//p' "$pkgbuild")
-    [[ $pkgbuild_ver == "$version" ]] ||
-        die "$pkgbuild has pkgver=$pkgbuild_ver but Cargo.toml has version $version"
+    local work="$dist_dir/arch"
 
     info "Building Arch package $pkgname $version"
     rm -rf "$work"
     mkdir -p "$work"
-    cp "$pkgbuild" "$work/PKGBUILD"
+    bash "$repo_root/packaging/arch/generate.sh" release --reset-sums --output "$work/PKGBUILD"
     make_source_tarball "$work/$pkgname-$version.tar.gz"
 
     # The local snapshot differs from the release tarball, so skip checksums.
@@ -134,8 +130,9 @@ build_git() {
     rm -rf "$work"
     mkdir -p "$work"
     # Clone from this local repository instead of GitHub so unpushed commits are tested.
-    sed "s|^source=(.*)|source=(\"\$_pkgname::git+file://$repo_root\")|" \
-        packaging/arch/wavetune-git/PKGBUILD >"$work/PKGBUILD"
+    bash "$repo_root/packaging/arch/generate.sh" git \
+        --source "\$_pkgname::git+file://$repo_root" \
+        --output "$work/PKGBUILD"
 
     local args=(--force --cleanbuild)
     ((run_check)) || args+=(--nocheck)

@@ -88,8 +88,7 @@ cargo run
 
 打包配置位于 `packaging/`：
 
-- `packaging/arch/wavetune/PKGBUILD`：正式版，从 GitHub `v<version>` tag 的源码包构建。
-- `packaging/arch/wavetune-git/PKGBUILD`：跟踪最新提交的 `-git` 版本。
+- `packaging/arch/generate.sh`：Arch Linux / AUR 打包生成脚本，支持生成正式版（`release` -> `packaging/arch/wavetune/`）与开发版（`git` -> `packaging/arch/wavetune-git/`）两套独立的 AUR Git 仓库（生成目录已被主仓库 `.gitignore` 忽略），详见 [`packaging/arch/README.md`](packaging/arch/README.md)。
 - `packaging/debian/`：`.deb` 的 `control` 模板和版权文件。
 - `packaging/install.sh`：两种格式共用的安装文件布局。
 
@@ -105,8 +104,8 @@ packaging/package.sh all --no-check
 
 产物输出到 `target/dist/`，中间文件位于 `target/dist/<格式>/`，不会污染项目根目录。
 `.deb` 链接的是构建主机的 glibc/GTK/libadwaita，发布用的 deb 应在目标 Debian/Ubuntu
-发行版上构建（需要 libadwaita >= 1.9）。发布新版本时，同步更新 `Cargo.toml` 与
-`packaging/arch/wavetune/PKGBUILD` 中的版本号，打 tag 后在 PKGBUILD 目录运行 `updpkgsums`。
+发行版上构建（需要 libadwaita >= 1.9）。发布新版本时，更新 `Cargo.toml` 中的版本号并打上
+`v<version>` tag，随后执行 `packaging/arch/generate.sh release --updpkgsums` 生成并更新正式版 AUR 仓库。
 
 ## OnePlus/OPPO/realme 控制通道连接
 

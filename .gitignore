@@ -1,11 +1,9 @@
 # build output
 /target/
 
-# makepkg output when run directly inside packaging/arch/*
-/packaging/arch/*/src/
-/packaging/arch/*/pkg/
-/packaging/arch/*/*.tar.*
-/packaging/arch/wavetune-git/wavetune/
+# Generated AUR repositories (separate git repos for publishing to AUR)
+/packaging/arch/wavetune/
+/packaging/arch/wavetune-git/
 *.pkg.tar.zst
 *.deb
 
