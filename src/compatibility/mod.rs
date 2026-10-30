@@ -273,6 +273,11 @@ impl DeviceProfile {
     }
 
     #[inline]
+    pub fn supports_noise_control(&self) -> bool {
+        !self.noise_modes.is_empty()
+    }
+
+    #[inline]
     pub fn supports_dual_device(&self) -> bool {
         self.has_feature(features::DUAL_DEVICE)
     }

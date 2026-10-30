@@ -63,6 +63,7 @@ pub(crate) struct HomeWidgets {
     pub(crate) left_battery: BatteryIndicator,
     pub(crate) right_battery: BatteryIndicator,
     pub(crate) case_battery: BatteryIndicator,
+    pub(crate) mode_group: adw::PreferencesGroup,
     pub(crate) noise_option_row: adw::ComboRow,
     pub(crate) paired_devices_section: GtkBox,
     pub(crate) paired_devices: gtk::ListBox,

@@ -72,6 +72,7 @@ pub(crate) struct HomeWidgetRefs {
     pub(crate) left_battery: BatteryIndicator,
     pub(crate) right_battery: BatteryIndicator,
     pub(crate) case_battery: BatteryIndicator,
+    pub(crate) mode_group: adw::PreferencesGroup,
     pub(crate) noise_option_row: adw::ComboRow,
     pub(crate) paired_devices_section: GtkBox,
     pub(crate) paired_devices: gtk::ListBox,
@@ -104,6 +105,7 @@ pub(crate) fn widgets_ref(widgets: &HomeWidgets) -> HomeWidgetRefs {
         left_battery: widgets.left_battery.clone(),
         right_battery: widgets.right_battery.clone(),
         case_battery: widgets.case_battery.clone(),
+        mode_group: widgets.mode_group.clone(),
         noise_option_row: widgets.noise_option_row.clone(),
         paired_devices_section: widgets.paired_devices_section.clone(),
         paired_devices: widgets.paired_devices.clone(),
@@ -276,6 +278,7 @@ fn refresh_noise_controls(
 ) {
     let current_group =
         current_mode.and_then(|index| compatibility::noise_mode_group_for(modes, index));
+    let mut any_noise_mode_supported = false;
     for control in &widgets.primary_noise_controls {
         let index = control.index;
         let mode = compatibility::noise_mode_for(modes, index);
@@ -299,6 +302,9 @@ fn refresh_noise_controls(
                 && compatibility::noise_mode_supported_for(index, supported_indices, modes)
         });
         control.container.set_visible(visible);
+        if visible {
+            any_noise_mode_supported = true;
+        }
         let sensitive = enabled && visible && noise_mode_write_payload_for(index, modes).is_some();
         control.button.set_sensitive(sensitive);
         control.label.set_sensitive(sensitive);
@@ -308,6 +314,8 @@ fn refresh_noise_controls(
             control.button.remove_css_class("suggested-action");
         }
     }
+
+    widgets.mode_group.set_visible(any_noise_mode_supported);
 
     let visible_submodes: Vec<_> = current_group.map_or_else(Vec::new, |group| {
         modes

@@ -1911,6 +1911,9 @@ pub(crate) fn wire_bluetooth_controls(
                     widgets
                         .paired_devices_section
                         .set_visible(supports_dual_device);
+                    let supports_noise =
+                        profile.is_some_and(|profile| profile.supports_noise_control());
+                    widgets.mode_group.set_visible(supports_noise);
 
                     let supports_eq = profile.is_some_and(|p| p.supports_equalizer());
                     let supports_custom_eq = profile.is_some_and(|p| p.supports_custom_equalizer());

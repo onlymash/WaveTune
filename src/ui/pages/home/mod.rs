@@ -361,6 +361,7 @@ pub(crate) fn build_home_page() -> (GtkBox, HomeWidgets) {
     let mode_group = adw::PreferencesGroup::builder()
         .title(&crate::t!("noise-mode-title"))
         .build();
+    mode_group.set_visible(false);
 
     let primary_modes = GtkBox::new(Orientation::Horizontal, 8);
     primary_modes.set_homogeneous(true);
@@ -551,6 +552,7 @@ pub(crate) fn build_home_page() -> (GtkBox, HomeWidgets) {
             left_battery,
             right_battery,
             case_battery,
+            mode_group,
             noise_option_row,
             paired_devices_section,
             paired_devices,

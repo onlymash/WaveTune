@@ -75,6 +75,9 @@ fn noise_control_circular_buttons_and_combobox_row() {
     // Verify second row is a modern ComboRow (initially hidden)
     assert!(!widget_refs.noise_option_row.is_visible());
 
+    // Verify mode_group card is initially hidden when no device/noise modes are loaded
+    assert!(!widget_refs.mode_group.is_visible());
+
     // Verify model_firmware label is present in model card, initially hidden and styled
     assert!(!widget_refs.model_firmware.is_visible());
     assert!(widget_refs.model_firmware.has_css_class("dim-label"));
@@ -98,7 +101,7 @@ fn noise_control_circular_buttons_and_combobox_row() {
     };
     let supported_indices = vec![0, 1, 2, 4, 5, 6, 7, 11, 12, 13, 14];
 
-    // 1. Off mode (index 0): no submodes, noise_option_row remains hidden
+    // 1. Off mode (index 0): no submodes, noise_option_row remains hidden, mode_group is visible
     crate::ui::home_state::update_noise_controls(
         &widget_refs,
         &supported_indices,
@@ -110,6 +113,7 @@ fn noise_control_circular_buttons_and_combobox_row() {
         modes,
         &updating_noise,
     );
+    assert!(widget_refs.mode_group.is_visible());
     assert!(!widget_refs.noise_option_row.is_visible());
     let off_ctrl = widget_refs
         .primary_noise_controls
@@ -146,6 +150,21 @@ fn noise_control_circular_buttons_and_combobox_row() {
         widget_refs.noise_option_row.title().as_str(),
         &crate::t!("noise-mode-level")
     );
+
+    // 3. Unsupported headset (empty noise modes): mode_group card must be hidden
+    crate::ui::home_state::update_noise_controls(
+        &widget_refs,
+        &[],
+        "",
+        false,
+        false,
+        &wear,
+        None,
+        &[],
+        &updating_noise,
+    );
+    assert!(!widget_refs.mode_group.is_visible());
+    assert!(!widget_refs.noise_option_row.is_visible());
 }
 
 #[test]
