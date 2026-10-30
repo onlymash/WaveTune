@@ -130,9 +130,20 @@ The sequence verified by the reference project on Enco X4:
 6. Query firmware, battery, wear state, noise-control state, EQ, and supported feature states.
 
 Respect the handshake capability bitmap and avoid commands it does not permit. The reference
-records no authentication, key exchange, or heartbeat. On connection X4 may send requests such
-as `0x0500` (time) and `0x051C` (app capabilities); the reference reports that ignoring these did
-not prevent normal use on its tested X4.
+records no authentication or key exchange. On connection, earbuds may originate requests that
+the host should answer to keep the protocol session responsive:
+- `0x0500` (time): answered with `0x8500 [00][unix seconds u32 LE]`.
+- `0x051C` (app capabilities): answered with `0x851C [00, 00, 00]`.
+- `0x051D` (phone spatial): answered with `0x851D [01]` (unsupported by host).
+- `0x050C` (game EQ): answered with `0x850C [00, 01, 00]`.
+- `0x0402` (free music): answered with `0x8402 [00]`.
+- Event `0x0204` with event ID `0xF2` (connection history): answered with `0x8204 [00, F2]`.
+- Event `0x0204` with event ID `0xF4` (telemetry JSON): answered with `0x8204 [00, F4]{"cmd":…}` echoing the request's cmd.
+- Command `0x0419` (`SetHostCapabilities`): if permitted by the capability bitmap (bit 35), the host sends `0x0419 [00]` during session initialization.
+
+When writing settings, slow firmware (such as Enco Free4 when switching game mode) may immediately acknowledge
+the write but apply the internal state change after a 200–500 ms delay. Settle delay retries (250 ms, 500 ms)
+prevent false readback mismatch errors.
 
 For the Enco X4 capability bitmap, bit 8 is documented for noise-control query `0x010C` and
 setting `0x0404`. The Linux client checks this bit before exposing or sending noise-mode settings.

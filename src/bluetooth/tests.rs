@@ -1014,3 +1014,149 @@ fn probe_read_only_features_populates_detected_list() {
         assert!(!feature.is_empty());
     }
 }
+
+#[test]
+fn device_originated_requests_are_answered_during_queries() {
+    let (mut client, mut device) = UnixStream::pair().unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    device
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+
+    let device_thread = thread::spawn(move || {
+        // Client sends an initial request, e.g. 0x0106 battery
+        let initial_query = read_mock_request(&mut device);
+        assert_eq!(initial_query.command, 0x0106);
+
+        // Before answering the query, device sends unsolicited TimeRequest (0x0500)
+        let time_req = AppPacket {
+            command: 0x0500,
+            sequence: 0x12,
+            payload: vec![],
+        };
+        let frame = encode_frame(&time_req.encode().unwrap()).unwrap();
+        device.write_all(&frame).unwrap();
+
+        // Host client must reply 0x8500 with unix timestamp
+        let time_reply = read_mock_request(&mut device);
+        assert_eq!(time_reply.command, 0x8500);
+        assert_eq!(time_reply.sequence, 0x12);
+        assert_eq!(time_reply.payload.len(), 5);
+        assert_eq!(time_reply.payload[0], 0x00);
+
+        // Device sends AppCapabilitiesRequest (0x051C)
+        let caps_req = AppPacket {
+            command: 0x051C,
+            sequence: 0x13,
+            payload: vec![],
+        };
+        let frame = encode_frame(&caps_req.encode().unwrap()).unwrap();
+        device.write_all(&frame).unwrap();
+
+        // Host client must reply 0x851C [0, 0, 0]
+        let caps_reply = read_mock_request(&mut device);
+        assert_eq!(caps_reply.command, 0x851C);
+        assert_eq!(caps_reply.sequence, 0x13);
+        assert_eq!(caps_reply.payload, vec![0x00, 0x00, 0x00]);
+
+        // Device sends PhoneSpatialRequest (0x051D)
+        let spatial_req = AppPacket {
+            command: 0x051D,
+            sequence: 0x14,
+            payload: vec![],
+        };
+        let frame = encode_frame(&spatial_req.encode().unwrap()).unwrap();
+        device.write_all(&frame).unwrap();
+
+        let spatial_reply = read_mock_request(&mut device);
+        assert_eq!(spatial_reply.command, 0x851D);
+        assert_eq!(spatial_reply.sequence, 0x14);
+        assert_eq!(spatial_reply.payload, vec![0x01]);
+
+        // Device sends ConnectionHistory event (0x0204 [0xF2])
+        let history_event = AppPacket {
+            command: 0x0204,
+            sequence: 0x15,
+            payload: vec![0xF2, 0x01, 0x02],
+        };
+        let frame = encode_frame(&history_event.encode().unwrap()).unwrap();
+        device.write_all(&frame).unwrap();
+
+        let history_reply = read_mock_request(&mut device);
+        assert_eq!(history_reply.command, 0x8204);
+        assert_eq!(history_reply.sequence, 0x15);
+        assert_eq!(history_reply.payload, vec![0x00, 0xF2]);
+
+        // Device sends Telemetry event (0x0204 [0xF4, ...])
+        let telemetry_event = AppPacket {
+            command: 0x0204,
+            sequence: 0x16,
+            payload: [&[0xF4][..], br#"{"cmd":"device_heartbeat","status":"ok"}"#].concat(),
+        };
+        let frame = encode_frame(&telemetry_event.encode().unwrap()).unwrap();
+        device.write_all(&frame).unwrap();
+
+        let telemetry_reply = read_mock_request(&mut device);
+        assert_eq!(telemetry_reply.command, 0x8204);
+        assert_eq!(telemetry_reply.sequence, 0x16);
+        assert_eq!(telemetry_reply.payload[0], 0x00);
+        assert_eq!(telemetry_reply.payload[1], 0xF4);
+        let reply_json: serde_json::Value =
+            serde_json::from_slice(&telemetry_reply.payload[2..]).unwrap();
+        assert_eq!(reply_json["cmd"], "device_heartbeat");
+
+        // Now device answers the original query
+        send_mock_response(&mut device, &initial_query, vec![0, 0]);
+    });
+
+    let (updates, _) = mpsc::channel();
+    let res = super::brands::oppo::oppo_session::request(
+        &mut client,
+        &mut FrameDecoder::default(),
+        0x0106,
+        0,
+        vec![],
+        Some(&updates),
+    );
+    assert!(res.is_ok());
+    device_thread.join().unwrap();
+}
+
+#[test]
+fn write_readback_settle_delay_retries_on_slow_firmware() {
+    let (mut client, mut device) = UnixStream::pair().unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+    device
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .unwrap();
+
+    let device_thread = thread::spawn(move || {
+        // Setting game mode
+        let write_cmd = read_mock_request(&mut device);
+        assert_eq!(write_cmd.command, 0x0403);
+        assert_eq!(write_cmd.payload, vec![6, 1]);
+        send_mock_response(&mut device, &write_cmd, vec![0]);
+
+        // First readback immediately after write: returns old state 0 (not settled yet)
+        let readback1 = read_mock_request(&mut device);
+        assert_eq!(readback1.command, 0x010d);
+        assert_eq!(readback1.payload, vec![1, 6]);
+        send_mock_response(&mut device, &readback1, vec![0, 1, 6, 0]);
+
+        // Second readback after settle delay (250ms): returns new state 1 (settled)
+        let readback2 = read_mock_request(&mut device);
+        assert_eq!(readback2.command, 0x010d);
+        assert_eq!(readback2.payload, vec![1, 6]);
+        send_mock_response(&mut device, &readback2, vec![0, 1, 6, 1]);
+    });
+
+    let (updates, _) = mpsc::channel();
+    let res =
+        super::session::set_game_mode(&mut client, &mut FrameDecoder::default(), 6, true, &updates);
+    assert_eq!(res, Ok(true));
+    device_thread.join().unwrap();
+}

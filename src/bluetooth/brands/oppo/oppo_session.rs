@@ -1087,7 +1087,7 @@ fn monitor_device(
                                 {
                                     merge_wear_state(&mut current_wear, update);
                                 }
-                                publish_unsolicited(&packet, updates);
+                                publish_read_only_event(&packet, updates);
                             }
                             continue;
                         }
@@ -1103,11 +1103,44 @@ fn monitor_device(
                         {
                             merge_wear_state(&mut current_wear, update);
                         }
-                        publish_unsolicited(&packet, updates);
+                        handle_unsolicited(&mut stream, &packet, Some(updates));
                     }
                 }
             }
         }
+    }
+}
+
+fn find_feature_in_records(payload: &[u8], feature_id: u8) -> Option<bool> {
+    if payload.first() != Some(&0) || payload.len() < 2 {
+        return None;
+    }
+    let count = payload[1] as usize;
+    let records = &payload[2..];
+    if records.len() < count * 2 {
+        return None;
+    }
+    records[..count * 2]
+        .chunks_exact(2)
+        .find(|record| record[0] == feature_id)
+        .map(|record| record[1] != 0)
+}
+
+fn query_feature_flag<T: Read + Write>(
+    stream: &mut T,
+    decoder: &mut FrameDecoder,
+    batch_cache: &Option<Vec<u8>>,
+    feature_id: u8,
+    updates: Option<&Sender<UiUpdate>>,
+) -> Option<bool> {
+    if let Some(payload) = batch_cache {
+        if let Some(val) = find_feature_in_records(payload, feature_id) {
+            return Some(val);
+        }
+    }
+    match request(stream, decoder, 0x010d, 0, vec![1, feature_id], updates) {
+        Ok(res) => parse_feature_flags_response(&res.payload, feature_id).ok(),
+        Err(_) => None,
     }
 }
 
@@ -1118,7 +1151,19 @@ pub fn initialize_oppo_session<T: Read + Write>(
 ) -> Result<(OppoDeviceSnapshot, FrameDecoder), String> {
     let mut decoder = FrameDecoder::default();
 
-    let handshake = request(stream, &mut decoder, 0x0100, 0, vec![], updates)?;
+    let mut handshake = None;
+    for _ in 0..3 {
+        match request(stream, &mut decoder, 0x0100, 0, vec![], updates) {
+            Ok(pkt) => {
+                handshake = Some(pkt);
+                break;
+            }
+            Err(_) => {
+                thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
+    let handshake = handshake.ok_or_else(|| crate::t!("device-handshake-missing-caps"))?;
     if handshake.payload.len() < 2 {
         return Err(crate::t!("device-handshake-missing-caps"));
     }
@@ -1301,13 +1346,50 @@ pub fn initialize_oppo_session<T: Read + Write>(
         }
     }
 
+    let supports_game_mode = profile.supports_game_mode();
+    let game_mode_feature_id = if capability_bitmap_allows(&capabilities, 0x0423) {
+        0x28
+    } else {
+        compatibility::game_mode_feature_id_for_product(product_id)
+    };
+
+    let mut feature_ids_to_query = Vec::new();
+    if profile.supports_dual_device() {
+        feature_ids_to_query.push(17);
+    }
+    if supports_game_mode {
+        feature_ids_to_query.push(game_mode_feature_id);
+    }
+    if profile.supports_bass_engine() {
+        feature_ids_to_query.push(FEATURE_BASS_ENGINE);
+    }
+    if profile.supports_hi_res() {
+        feature_ids_to_query.push(FEATURE_HI_RES);
+    }
+    if profile.supports_wear_detection() {
+        feature_ids_to_query.push(0x04);
+    }
+    if profile.supports_sleep_detection() {
+        feature_ids_to_query.push(0x3a);
+    }
+
+    let batch_features_payload = if !feature_ids_to_query.is_empty() {
+        let mut req = vec![feature_ids_to_query.len() as u8];
+        req.extend_from_slice(&feature_ids_to_query);
+        match request(stream, &mut decoder, 0x010d, 0, req, updates) {
+            Ok(res) => Some(res.payload),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
     let paired_device_controls_enabled = if !profile.supports_dual_device() {
         Err(crate::t!("dual-device-profile-missing"))
     } else {
-        match request(stream, &mut decoder, 0x010d, 0, vec![1, 17], updates) {
-            Ok(response) => parse_feature_flags_response(&response.payload, 17)
-                .map_err(|error| crate::t!("dual-device-response-invalid", error)),
-            Err(_) => Ok(true),
+        match query_feature_flag(stream, &mut decoder, &batch_features_payload, 17, updates) {
+            Some(enabled) => Ok(enabled),
+            None => Ok(true),
         }
     };
 
@@ -1328,7 +1410,8 @@ pub fn initialize_oppo_session<T: Read + Write>(
         None
     };
 
-    let supports_custom_equalizer = profile.supports_custom_equalizer();
+    let supports_custom_equalizer =
+        profile.supports_custom_equalizer() && capability_bitmap_allows(&capabilities, 0x0418);
     let custom_equalizers = if supports_custom_equalizer {
         match request(stream, &mut decoder, 0x0122, 0, vec![], updates) {
             Ok(response) => {
@@ -1351,41 +1434,27 @@ pub fn initialize_oppo_session<T: Read + Write>(
         None
     };
 
-    let supports_game_mode = profile.supports_game_mode();
-    let game_mode_feature_id = compatibility::game_mode_feature_id_for_product(product_id);
     let game_mode_enabled = if supports_game_mode {
-        match request(
+        query_feature_flag(
             stream,
             &mut decoder,
-            0x010d,
-            0,
-            vec![1, game_mode_feature_id],
+            &batch_features_payload,
+            game_mode_feature_id,
             updates,
-        ) {
-            Ok(response) => {
-                parse_feature_flags_response(&response.payload, game_mode_feature_id).ok()
-            }
-            Err(_) => None,
-        }
+        )
     } else {
         None
     };
 
     let supports_bass_engine = profile.supports_bass_engine();
     let (bass_engine_enabled, bass_engine_level) = if supports_bass_engine {
-        let enabled = match request(
+        let enabled = query_feature_flag(
             stream,
             &mut decoder,
-            0x010d,
-            0,
-            vec![1, FEATURE_BASS_ENGINE],
+            &batch_features_payload,
+            FEATURE_BASS_ENGINE,
             updates,
-        ) {
-            Ok(response) => {
-                parse_feature_flags_response(&response.payload, FEATURE_BASS_ENGINE).ok()
-            }
-            Err(_) => None,
-        };
+        );
         let level = match request(stream, &mut decoder, 0x0124, 0, vec![], updates) {
             Ok(response) => parse_bass_engine_response(&response.payload).ok(),
             Err(_) => None,
@@ -1397,17 +1466,13 @@ pub fn initialize_oppo_session<T: Read + Write>(
 
     let supports_hi_res = profile.supports_hi_res();
     let hi_res_enabled = if supports_hi_res {
-        match request(
+        query_feature_flag(
             stream,
             &mut decoder,
-            0x010d,
-            0,
-            vec![1, FEATURE_HI_RES],
+            &batch_features_payload,
+            FEATURE_HI_RES,
             updates,
-        ) {
-            Ok(response) => parse_feature_flags_response(&response.payload, FEATURE_HI_RES).ok(),
-            Err(_) => None,
-        }
+        )
     } else {
         None
     };
@@ -1467,24 +1532,22 @@ pub fn initialize_oppo_session<T: Read + Write>(
     };
 
     let in_ear_detection_enabled = if profile.supports_wear_detection() {
-        match request(stream, &mut decoder, 0x010d, 0, vec![1, 0x04], updates) {
-            Ok(res) => parse_feature_flags_response(&res.payload, 0x04).ok(),
-            Err(_) => None,
-        }
+        query_feature_flag(stream, &mut decoder, &batch_features_payload, 0x04, updates)
     } else {
         None
     };
 
     let sleep_detection_enabled = if profile.supports_sleep_detection() {
-        match request(stream, &mut decoder, 0x010d, 0, vec![1, 0x3a], updates) {
-            Ok(res) => parse_feature_flags_response(&res.payload, 0x3a).ok(),
-            Err(_) => None,
-        }
+        query_feature_flag(stream, &mut decoder, &batch_features_payload, 0x3a, updates)
     } else {
         None
     };
 
     let dual_device_enabled = paired_device_controls_enabled.as_ref().ok().copied();
+
+    if capability_bitmap_allows(&capabilities, 0x0419) {
+        let _ = request(stream, &mut decoder, 0x0419, 0xf0, vec![0x00], updates);
+    }
 
     Ok((
         DeviceSnapshot {
@@ -1695,8 +1758,23 @@ pub fn set_noise_mode<T: Read + Write>(
         request(stream, decoder, 0x0404, 0, payload, Some(&deferred_tx))?;
 
         let result = request(stream, decoder, 0x010c, 0, vec![1, 1], Some(&deferred_tx))?;
-        let actual = parse_noise_mode_response(&result.payload)
+        let mut actual = parse_noise_mode_response(&result.payload)
             .ok_or_else(|| crate::t!("noise-mode-readback-unrecognized"))?;
+        if !noise_mode_readback_matches_for(protocol_index, actual, modes) {
+            for delay_ms in [250, 500] {
+                thread::sleep(Duration::from_millis(delay_ms));
+                if let Ok(retry) =
+                    request(stream, decoder, 0x010c, 0, vec![1, 1], Some(&deferred_tx))
+                {
+                    if let Some(retry_val) = parse_noise_mode_response(&retry.payload) {
+                        if noise_mode_readback_matches_for(protocol_index, retry_val, modes) {
+                            actual = retry_val;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         if !noise_mode_readback_matches_for(protocol_index, actual, modes) {
             return Err(crate::t!(
                 "noise-mode-readback-mismatch",
@@ -1815,8 +1893,21 @@ pub fn set_equalizer<T: Read + Write>(
 ) -> Result<u8, String> {
     request(stream, decoder, 0x0406, 0, vec![preset], Some(updates))?;
     let result = request(stream, decoder, 0x010f, 0, vec![], Some(updates))?;
-    let actual = parse_equalizer_response(&result.payload)
+    let mut actual = parse_equalizer_response(&result.payload)
         .map_err(|error| crate::t!("equalizer-readback-invalid", error))?;
+    if actual != preset {
+        for delay_ms in [250, 500] {
+            thread::sleep(Duration::from_millis(delay_ms));
+            if let Ok(retry) = request(stream, decoder, 0x010f, 0, vec![], Some(updates)) {
+                if let Ok(retry_val) = parse_equalizer_response(&retry.payload) {
+                    if retry_val == preset {
+                        actual = retry_val;
+                        break;
+                    }
+                }
+            }
+        }
+    }
     if actual != preset {
         return Err(crate::t!("equalizer-readback-mismatch", actual, preset));
     }
@@ -1831,8 +1922,21 @@ pub fn set_spatial_audio<T: Read + Write>(
 ) -> Result<u8, String> {
     request(stream, decoder, 0x0422, 0, vec![mode], Some(updates))?;
     let result = request(stream, decoder, 0x012a, 0, vec![], Some(updates))?;
-    let actual = parse_spatial_audio_response(&result.payload)
+    let mut actual = parse_spatial_audio_response(&result.payload)
         .map_err(|error| crate::t!("spatial-audio-readback-invalid", error))?;
+    if actual != mode {
+        for delay_ms in [250, 500] {
+            thread::sleep(Duration::from_millis(delay_ms));
+            if let Ok(retry) = request(stream, decoder, 0x012a, 0, vec![], Some(updates)) {
+                if let Ok(retry_val) = parse_spatial_audio_response(&retry.payload) {
+                    if retry_val == mode {
+                        actual = retry_val;
+                        break;
+                    }
+                }
+            }
+        }
+    }
     if actual != mode {
         return Err(crate::t!("spatial-audio-readback-mismatch", actual, mode));
     }
@@ -1943,15 +2047,58 @@ fn set_feature_toggle<T: Read + Write>(
         vec![1, feature_id],
         Some(updates),
     )?;
-    let actual = parse_feature_flags_response(&result.payload, feature_id)
+    let mut actual = parse_feature_flags_response(&result.payload, feature_id)
         .map_err(|error| crate::t!("feature-readback-invalid", feature_name, error))?;
+    if actual != enabled {
+        for delay_ms in [250, 500] {
+            thread::sleep(Duration::from_millis(delay_ms));
+            if let Ok(retry) = request(
+                stream,
+                decoder,
+                0x010d,
+                0,
+                vec![1, feature_id],
+                Some(updates),
+            ) {
+                if let Ok(retry_val) = parse_feature_flags_response(&retry.payload, feature_id) {
+                    if retry_val == enabled {
+                        actual = retry_val;
+                        break;
+                    }
+                }
+            }
+        }
+    }
     if actual != enabled {
         return Err(crate::t!("feature-readback-mismatch", feature_name));
     }
     Ok(actual)
 }
 
-fn request<T: Read + Write>(
+fn reply_packet<T: Write>(
+    stream: &mut T,
+    command: u16,
+    sequence: u8,
+    payload: Vec<u8>,
+) -> Result<(), String> {
+    let packet = AppPacket {
+        command: command | 0x8000,
+        sequence,
+        payload,
+    };
+    let packet_bytes = packet
+        .encode()
+        .map_err(|error| crate::t!("protocol-command-encode-failed", error))?;
+    let frame = encode_frame(&packet_bytes)
+        .map_err(|error| crate::t!("protocol-frame-encode-failed", error))?;
+    stream
+        .write_all(&frame)
+        .map_err(|error| crate::t!("protocol-query-send-failed", error))?;
+    let _ = stream.flush();
+    Ok(())
+}
+
+pub(crate) fn request<T: Read + Write>(
     stream: &mut T,
     decoder: &mut FrameDecoder,
     command: u16,
@@ -2005,14 +2152,12 @@ fn request<T: Read + Write>(
                 trailing_packets.extend(frames.iter().skip(index + 1).cloned());
                 break;
             }
-            if let Some(updates) = updates {
-                publish_unsolicited(&received, updates);
-            }
+            handle_unsolicited(stream, &received, updates);
         }
         if let Some(response) = response {
             for bytes in trailing_packets {
-                if let (Some(updates), Ok(packet)) = (updates, AppPacket::decode(&bytes)) {
-                    publish_unsolicited(&packet, updates);
+                if let Ok(packet) = AppPacket::decode(&bytes) {
+                    handle_unsolicited(stream, &packet, updates);
                 }
             }
             if response.payload.first() != Some(&0) {
@@ -2038,7 +2183,72 @@ fn request<T: Read + Write>(
     }
 }
 
-fn publish_unsolicited(packet: &AppPacket, updates: &Sender<UiUpdate>) {
+fn handle_unsolicited<T: Write>(
+    stream: &mut T,
+    packet: &AppPacket,
+    updates: Option<&Sender<UiUpdate>>,
+) {
+    match packet.command {
+        0x0500 => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as u32;
+            let mut payload = vec![0x00];
+            payload.extend_from_slice(&now.to_le_bytes());
+            let _ = reply_packet(stream, 0x0500, packet.sequence, payload);
+            return;
+        }
+        0x051C => {
+            let _ = reply_packet(stream, 0x051C, packet.sequence, vec![0x00, 0x00, 0x00]);
+            return;
+        }
+        0x051D => {
+            let _ = reply_packet(stream, 0x051D, packet.sequence, vec![0x01]);
+            return;
+        }
+        0x050C => {
+            let _ = reply_packet(stream, 0x050C, packet.sequence, vec![0x00, 0x01, 0x00]);
+            return;
+        }
+        0x0402 => {
+            let _ = reply_packet(stream, 0x0402, packet.sequence, vec![0x00]);
+            return;
+        }
+        _ => {}
+    }
+
+    if packet.command == 0x0204 {
+        match packet.payload.first() {
+            Some(&0xF2) => {
+                let _ = reply_packet(stream, 0x0204, packet.sequence, vec![0x00, 0xF2]);
+                return;
+            }
+            Some(&0xF4) => {
+                let mut cmd = String::new();
+                if packet.payload.len() > 1 {
+                    if let Ok(value) =
+                        serde_json::from_slice::<serde_json::Value>(&packet.payload[1..])
+                    {
+                        if let Some(c) = value.get("cmd").and_then(|v| v.as_str()) {
+                            cmd = c.to_string();
+                        }
+                    }
+                }
+                let reply_json = serde_json::json!({ "cmd": cmd }).to_string();
+                let mut reply_payload = vec![0x00, 0xF4];
+                reply_payload.extend_from_slice(reply_json.as_bytes());
+                let _ = reply_packet(stream, 0x0204, packet.sequence, reply_payload);
+                return;
+            }
+            _ => {}
+        }
+    }
+
+    let Some(updates) = updates else {
+        return;
+    };
+
     if packet.command == 0x0506 {
         if let Ok(list) = parse_custom_equalizer_list(&packet.payload, false) {
             let _ = updates.send(UiUpdate::CustomEqualizers(list));
@@ -2077,11 +2287,22 @@ fn publish_unsolicited(packet: &AppPacket, updates: &Sender<UiUpdate>) {
                 let _ = updates.send(UiUpdate::BassEngineEnabled(val != 0));
             } else if feature_id == FEATURE_HI_RES {
                 let _ = updates.send(UiUpdate::HiRes(val != 0));
+            } else if feature_id == 0x04 {
+                let _ = updates.send(UiUpdate::InEarDetectionEnabled(val != 0));
+            } else if feature_id == 17 {
+                let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(val != 0));
+            } else if feature_id == 0x3a {
+                let _ = updates.send(UiUpdate::SleepDetectionEnabled(val != 0));
+            } else if feature_id == 27 {
+                let mode = if val != 0 { 1 } else { 0 };
+                let _ = updates.send(UiUpdate::SpatialAudio(mode));
             }
         }
         return;
     }
-    if (packet.command == 0x012a || packet.command == 0x812a) && !packet.payload.is_empty() {
+    if (packet.command == 0x012a || packet.command == 0x812a || packet.command == 0x0510)
+        && !packet.payload.is_empty()
+    {
         if let Ok(mode) = parse_spatial_audio_response(&packet.payload) {
             let _ = updates.send(UiUpdate::SpatialAudio(mode));
         }
@@ -2116,6 +2337,25 @@ fn publish_unsolicited(packet: &AppPacket, updates: &Sender<UiUpdate>) {
             let result = parse_paired_devices_event(&packet.payload)
                 .map_err(|error| crate::t!("dual-device-event-invalid", error));
             let _ = updates.send(UiUpdate::PairedDevices(result));
+        }
+        _ => {}
+    }
+}
+
+fn publish_read_only_event(packet: &AppPacket, updates: &Sender<UiUpdate>) {
+    if packet.command != 0x0204 {
+        return;
+    }
+    match packet.payload.first() {
+        Some(1) => {
+            if let Ok(state) = parse_battery_event(&packet.payload) {
+                let _ = updates.send(UiUpdate::Battery(state));
+            }
+        }
+        Some(2) => {
+            if let Ok(state) = parse_wear_event(&packet.payload) {
+                let _ = updates.send(UiUpdate::Wear(state));
+            }
         }
         _ => {}
     }
