@@ -1181,50 +1181,50 @@ pub fn initialize_oppo_session<T: Read + Write>(
                 firmware,
                 wear,
                 supports_wear_detection: profile
-                    .is_some_and(|profile| profile.supports_wear_detection),
+                    .is_some_and(|profile| profile.supports_wear_detection()),
                 noise_mode: None,
                 noise_mode_indices: Vec::new(),
                 noise_mode_support_note,
                 noise_modes: profile.map_or(&[], |profile| profile.noise_modes),
                 supports_paired_devices: profile
-                    .is_some_and(|profile| profile.supports_dual_device),
+                    .is_some_and(|profile| profile.supports_dual_device()),
                 detected_features,
                 probe_errors,
                 paired_devices: Err(note.clone()),
                 paired_device_controls_enabled: Err(note),
-                supports_equalizer: profile.is_some_and(|profile| profile.supports_equalizer),
+                supports_equalizer: profile.is_some_and(|profile| profile.supports_equalizer()),
                 supports_custom_equalizer: profile
-                    .is_some_and(|profile| profile.supports_custom_equalizer),
+                    .is_some_and(|profile| profile.supports_custom_equalizer()),
                 custom_equalizers: Vec::new(),
                 equalizer_preset: None,
                 supports_spatial_audio: profile
-                    .is_some_and(|profile| profile.supports_spatial_audio),
+                    .is_some_and(|profile| profile.supports_spatial_audio()),
                 supports_head_tracking: profile
-                    .is_some_and(|profile| profile.supports_head_tracking),
+                    .is_some_and(|profile| profile.supports_head_tracking()),
                 spatial_audio_mode: None,
-                supports_game_mode: profile.is_some_and(|profile| profile.supports_game_mode),
+                supports_game_mode: profile.is_some_and(|profile| profile.supports_game_mode()),
                 game_mode_enabled: None,
                 game_mode_feature_id: 0x06,
-                supports_bass_engine: profile.is_some_and(|profile| profile.supports_bass_engine),
+                supports_bass_engine: profile.is_some_and(|profile| profile.supports_bass_engine()),
                 bass_engine_enabled: None,
                 bass_engine_level: None,
-                supports_hi_res: profile.is_some_and(|profile| profile.supports_hi_res),
+                supports_hi_res: profile.is_some_and(|profile| profile.supports_hi_res()),
                 hi_res_enabled: None,
                 supports_touch_customization: profile
-                    .is_some_and(|profile| profile.supports_touch_customization),
+                    .is_some_and(|profile| profile.supports_touch_customization()),
                 key_functions: Vec::new(),
                 noise_cycle: NoiseCycleState::default(),
                 is_finding_earbuds: false,
                 supports_prompt_volume: profile
-                    .is_some_and(|profile| profile.supports_prompt_volume),
+                    .is_some_and(|profile| profile.supports_prompt_volume()),
                 prompt_volume: None,
-                supports_head_motion: profile.is_some_and(|profile| profile.supports_head_motion),
+                supports_head_motion: profile.is_some_and(|profile| profile.supports_head_motion()),
                 head_motion_type: None,
                 supports_fit_detection: profile
-                    .is_some_and(|profile| profile.supports_fit_detection),
-                supports_find_device: profile.is_some_and(|profile| profile.supports_find_device),
+                    .is_some_and(|profile| profile.supports_fit_detection()),
+                supports_find_device: profile.is_some_and(|profile| profile.supports_find_device()),
                 supports_sleep_detection: profile
-                    .is_some_and(|profile| profile.supports_sleep_detection),
+                    .is_some_and(|profile| profile.supports_sleep_detection()),
                 in_ear_detection_enabled: None,
                 sleep_detection_enabled: None,
                 dual_device_enabled: None,
@@ -1249,10 +1249,10 @@ pub fn initialize_oppo_session<T: Read + Write>(
         .into_iter()
         .filter(|event| {
             event_ids[..event_count].contains(event)
-                && (*event != 2 || profile.supports_wear_detection)
+                && (*event != 2 || profile.supports_wear_detection())
                 && (*event != 3 || !profile.noise_modes.is_empty())
-                && (*event != 4 || profile.supports_fit_detection)
-                && (*event != 6 || profile.supports_dual_device)
+                && (*event != 4 || profile.supports_fit_detection())
+                && (*event != 6 || profile.supports_dual_device())
         })
         .collect();
 
@@ -1270,7 +1270,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
     let firmware = parse_firmware_response(&firmware.payload)
         .map_err(|error| crate::t!("firmware-response-invalid", error))?;
 
-    let wear = if profile.supports_wear_detection {
+    let wear = if profile.supports_wear_detection() {
         let wear = request(stream, &mut decoder, 0x0109, 0, vec![], updates)?;
         parse_wear_response(&wear.payload)
             .map_err(|error| crate::t!("wear-response-invalid", error))?
@@ -1301,7 +1301,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         }
     }
 
-    let paired_device_controls_enabled = if !profile.supports_dual_device {
+    let paired_device_controls_enabled = if !profile.supports_dual_device() {
         Err(crate::t!("dual-device-profile-missing"))
     } else {
         match request(stream, &mut decoder, 0x010d, 0, vec![1, 17], updates) {
@@ -1311,14 +1311,14 @@ pub fn initialize_oppo_session<T: Read + Write>(
         }
     };
 
-    let supports_paired_devices = profile.supports_dual_device;
+    let supports_paired_devices = profile.supports_dual_device();
     let paired_devices = if supports_paired_devices {
         read_paired_devices(stream, &mut decoder, updates)
     } else {
         Err(crate::t!("dual-device-profile-missing"))
     };
 
-    let supports_equalizer = profile.supports_equalizer;
+    let supports_equalizer = profile.supports_equalizer();
     let equalizer_preset = if supports_equalizer {
         match request(stream, &mut decoder, 0x010f, 0, vec![], updates) {
             Ok(response) => parse_equalizer_response(&response.payload).ok(),
@@ -1328,7 +1328,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         None
     };
 
-    let supports_custom_equalizer = profile.supports_custom_equalizer;
+    let supports_custom_equalizer = profile.supports_custom_equalizer();
     let custom_equalizers = if supports_custom_equalizer {
         match request(stream, &mut decoder, 0x0122, 0, vec![], updates) {
             Ok(response) => {
@@ -1340,8 +1340,8 @@ pub fn initialize_oppo_session<T: Read + Write>(
         Vec::new()
     };
 
-    let supports_spatial_audio = profile.supports_spatial_audio;
-    let supports_head_tracking = profile.supports_head_tracking;
+    let supports_spatial_audio = profile.supports_spatial_audio();
+    let supports_head_tracking = profile.supports_head_tracking();
     let spatial_audio_mode = if supports_spatial_audio {
         match request(stream, &mut decoder, 0x012a, 0, vec![], updates) {
             Ok(response) => parse_spatial_audio_response(&response.payload).ok(),
@@ -1351,7 +1351,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         None
     };
 
-    let supports_game_mode = profile.supports_game_mode;
+    let supports_game_mode = profile.supports_game_mode();
     let game_mode_feature_id = compatibility::game_mode_feature_id_for_product(product_id);
     let game_mode_enabled = if supports_game_mode {
         match request(
@@ -1371,7 +1371,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         None
     };
 
-    let supports_bass_engine = profile.supports_bass_engine;
+    let supports_bass_engine = profile.supports_bass_engine();
     let (bass_engine_enabled, bass_engine_level) = if supports_bass_engine {
         let enabled = match request(
             stream,
@@ -1395,7 +1395,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         (None, None)
     };
 
-    let supports_hi_res = profile.supports_hi_res;
+    let supports_hi_res = profile.supports_hi_res();
     let hi_res_enabled = if supports_hi_res {
         match request(
             stream,
@@ -1412,7 +1412,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         None
     };
 
-    let supports_touch_customization = profile.supports_touch_customization;
+    let supports_touch_customization = profile.supports_touch_customization();
     let key_functions = if supports_touch_customization {
         match request(stream, &mut decoder, 0x0108, 0, vec![2, 3, 1], updates) {
             Ok(res) => parse_touch_controls_response(&res.payload).unwrap_or_default(),
@@ -1437,7 +1437,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         NoiseCycleState::default()
     };
 
-    let supports_prompt_volume = profile.supports_prompt_volume;
+    let supports_prompt_volume = profile.supports_prompt_volume();
     let prompt_volume = if supports_prompt_volume {
         match request(stream, &mut decoder, 0x0130, 0, vec![], updates) {
             Ok(res) => parse_prompt_volume_response(&res.payload).ok(),
@@ -1447,7 +1447,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         None
     };
 
-    let supports_head_motion = profile.supports_head_motion;
+    let supports_head_motion = profile.supports_head_motion();
     let head_motion_type = if supports_head_motion {
         match request(stream, &mut decoder, 0x0134, 0, vec![], updates) {
             Ok(res) => parse_head_motion_type_response(&res.payload).ok(),
@@ -1457,7 +1457,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         None
     };
 
-    let preferred_device = if profile.supports_dual_device {
+    let preferred_device = if profile.supports_dual_device() {
         match request(stream, &mut decoder, 0x0132, 0, vec![2], updates) {
             Ok(res) => parse_priority_device_response(&res.payload).ok().flatten(),
             Err(_) => None,
@@ -1466,7 +1466,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         None
     };
 
-    let in_ear_detection_enabled = if profile.supports_wear_detection {
+    let in_ear_detection_enabled = if profile.supports_wear_detection() {
         match request(stream, &mut decoder, 0x010d, 0, vec![1, 0x04], updates) {
             Ok(res) => parse_feature_flags_response(&res.payload, 0x04).ok(),
             Err(_) => None,
@@ -1475,7 +1475,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         None
     };
 
-    let sleep_detection_enabled = if profile.supports_sleep_detection {
+    let sleep_detection_enabled = if profile.supports_sleep_detection() {
         match request(stream, &mut decoder, 0x010d, 0, vec![1, 0x3a], updates) {
             Ok(res) => parse_feature_flags_response(&res.payload, 0x3a).ok(),
             Err(_) => None,
@@ -1497,7 +1497,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
             battery,
             firmware,
             wear,
-            supports_wear_detection: profile.supports_wear_detection,
+            supports_wear_detection: profile.supports_wear_detection(),
             noise_mode,
             noise_mode_indices,
             noise_mode_support_note,
@@ -1530,9 +1530,9 @@ pub fn initialize_oppo_session<T: Read + Write>(
             prompt_volume,
             supports_head_motion,
             head_motion_type,
-            supports_fit_detection: profile.supports_fit_detection,
-            supports_find_device: profile.supports_find_device,
-            supports_sleep_detection: profile.supports_sleep_detection,
+            supports_fit_detection: profile.supports_fit_detection(),
+            supports_find_device: profile.supports_find_device(),
+            supports_sleep_detection: profile.supports_sleep_detection(),
             in_ear_detection_enabled,
             sleep_detection_enabled,
             dual_device_enabled,

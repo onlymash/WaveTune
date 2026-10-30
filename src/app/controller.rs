@@ -1898,7 +1898,7 @@ pub(crate) fn wire_bluetooth_controls(
                 }) => {
                     let profile = crate::compatibility::profile_for_product_id(product_id);
                     supports_wear_detection =
-                        profile.is_none_or(|profile| profile.supports_wear_detection);
+                        profile.is_none_or(|profile| profile.supports_wear_detection());
                     if !supports_wear_detection {
                         device_widgets
                             .wear
@@ -1907,18 +1907,18 @@ pub(crate) fn wire_bluetooth_controls(
                     qs_state.borrow_mut().supports_wear_detection = supports_wear_detection;
                     sync_desktop_services(&quick_settings, &tray, &qs_state);
                     let supports_dual_device =
-                        profile.is_some_and(|profile| profile.supports_dual_device);
+                        profile.is_some_and(|profile| profile.supports_dual_device());
                     widgets
                         .paired_devices_section
                         .set_visible(supports_dual_device);
 
-                    let supports_eq = profile.is_some_and(|p| p.supports_equalizer);
-                    let supports_custom_eq = profile.is_some_and(|p| p.supports_custom_equalizer);
-                    let supports_spatial = profile.is_some_and(|p| p.supports_spatial_audio);
-                    let supports_game = profile.is_some_and(|p| p.supports_game_mode);
-                    let supports_head_track = profile.is_some_and(|p| p.supports_head_tracking);
-                    let supports_bass = profile.is_some_and(|p| p.supports_bass_engine);
-                    let supports_hires = profile.is_some_and(|p| p.supports_hi_res);
+                    let supports_eq = profile.is_some_and(|p| p.supports_equalizer());
+                    let supports_custom_eq = profile.is_some_and(|p| p.supports_custom_equalizer());
+                    let supports_spatial = profile.is_some_and(|p| p.supports_spatial_audio());
+                    let supports_game = profile.is_some_and(|p| p.supports_game_mode());
+                    let supports_head_track = profile.is_some_and(|p| p.supports_head_tracking());
+                    let supports_bass = profile.is_some_and(|p| p.supports_bass_engine());
+                    let supports_hires = profile.is_some_and(|p| p.supports_hi_res());
 
                     current_supports_eq.set(supports_eq);
                     current_supports_custom_eq.set(supports_custom_eq);

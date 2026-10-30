@@ -98,9 +98,7 @@ pub fn oppo_noise_mode_write_payload_for(
     protocol_index: u8,
     modes: &[compatibility::NoiseMode],
 ) -> Option<Vec<u8>> {
-    if !compatibility::noise_mode_for(modes, protocol_index)?.write_enabled {
-        return None;
-    }
+    compatibility::noise_mode_for(modes, protocol_index)?;
     let byte_count = usize::from(protocol_index / 8) + 1;
     let mut payload = vec![1, 1];
     payload.resize(2 + byte_count, 0);

@@ -26,6 +26,26 @@ pub use brands::oppo::OPPO_DEVICE_PROFILES;
 #[allow(unused_imports)]
 pub use registry::builtin_profiles;
 
+pub mod features {
+    pub const DUAL_DEVICE: &str = "dual-device";
+    pub const WEAR_DETECTION: &str = "wear-detection";
+    pub const FIT_DETECTION: &str = "fit-detection";
+    pub const EQUALIZER: &str = "equalizer";
+    pub const CUSTOM_EQUALIZER: &str = "custom-equalizer";
+    pub const GAME_MODE: &str = "game-mode";
+    pub const SPATIAL_AUDIO: &str = "spatial-audio";
+    pub const HEAD_TRACKING: &str = "head-tracking";
+    pub const BASS_ENGINE: &str = "bass-engine";
+    pub const FIND_DEVICE: &str = "find-device";
+    pub const TOUCH_CUSTOMIZATION: &str = "touch-customization";
+    pub const PROMPT_VOLUME: &str = "prompt-volume";
+    pub const SLEEP_DETECTION: &str = "sleep-detection";
+    pub const SWIFT_PAIR: &str = "swift-pair";
+    pub const VOICE_COMMAND: &str = "voice-command";
+    pub const HEAD_MOTION: &str = "head-motion";
+    pub const HI_RES: &str = "hi-res";
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NoiseModeKind {
     Off,
@@ -70,8 +90,6 @@ pub struct NoiseMode {
     pub index: u8,
     pub kind: NoiseModeKind,
     pub parent: Option<u8>,
-    pub write_enabled: bool,
-    pub device_reported_only: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,24 +97,8 @@ pub struct DeviceProfile {
     pub model: &'static str,
     pub product_id: Option<u32>,
     pub uuid: Option<&'static str>,
-    pub supports_dual_device: bool,
     pub noise_modes: &'static [NoiseMode],
-    pub supports_wear_detection: bool, // 入耳/佩戴检测 (wearDetection)
-    pub supports_fit_detection: bool,  // 耳塞贴合度检测 (fitDetection)
-    pub supports_equalizer: bool,      // 内置 EQ 预设 (equalizer)
-    pub supports_custom_equalizer: bool, // 自定义均衡器 (customEqualizer)
-    pub supports_game_mode: bool,      // 游戏模式/低延迟 (gameMode)
-    pub supports_spatial_audio: bool,  // 空间音频 (spatialTypes)
-    pub supports_head_tracking: bool,  // 头部跟踪 (spatialTypes 包含 2)
-    pub supports_bass_engine: bool,    // BassWave 动态低音 (bassEngineSupport)
-    pub supports_find_device: bool,    // 查找耳机 (findDevice / heyFindDevice)
-    pub supports_touch_customization: bool, // 触控/手势自定义 (control / callControl)
-    pub supports_prompt_volume: bool,  // 提示音音量 (promptVolume)
-    pub supports_sleep_detection: bool, // 入睡检测 (sleepDetection)
-    pub supports_swift_pair: bool,     // Swift Pair (swiftPair)
-    pub supports_voice_command: bool,  // 快捷语音指令 (voiceCommand)
-    pub supports_head_motion: bool,    // 头部动作接听 (headMotion)
-    pub supports_hi_res: bool,         // 高解析模式 (highToneQuality)
+    pub features: &'static [&'static str],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -322,19 +324,100 @@ pub fn gesture_function_label_key(function: u8) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 impl DeviceProfile {
+    #[inline]
+    pub fn has_feature(&self, feature: &str) -> bool {
+        self.features.contains(&feature)
+    }
+
+    #[inline]
+    pub fn supports_dual_device(&self) -> bool {
+        self.has_feature(features::DUAL_DEVICE)
+    }
+
+    #[inline]
+    pub fn supports_wear_detection(&self) -> bool {
+        self.has_feature(features::WEAR_DETECTION)
+    }
+
+    #[inline]
+    pub fn supports_fit_detection(&self) -> bool {
+        self.has_feature(features::FIT_DETECTION)
+    }
+
+    #[inline]
+    pub fn supports_equalizer(&self) -> bool {
+        self.has_feature(features::EQUALIZER)
+    }
+
+    #[inline]
+    pub fn supports_custom_equalizer(&self) -> bool {
+        self.has_feature(features::CUSTOM_EQUALIZER)
+    }
+
+    #[inline]
+    pub fn supports_game_mode(&self) -> bool {
+        self.has_feature(features::GAME_MODE)
+    }
+
+    #[inline]
+    pub fn supports_spatial_audio(&self) -> bool {
+        self.has_feature(features::SPATIAL_AUDIO)
+    }
+
+    #[inline]
+    pub fn supports_head_tracking(&self) -> bool {
+        self.has_feature(features::HEAD_TRACKING)
+    }
+
+    #[inline]
+    pub fn supports_bass_engine(&self) -> bool {
+        self.has_feature(features::BASS_ENGINE)
+    }
+
+    #[inline]
+    pub fn supports_find_device(&self) -> bool {
+        self.has_feature(features::FIND_DEVICE)
+    }
+
+    #[inline]
+    pub fn supports_touch_customization(&self) -> bool {
+        self.has_feature(features::TOUCH_CUSTOMIZATION)
+    }
+
+    #[inline]
+    pub fn supports_prompt_volume(&self) -> bool {
+        self.has_feature(features::PROMPT_VOLUME)
+    }
+
+    #[inline]
+    pub fn supports_sleep_detection(&self) -> bool {
+        self.has_feature(features::SLEEP_DETECTION)
+    }
+
+    #[inline]
+    pub fn supports_swift_pair(&self) -> bool {
+        self.has_feature(features::SWIFT_PAIR)
+    }
+
+    #[inline]
+    pub fn supports_voice_command(&self) -> bool {
+        self.has_feature(features::VOICE_COMMAND)
+    }
+
+    #[inline]
+    pub fn supports_head_motion(&self) -> bool {
+        self.has_feature(features::HEAD_MOTION)
+    }
+
+    #[inline]
+    pub fn supports_hi_res(&self) -> bool {
+        self.has_feature(features::HI_RES)
+    }
+
     pub fn supports_controls(&self) -> bool {
-        self.supports_dual_device
-            || self.noise_modes.iter().any(|mode| mode.write_enabled)
-            || self.supports_equalizer
-            || self.supports_spatial_audio
-            || self.supports_game_mode
-            || self.supports_touch_customization
-            || self.supports_wear_detection
-            || self.supports_find_device
-            || self.supports_fit_detection
-            || self.supports_prompt_volume
-            || self.supports_head_motion
+        !self.features.is_empty() || !self.noise_modes.is_empty()
     }
 }
 
@@ -358,11 +441,7 @@ pub fn catalog_noise_indices() -> Vec<u8> {
 }
 
 pub fn fallback_noise_mode_indices_for(modes: &[NoiseMode]) -> Vec<u8> {
-    modes
-        .iter()
-        .filter(|mode| !mode.device_reported_only)
-        .map(|mode| mode.index)
-        .collect()
+    modes.iter().map(|mode| mode.index).collect()
 }
 
 pub fn resolve_noise_mode_indices_for_product(
@@ -407,17 +486,13 @@ pub fn noise_mode_supported_for(index: u8, supported_indices: &[u8], modes: &[No
     let Some(mode) = noise_mode_for(modes, index) else {
         return false;
     };
-    if mode.device_reported_only && !supported_indices.contains(&index) {
-        return false;
-    }
     if mode.parent.is_some() {
         return supported_indices.contains(&index);
     }
-    modes.iter().any(|child| {
-        child.parent == Some(index)
-            && (!child.device_reported_only || supported_indices.contains(&child.index))
-            && supported_indices.contains(&child.index)
-    }) || supported_indices.contains(&index)
+    modes
+        .iter()
+        .any(|child| child.parent == Some(index) && supported_indices.contains(&child.index))
+        || supported_indices.contains(&index)
 }
 
 pub fn noise_mode_group_for(modes: &[NoiseMode], index: u8) -> Option<u8> {
@@ -454,119 +529,119 @@ mod tests {
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_dual_device)
+                .filter(|profile| profile.supports_dual_device())
                 .count(),
             51
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_wear_detection)
+                .filter(|profile| profile.supports_wear_detection())
                 .count(),
             49
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_fit_detection)
+                .filter(|profile| profile.supports_fit_detection())
                 .count(),
             31
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_equalizer)
+                .filter(|profile| profile.supports_equalizer())
                 .count(),
             74
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_custom_equalizer)
+                .filter(|profile| profile.supports_custom_equalizer())
                 .count(),
             37
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_game_mode)
+                .filter(|profile| profile.supports_game_mode())
                 .count(),
             69
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_spatial_audio)
+                .filter(|profile| profile.supports_spatial_audio())
                 .count(),
             48
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_head_tracking)
+                .filter(|profile| profile.supports_head_tracking())
                 .count(),
             4
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_bass_engine)
+                .filter(|profile| profile.supports_bass_engine())
                 .count(),
             24
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_find_device)
+                .filter(|profile| profile.supports_find_device())
                 .count(),
             93
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_touch_customization)
+                .filter(|profile| profile.supports_touch_customization())
                 .count(),
             84
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_prompt_volume)
+                .filter(|profile| profile.supports_prompt_volume())
                 .count(),
             27
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_sleep_detection)
+                .filter(|profile| profile.supports_sleep_detection())
                 .count(),
             2
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_swift_pair)
+                .filter(|profile| profile.supports_swift_pair())
                 .count(),
             12
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_voice_command)
+                .filter(|profile| profile.supports_voice_command())
                 .count(),
             5
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_head_motion)
+                .filter(|profile| profile.supports_head_motion())
                 .count(),
             2
         );
         assert_eq!(
             DEVICE_PROFILES
                 .iter()
-                .filter(|profile| profile.supports_hi_res)
+                .filter(|profile| profile.supports_hi_res())
                 .count(),
             28
         );
@@ -611,28 +686,27 @@ mod tests {
         let profile = profile_for_product_id(0x067410).unwrap();
         assert_eq!(profile.model, "OPPO Enco X3");
         assert!(profile.supports_controls());
-        assert!(profile.supports_dual_device);
-        assert!(profile.supports_wear_detection);
-        assert!(profile.supports_fit_detection);
-        assert!(profile.supports_equalizer);
-        assert!(!profile.supports_custom_equalizer);
-        assert!(profile.supports_game_mode);
-        assert!(profile.supports_spatial_audio);
-        assert!(profile.supports_head_tracking);
-        assert!(!profile.supports_bass_engine);
-        assert!(profile.supports_find_device);
-        assert!(profile.supports_touch_customization);
-        assert!(!profile.supports_prompt_volume);
-        assert!(!profile.supports_sleep_detection);
-        assert!(!profile.supports_swift_pair);
-        assert!(!profile.supports_voice_command);
-        assert!(!profile.supports_head_motion);
-        assert!(profile.supports_hi_res);
+        assert!(profile.supports_dual_device());
+        assert!(profile.supports_wear_detection());
+        assert!(profile.supports_fit_detection());
+        assert!(profile.supports_equalizer());
+        assert!(!profile.supports_custom_equalizer());
+        assert!(profile.supports_game_mode());
+        assert!(profile.supports_spatial_audio());
+        assert!(profile.supports_head_tracking());
+        assert!(!profile.supports_bass_engine());
+        assert!(profile.supports_find_device());
+        assert!(profile.supports_touch_customization());
+        assert!(!profile.supports_prompt_volume());
+        assert!(!profile.supports_sleep_detection());
+        assert!(!profile.supports_swift_pair());
+        assert!(!profile.supports_voice_command());
+        assert!(!profile.supports_head_motion());
+        assert!(profile.supports_hi_res());
         assert!(noise_mode_supported_for(1, &[4, 7], profile.noise_modes));
         assert!(!noise_mode_supported_for(2, &[4, 7], profile.noise_modes));
         let voice_mode = noise_mode_for(profile.noise_modes, 9).unwrap();
         assert_eq!(voice_mode.kind, NoiseModeKind::VocalEnhancement);
-        assert!(voice_mode.write_enabled);
         assert!(noise_mode_readback_matches_for(9, 9, profile.noise_modes));
         assert!(noise_mode_readback_matches_for(9, 2, profile.noise_modes));
     }
@@ -642,23 +716,23 @@ mod tests {
         let profile = profile_for_product_id(0x06ec10).unwrap();
         assert_eq!(profile.model, "OPPO Enco X4");
         assert!(profile.supports_controls());
-        assert!(profile.supports_dual_device);
-        assert!(profile.supports_wear_detection);
-        assert!(profile.supports_fit_detection);
-        assert!(profile.supports_equalizer);
-        assert!(profile.supports_custom_equalizer);
-        assert!(profile.supports_game_mode);
-        assert!(profile.supports_spatial_audio);
-        assert!(profile.supports_head_tracking);
-        assert!(profile.supports_bass_engine);
-        assert!(profile.supports_find_device);
-        assert!(profile.supports_touch_customization);
-        assert!(profile.supports_prompt_volume);
-        assert!(profile.supports_sleep_detection);
-        assert!(profile.supports_swift_pair);
-        assert!(profile.supports_voice_command);
-        assert!(profile.supports_head_motion);
-        assert!(profile.supports_hi_res);
+        assert!(profile.supports_dual_device());
+        assert!(profile.supports_wear_detection());
+        assert!(profile.supports_fit_detection());
+        assert!(profile.supports_equalizer());
+        assert!(profile.supports_custom_equalizer());
+        assert!(profile.supports_game_mode());
+        assert!(profile.supports_spatial_audio());
+        assert!(profile.supports_head_tracking());
+        assert!(profile.supports_bass_engine());
+        assert!(profile.supports_find_device());
+        assert!(profile.supports_touch_customization());
+        assert!(profile.supports_prompt_volume());
+        assert!(profile.supports_sleep_detection());
+        assert!(profile.supports_swift_pair());
+        assert!(profile.supports_voice_command());
+        assert!(profile.supports_head_motion());
+        assert!(profile.supports_hi_res());
     }
 
     #[test]
@@ -669,32 +743,6 @@ mod tests {
         assert!(indices.contains(&1));
         assert!(indices.contains(&11));
         assert!(indices.contains(&14));
-    }
-
-    #[test]
-    fn device_reported_modes_require_a_matching_runtime_support_index() {
-        let profile = DEVICE_PROFILES
-            .iter()
-            .find(|profile| {
-                profile
-                    .noise_modes
-                    .iter()
-                    .any(|mode| mode.device_reported_only)
-            })
-            .unwrap();
-        let mode = profile
-            .noise_modes
-            .iter()
-            .find(|mode| mode.device_reported_only)
-            .unwrap();
-        let group = mode.parent.unwrap();
-        assert!(!noise_mode_supported_for(group, &[], profile.noise_modes));
-        assert!(noise_mode_supported_for(
-            group,
-            &[mode.index],
-            profile.noise_modes
-        ));
-        assert!(!fallback_noise_mode_indices_for(profile.noise_modes).contains(&mode.index));
     }
 
     #[test]
