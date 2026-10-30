@@ -76,12 +76,16 @@ pub(crate) fn build_sound_page() -> (GtkBox, SoundWidgets) {
     let mut preset_radios = Vec::new();
     let mut first_radio: Option<CheckButton> = None;
 
-    let default_presets: [(u8, &str); 5] = [
+    let default_presets: [(u8, &str); 9] = [
         (0, &crate::t!("equalizer-preset-dynaudio-classic")),
         (7, &crate::t!("equalizer-preset-dynaudio-hi-res")),
         (2, &crate::t!("equalizer-preset-pure-vocal")),
         (1, &crate::t!("equalizer-preset-clear-treble")),
         (3, &crate::t!("equalizer-preset-bass-boost")),
+        (4, &crate::t!("equalizer-preset-soft")),
+        (5, &crate::t!("equalizer-preset-dynamic")),
+        (6, &crate::t!("equalizer-preset-clear")),
+        (8, &crate::t!("equalizer-preset-natural")),
     ];
 
     for (index, name) in default_presets {

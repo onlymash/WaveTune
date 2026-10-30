@@ -20,6 +20,7 @@ pub mod registry;
 
 use std::collections::BTreeSet;
 
+#[allow(unused_imports)]
 pub use brands::oppo::DEVICE_PROFILES;
 #[allow(unused_imports)]
 pub use brands::oppo::OPPO_DEVICE_PROFILES;
@@ -107,78 +108,22 @@ pub struct EqualizerPreset {
     pub key: &'static str,
 }
 
-pub static DYNAUDIO_EQ_PRESETS: &[EqualizerPreset] = &[
-    EqualizerPreset {
-        index: 0,
-        key: "equalizer-preset-dynaudio-classic",
-    },
-    EqualizerPreset {
-        index: 7,
-        key: "equalizer-preset-dynaudio-hi-res",
-    },
-    EqualizerPreset {
-        index: 2,
-        key: "equalizer-preset-pure-vocal",
-    },
-    EqualizerPreset {
-        index: 1,
-        key: "equalizer-preset-clear-treble",
-    },
-    EqualizerPreset {
-        index: 3,
-        key: "equalizer-preset-bass-boost",
-    },
-];
-
-pub static STANDARD_EQ_PRESETS: &[EqualizerPreset] = &[
-    EqualizerPreset {
-        index: 0,
-        key: "equalizer-preset-classic",
-    },
-    EqualizerPreset {
-        index: 1,
-        key: "equalizer-preset-dynamic-bass",
-    },
-    EqualizerPreset {
-        index: 2,
-        key: "equalizer-preset-pure-vocal",
-    },
-    EqualizerPreset {
-        index: 3,
-        key: "equalizer-preset-clear-vocal",
-    },
-];
-
-pub static X3_EQ_PRESETS: &[EqualizerPreset] = &[
-    EqualizerPreset {
-        index: 0,
-        key: "equalizer-preset-ultimate-sound",
-    },
-    EqualizerPreset {
-        index: 1,
-        key: "equalizer-preset-hd-clarity",
-    },
-    EqualizerPreset {
-        index: 2,
-        key: "equalizer-preset-pure-vocal",
-    },
-    EqualizerPreset {
-        index: 3,
-        key: "equalizer-preset-bass-boost",
-    },
-    EqualizerPreset {
-        index: 7,
-        key: "equalizer-preset-dynaudio-tuning",
-    },
-];
+#[allow(unused_imports)]
+pub use brands::earfun::{
+    EARFUN_AIR_PRO_4_EQ_PRESETS, EARFUN_AIR_S_EQ_PRESETS, EARFUN_TEN_BAND_EQ_PRESETS,
+};
+#[allow(unused_imports)]
+pub use brands::oppo::{
+    DYNAUDIO_EQ_PRESETS, STANDARD_EQ_PRESETS, X3_EQ_PRESETS, game_mode_feature_id_for_product,
+};
 
 pub fn equalizer_presets_for_product(product_id: u32) -> &'static [EqualizerPreset] {
-    if product_id == 0x06ec10 {
-        DYNAUDIO_EQ_PRESETS
-    } else if product_id == 0x067410 {
-        X3_EQ_PRESETS
+    if let Some(presets) = brands::earfun::equalizer_presets_for_product(product_id) {
+        presets
+    } else if let Some(presets) = brands::oppo::equalizer_presets_for_product(product_id) {
+        presets
     } else {
-        STANDARD_EQ_PRESETS
+        brands::oppo::STANDARD_EQ_PRESETS
     }
 }
 
@@ -209,10 +154,6 @@ pub fn spatial_audio_mode_key(mode: u8) -> &'static str {
         2 => "spatial-audio-mode-head-tracking",
         _ => "common-off",
     }
-}
-
-pub fn game_mode_feature_id_for_product(product_id: u32) -> u8 {
-    if product_id == 0x06ec10 { 0x28 } else { 0x06 }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -422,9 +363,7 @@ impl DeviceProfile {
 }
 
 pub fn profile_for_product_id(product_id: u32) -> Option<&'static DeviceProfile> {
-    DEVICE_PROFILES
-        .iter()
-        .find(|profile| profile.product_id == Some(product_id))
+    registry::builtin_profiles().find(|profile| profile.product_id == Some(product_id))
 }
 
 pub fn noise_mode_for(modes: &[NoiseMode], index: u8) -> Option<&NoiseMode> {
@@ -432,8 +371,7 @@ pub fn noise_mode_for(modes: &[NoiseMode], index: u8) -> Option<&NoiseMode> {
 }
 
 pub fn catalog_noise_indices() -> Vec<u8> {
-    DEVICE_PROFILES
-        .iter()
+    registry::builtin_profiles()
         .flat_map(|profile| profile.noise_modes.iter().map(|mode| mode.index))
         .collect::<BTreeSet<_>>()
         .into_iter()

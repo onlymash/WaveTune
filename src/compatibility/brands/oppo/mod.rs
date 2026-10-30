@@ -16,5 +16,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 pub mod oppo_catalog;
+pub mod oppo_equalizer;
 
 pub use oppo_catalog::{DEVICE_PROFILES, OPPO_DEVICE_PROFILES};
+pub use oppo_equalizer::{
+    DYNAUDIO_EQ_PRESETS, STANDARD_EQ_PRESETS, X3_EQ_PRESETS, equalizer_presets_for_product,
+    game_mode_feature_id_for_product,
+};

@@ -2,9 +2,9 @@
 
 [English](README.md) | **简体中文**
 
-面向 Linux 桌面的非官方多品牌无线耳机控制中心（移植自 [EncoDeck](https://github.com/TIANLI0/EncoDeck)），使用 Rust 与 GTK4 / Libadwaita 构建。当前支持 OPPO、OnePlus 和 realme（欧加体系）无线耳机，底层已完成多品牌架构解耦，后续将逐步扩展更多品牌支持。
+面向 Linux 桌面的非官方多品牌无线耳机控制中心（移植自 [EncoDeck](https://github.com/TIANLI0/EncoDeck)），使用 Rust 与 GTK4 / Libadwaita 构建。当前支持 OPPO、OnePlus、realme 及 EarFun 无线耳机，底层已完成多品牌架构解耦，后续将逐步扩展更多品牌支持。
 
-> 本项目与各耳机厂商无任何官方关联。私有蓝牙协议细节与硬件验证记录见 [`docs/OPPO_BLUETOOTH_API.md`](docs/OPPO_BLUETOOTH_API.md)。
+> 本项目与各耳机厂商无任何官方关联。私有蓝牙协议细节与硬件验证记录见 [`docs/OPPO_BLUETOOTH_API.md`](docs/OPPO_BLUETOOTH_API.md) 及 [`docs/EARFUN_BLUETOOTH_API.md`](docs/EARFUN_BLUETOOTH_API.md)。
 
 ## 功能特性
 
@@ -98,7 +98,7 @@ packaging/package.sh deb        # 构建 Debian/Ubuntu .deb 包（需 dpkg-deb �
 
 ## 兼容性说明
 
-内置型号目录涵盖 130 余款 OPPO、OnePlus 和 realme 耳机配置，界面会根据耳机上报的产品 ID、能力位与型号配置动态开放对应功能；未识别的新型号将以只读安全模式连接，仅执行握手与产品识别。
+内置型号目录涵盖 130 余款 OPPO、OnePlus 和 realme 耳机配置，以及 EarFun 系列（EarFun Air Pro 4、EarFun Free Pro 3、EarFun Air S）。界面会根据耳机上报的产品 ID、能力位与型号配置动态开放对应功能；未识别的新型号将以只读安全模式连接，仅执行握手与产品识别。
 
 ## 许可证
 

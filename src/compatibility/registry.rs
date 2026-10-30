@@ -17,11 +17,14 @@
 
 //! Multi-brand device profile registry, inspired by EncoDeck's BuiltInProfiles.
 
-use super::{DeviceProfile, brands::oppo::OPPO_DEVICE_PROFILES};
+use super::{
+    DeviceProfile, brands::earfun::EARFUN_DEVICE_PROFILES, brands::oppo::OPPO_DEVICE_PROFILES,
+};
 
 /// Returns an iterator over all built-in device profiles across all supported brands.
 #[allow(dead_code)]
 pub fn builtin_profiles() -> impl Iterator<Item = &'static DeviceProfile> {
-    OPPO_DEVICE_PROFILES.iter()
-    // Future brands (e.g., Huawei, Vivo, Xiaomi, Edifier) will be chained here.
+    OPPO_DEVICE_PROFILES
+        .iter()
+        .chain(EARFUN_DEVICE_PROFILES.iter())
 }

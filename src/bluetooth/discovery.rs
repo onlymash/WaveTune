@@ -17,7 +17,7 @@
 
 use std::{sync::mpsc::Sender, thread};
 
-use bluer::{Session, Uuid};
+use bluer::{Address, Session, Uuid};
 use tokio::runtime::Builder;
 
 use super::{DeviceBrand, DeviceChoice, UiUpdate};
@@ -27,6 +27,8 @@ pub(super) const CONTROL_SERVICE_CANDIDATES: &[&str] =
 pub(super) const ONEPLUS_COMPANY_ID: u16 = crate::protocol::brands::oppo::ONEPLUS_COMPANY_ID;
 pub(super) const OPPO_COMPANY_ID: u16 = crate::protocol::brands::oppo::OPPO_COMPANY_ID;
 pub(super) const REALME_COMPANY_ID: u16 = crate::protocol::brands::oppo::REALME_COMPANY_ID;
+pub(super) const EARFUN_COMPANY_ID: u16 = 0x5A70;
+pub(super) const GAIA_UUID: &str = "00001107-d102-11e1-9b23-00025b00a5a5";
 
 pub fn spawn_discovery(updates: Sender<UiUpdate>) -> std::io::Result<thread::JoinHandle<()>> {
     thread::Builder::new()
@@ -106,18 +108,31 @@ async fn find_device_async() -> Result<Vec<DeviceChoice>, String> {
             .filter(|candidate| uuids.contains(candidate))
             .collect();
         let has_control_service = !control_service_uuids.is_empty();
-        let Some(brand) = identify_brand(&manufacturer_data, has_control_service) else {
-            continue;
-        };
         let alias = device
             .alias()
             .await
             .map_err(|error| format!("Unable to read Bluetooth device name: {error}"))?;
+        let name = device
+            .name()
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| alias.clone());
+        let Some(brand) = identify_brand(&manufacturer_data, has_control_service, &name, &uuids)
+        else {
+            continue;
+        };
+        let product_id = if brand == DeviceBrand::EarFun {
+            extract_earfun_product_id(&address, &manufacturer_data)
+        } else {
+            None
+        };
         candidates.push(DeviceChoice {
             address,
             name: alias,
             brand,
-            has_control_service,
+            product_id,
+            has_control_service: has_control_service || brand == DeviceBrand::EarFun,
             control_service_uuids,
         });
     }
@@ -143,13 +158,42 @@ pub(super) fn is_headset(icon: Option<&str>, class: Option<u32>) -> bool {
 pub(super) fn identify_brand(
     manufacturer_data: &std::collections::HashMap<u16, Vec<u8>>,
     has_control_service: bool,
+    device_name: &str,
+    uuids: &std::collections::HashSet<Uuid>,
 ) -> Option<DeviceBrand> {
     if manufacturer_data.contains_key(&ONEPLUS_COMPANY_ID) {
         Some(DeviceBrand::OnePlus)
     } else if manufacturer_data.contains_key(&REALME_COMPANY_ID) {
         Some(DeviceBrand::Realme)
+    } else if manufacturer_data.contains_key(&EARFUN_COMPANY_ID)
+        || device_name.to_lowercase().starts_with("earfun")
+    {
+        Some(DeviceBrand::EarFun)
     } else if manufacturer_data.contains_key(&OPPO_COMPANY_ID) || has_control_service {
         Some(DeviceBrand::Oppo)
+    } else if uuids.iter().any(|u| {
+        let s = u.to_string();
+        s.starts_with("0000eb") || s == GAIA_UUID
+    }) {
+        Some(DeviceBrand::EarFun)
+    } else {
+        None
+    }
+}
+
+pub(super) fn extract_earfun_product_id(
+    address: &Address,
+    manufacturer_data: &std::collections::HashMap<u16, Vec<u8>>,
+) -> Option<u32> {
+    let earfun_data = manufacturer_data.get(&EARFUN_COMPANY_ID)?;
+    let mac = address.0;
+    let addr_suffix = &mac[2..6];
+    let index = earfun_data
+        .windows(4)
+        .position(|window| window == addr_suffix)?;
+    let pid_bytes = &earfun_data[index + 4..];
+    if pid_bytes.len() >= 2 {
+        Some(u32::from_be_bytes([0, 0, pid_bytes[0], pid_bytes[1]]))
     } else {
         None
     }

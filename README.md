@@ -2,9 +2,9 @@
 
 **English** | [简体中文](README_zh.md)
 
-An unofficial multi-brand wireless headset control center for the Linux desktop (ported from [EncoDeck](https://github.com/TIANLI0/EncoDeck)), built with Rust and GTK4 / Libadwaita. It currently supports OPPO, OnePlus, and realme wireless headsets, with a decoupled multi-brand architecture ready for expanding to additional brands in the future.
+An unofficial multi-brand wireless headset control center for the Linux desktop (ported from [EncoDeck](https://github.com/TIANLI0/EncoDeck)), built with Rust and GTK4 / Libadwaita. It currently supports OPPO, OnePlus, realme, and EarFun wireless headsets, with a decoupled multi-brand architecture ready for expanding to additional brands in the future.
 
-> This project is not affiliated with or endorsed by any headset vendor. See [`docs/OPPO_BLUETOOTH_API.md`](docs/OPPO_BLUETOOTH_API.md) for private Bluetooth protocol details and hardware verification notes.
+> This project is not affiliated with or endorsed by any headset vendor. See [`docs/OPPO_BLUETOOTH_API.md`](docs/OPPO_BLUETOOTH_API.md) and [`docs/EARFUN_BLUETOOTH_API.md`](docs/EARFUN_BLUETOOTH_API.md) for private Bluetooth protocol details and hardware verification notes.
 
 ## Features
 
@@ -98,7 +98,7 @@ Built packages are written to `target/dist/`. For AUR repository generation and 
 
 ## Compatibility
 
-The built-in compatibility catalog covers 130+ OPPO, OnePlus, and realme headset models. Supported controls are enabled dynamically based on each headset's reported product ID, capability flags, and model profile; unrecognized models connect in a safe read-only mode limited to handshake and product identification.
+The built-in compatibility catalog covers 130+ OPPO, OnePlus, and realme headset models, as well as EarFun headsets (EarFun Air Pro 4, EarFun Free Pro 3, EarFun Air S). Supported controls are enabled dynamically based on each headset's reported product ID, capability flags, and model profile; unrecognized models connect in a safe read-only mode limited to handshake and product identification.
 
 ## License
 

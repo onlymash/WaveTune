@@ -30,11 +30,16 @@ pub fn probe() -> Result<(), String> {
         });
     }
     let device = devices.remove(0);
-    let mut stream = open_oppo_rfcomm(&device)
-        .map_err(|error| crate::t!("channel-unable-to-open-rfcomm", error))?;
-    let (snapshot, _) = initialize_oppo_session(&mut stream, &device.name, None)?;
-    print_snapshot(&snapshot);
-    Ok(())
+    match device.brand {
+        crate::bluetooth::DeviceBrand::EarFun => super::brands::earfun::probe_earfun(&device),
+        _ => {
+            let mut stream = open_oppo_rfcomm(&device)
+                .map_err(|error| crate::t!("channel-unable-to-open-rfcomm", error))?;
+            let (snapshot, _) = initialize_oppo_session(&mut stream, &device.name, None)?;
+            print_snapshot(&snapshot);
+            Ok(())
+        }
+    }
 }
 
 fn print_snapshot(snapshot: &OppoDeviceSnapshot) {

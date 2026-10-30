@@ -302,7 +302,7 @@ fn ui_components_layout_and_behavior() {
     // Verify sound_page construction and SoundWidgets layout
     let (_sound_page, sound_widgets) = crate::ui::pages::sound::build_sound_page();
     assert!(!sound_widgets.sound_columns.is_single_column());
-    assert_eq!(sound_widgets.preset_radios.len(), 5);
+    assert_eq!(sound_widgets.preset_radios.len(), 9);
     assert!(sound_widgets.preset_list.first_child().is_some());
     assert_eq!(sound_widgets.spatial_radios.len(), 3);
     assert!(sound_widgets.spatial_list.first_child().is_some());
@@ -345,10 +345,13 @@ fn ui_components_layout_and_behavior() {
     assert!(sound_widgets.add_custom_row.is_visible());
     assert!(sound_widgets.add_custom_row.is_sensitive());
 
-    // All 5 Dynaudio preset rows should be visible & sensitive
-    for (_, radio, row) in &sound_widgets.preset_radios {
-        assert!(row.is_visible());
-        assert!(radio.is_sensitive());
+    // Exactly 5 Dynaudio preset rows should be visible & sensitive; other 4 hidden
+    for (idx, radio, row) in &sound_widgets.preset_radios {
+        let is_dynaudio = [0, 7, 2, 1, 3].contains(idx);
+        assert_eq!(row.is_visible(), is_dynaudio);
+        if is_dynaudio {
+            assert!(radio.is_sensitive());
+        }
     }
 
     // All 3 spatial modes (Off, Fixed, Head Tracking) should be visible & sensitive

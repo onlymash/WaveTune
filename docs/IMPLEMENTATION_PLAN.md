@@ -5,11 +5,11 @@
 本项目目标是将 [EncoDeck](https://github.com/TIANLI0/EncoDeck) 移植到 Linux 桌面，使用 Rust 与 GTK4/Libadwaita
 构建现代化的原生界面，通过 BlueZ 与各品牌已配对的蓝牙无线耳机通信。
 
-项目初期针对欧加体系（OPPO、OnePlus 和 realme）耳机完成适配，当前界面聚焦设备状态、降噪、EQ 预设及耳机已配对设备管理。
+项目初期针对欧加体系（OPPO、OnePlus 和 realme）耳机完成适配，并已成功接入首个扩展品牌 EarFun（GAIA V3 架构，涵盖 EarFun Air Pro 4、Free Pro 3、Air S）。当前界面聚焦设备状态、降噪、EQ 预设及耳机已配对设备管理。
 底层架构已全面完成多品牌隔离重构，使用品牌名称作为分类，将协议、配置与会话区隔在独立命名空间中，为未来扩展华为、小米、
 vivo、漫步者等多品牌耳机支持奠定基础。
 
-OPPO 协议依据见 [OPPO 蓝牙 API 记录](OPPO_BLUETOOTH_API.md)。协议为非官方私有协议，开发时应持续区分设备实测、客户端配置推断和设备动态上报的能力；
+协议依据见 [OPPO 蓝牙 API 记录](OPPO_BLUETOOTH_API.md) 及 [EarFun 蓝牙 API 记录](EARFUN_BLUETOOTH_API.md)。协议为非官方私有协议，开发时应持续区分设备实测、客户端配置推断和设备动态上报的能力；
 功能开放依据型号兼容配置及设备能力/支持列表，不以真机验证作为额外开关条件。
 
 ## 当前代码进度

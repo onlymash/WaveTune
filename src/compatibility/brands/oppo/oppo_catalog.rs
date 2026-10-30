@@ -3197,4 +3197,5 @@ pub static OPPO_DEVICE_PROFILES: &[DeviceProfile] = &[
     },
 ];
 
+#[allow(dead_code)]
 pub static DEVICE_PROFILES: &[DeviceProfile] = OPPO_DEVICE_PROFILES;

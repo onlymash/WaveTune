@@ -47,31 +47,69 @@ fn detects_headsets_from_bluez_icon_or_class_of_device() {
 
 #[test]
 fn identifies_oppo_oneplus_and_realme_from_company_identifiers() {
+    let empty_uuids = std::collections::HashSet::new();
     let mut manufacturer_data = HashMap::new();
     manufacturer_data.insert(OPPO_COMPANY_ID, vec![]);
     assert_eq!(
-        identify_brand(&manufacturer_data, false),
+        identify_brand(&manufacturer_data, false, "", &empty_uuids),
         Some(DeviceBrand::Oppo)
     );
 
     manufacturer_data.clear();
     assert_eq!(
-        identify_brand(&manufacturer_data, true),
+        identify_brand(&manufacturer_data, true, "", &empty_uuids),
         Some(DeviceBrand::Oppo)
     );
-    assert_eq!(identify_brand(&manufacturer_data, false), None);
+    assert_eq!(
+        identify_brand(&manufacturer_data, false, "", &empty_uuids),
+        None
+    );
 
     manufacturer_data.insert(ONEPLUS_COMPANY_ID, vec![]);
     assert_eq!(
-        identify_brand(&manufacturer_data, false),
+        identify_brand(&manufacturer_data, false, "", &empty_uuids),
         Some(DeviceBrand::OnePlus)
     );
 
     manufacturer_data.clear();
     manufacturer_data.insert(REALME_COMPANY_ID, vec![]);
     assert_eq!(
-        identify_brand(&manufacturer_data, false),
+        identify_brand(&manufacturer_data, false, "", &empty_uuids),
         Some(DeviceBrand::Realme)
+    );
+
+    manufacturer_data.clear();
+    manufacturer_data.insert(0x5A70, vec![]);
+    assert_eq!(
+        identify_brand(&manufacturer_data, false, "", &empty_uuids),
+        Some(DeviceBrand::EarFun)
+    );
+
+    manufacturer_data.clear();
+    assert_eq!(
+        identify_brand(&manufacturer_data, false, "EarFun Air Pro 4", &empty_uuids),
+        Some(DeviceBrand::EarFun)
+    );
+}
+
+#[test]
+fn extracts_earfun_product_id_from_manufacturer_data() {
+    use crate::bluetooth::discovery::extract_earfun_product_id;
+    let mac = bluer::Address([0x11, 0x22, 0x33, 0x44, 0x55, 0x66]);
+    let mut manufacturer_data = HashMap::new();
+    // [0x01, 0x02, mac[2..6], pid[0], pid[1]]
+    let data = vec![0x01, 0x02, 0x33, 0x44, 0x55, 0x66, 0x45, 0x35];
+    manufacturer_data.insert(0x5A70, data);
+    assert_eq!(
+        extract_earfun_product_id(&mac, &manufacturer_data),
+        Some(0x004535)
+    );
+
+    // Mismatched MAC suffix returns None
+    let other_mac = bluer::Address([0x11, 0x22, 0x99, 0x88, 0x77, 0x66]);
+    assert_eq!(
+        extract_earfun_product_id(&other_mac, &manufacturer_data),
+        None
     );
 }
 
