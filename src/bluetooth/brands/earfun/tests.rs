@@ -195,6 +195,85 @@ mod tests {
     }
 
     #[test]
+    fn test_earfun_session_initialization_with_offline_case_battery() {
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+
+        let device_thread = thread::spawn(move || {
+            // 1. FW query 0x0309
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::FIRMWARE_VERSION);
+            let mut fw_payload = vec![0x00];
+            fw_payload.extend_from_slice(b"TW600-3091_20250919_v0.4.1");
+            send_mock_response(&mut device, req.command, fw_payload);
+
+            // 2. Battery left 0x0306
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::BATTERY_LEFT);
+            send_mock_response(&mut device, req.command, vec![0x00, 90]);
+
+            // 3. Battery right 0x0307
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::BATTERY_RIGHT);
+            send_mock_response(&mut device, req.command, vec![0x00, 95]);
+
+            // 4. Battery case 0x0317 returns 0xFF (255 = offline/disconnected sentinel)
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::BATTERY_CASE);
+            send_mock_response(&mut device, req.command, vec![0x00, 0xFF]);
+
+            // 5. Ambient sound mode 0x0315
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_AMBIENT_SOUND);
+            send_mock_response(&mut device, req.command, vec![0x00, 0]); // Off
+
+            // 6. Game mode 0x0313
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_GAME_MODE);
+            send_mock_response(&mut device, req.command, vec![0x00, 0]);
+
+            // 7. In-ear detection 0x034A
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_IN_EAR_DETECTION);
+            send_mock_response(&mut device, req.command, vec![0x00, 0]);
+
+            // 8. Dual device 0x0326
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_CONNECT_TWO_DEVICES);
+            send_mock_response(&mut device, req.command, vec![0x00, 0]);
+
+            // 9. Paired devices 0x032C
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_CONNECTED_DEVICES);
+            for slot in 0..10 {
+                send_mock_032c(&mut device, slot, b"", [0, 0, slot], false);
+            }
+
+            // 10. Audio codec 0x032F
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_AUDIO_CODEC);
+            send_mock_response(&mut device, req.command, vec![0x00, 8]); // LDAC
+        });
+
+        let (snapshot, _) =
+            initialize_earfun_session(&mut client, "EarFun Air Pro 4", None, None, None)
+                .expect("session initialization should succeed");
+
+        assert_eq!(snapshot.battery.left.unwrap().percentage, 90);
+        assert_eq!(snapshot.battery.right.unwrap().percentage, 95);
+        // Case battery reporting 0xFF (255) must be parsed as None (unavailable/unreported), not 255%
+        assert!(snapshot.battery.case.is_none());
+        assert_eq!(snapshot.audio_codec, Some(8));
+
+        device_thread.join().unwrap();
+    }
+
+    #[test]
     fn test_earfun_set_noise_mode_and_readback() {
         let (mut client, mut device) = UnixStream::pair().unwrap();
         client

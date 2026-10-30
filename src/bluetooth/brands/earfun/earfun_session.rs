@@ -258,7 +258,7 @@ fn handle_unsolicited(packet: &EarFunPacket, updates: Option<&Sender<UiUpdate>>)
     let Some(updates) = updates else { return };
     match packet.command {
         EarFunCommands::BATTERY_LEFT => {
-            if let Ok(part) = parse_earfun_battery_component(&packet.payload) {
+            if let Ok(Some(part)) = parse_earfun_battery_component(&packet.payload) {
                 let _ = updates.send(UiUpdate::Battery(BatteryState {
                     left: Some(part),
                     right: None,
@@ -267,7 +267,7 @@ fn handle_unsolicited(packet: &EarFunPacket, updates: Option<&Sender<UiUpdate>>)
             }
         }
         EarFunCommands::BATTERY_RIGHT => {
-            if let Ok(part) = parse_earfun_battery_component(&packet.payload) {
+            if let Ok(Some(part)) = parse_earfun_battery_component(&packet.payload) {
                 let _ = updates.send(UiUpdate::Battery(BatteryState {
                     left: None,
                     right: Some(part),
@@ -280,7 +280,7 @@ fn handle_unsolicited(packet: &EarFunPacket, updates: Option<&Sender<UiUpdate>>)
                 let _ = updates.send(UiUpdate::Battery(BatteryState {
                     left: None,
                     right: None,
-                    case: Some(part),
+                    case: part,
                 }));
             }
         }
@@ -445,7 +445,7 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
             updates,
         )
         .ok()
-        .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok());
+        .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
         let right_bat = request(
             stream,
             &mut decoder,
@@ -454,7 +454,7 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
             updates,
         )
         .ok()
-        .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok());
+        .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
         let case_bat = request(
             stream,
             &mut decoder,
@@ -463,7 +463,7 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
             updates,
         )
         .ok()
-        .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok());
+        .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
 
         let snapshot = EarFunDeviceSnapshot {
             name: device_name.to_string(),
@@ -529,7 +529,7 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
         updates,
     )
     .ok()
-    .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok());
+    .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
     let right_bat = request(
         stream,
         &mut decoder,
@@ -538,7 +538,7 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
         updates,
     )
     .ok()
-    .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok());
+    .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
     let case_bat = if pid != EARFUN_AIR_S_PRODUCT_ID {
         request(
             stream,
@@ -548,7 +548,7 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
             updates,
         )
         .ok()
-        .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok())
+        .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten())
     } else {
         None
     };
@@ -1356,27 +1356,41 @@ fn monitor_device(
         // Periodic battery poll
         if last_poll.elapsed() >= POLL_INTERVAL {
             last_poll = Instant::now();
-            let _ = request(
+            let left = request(
                 &mut stream,
                 &mut decoder,
                 EarFunCommands::BATTERY_LEFT,
                 vec![],
                 Some(updates),
-            );
-            let _ = request(
+            )
+            .ok()
+            .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
+            let right = request(
                 &mut stream,
                 &mut decoder,
                 EarFunCommands::BATTERY_RIGHT,
                 vec![],
                 Some(updates),
-            );
-            let _ = request(
-                &mut stream,
-                &mut decoder,
-                EarFunCommands::BATTERY_CASE,
-                vec![],
-                Some(updates),
-            );
+            )
+            .ok()
+            .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
+            let case = if snapshot.product_id != EARFUN_AIR_S_PRODUCT_ID {
+                request(
+                    &mut stream,
+                    &mut decoder,
+                    EarFunCommands::BATTERY_CASE,
+                    vec![],
+                    Some(updates),
+                )
+                .ok()
+                .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten())
+            } else {
+                None
+            };
+
+            if left.is_some() || right.is_some() || case.is_some() {
+                let _ = updates.send(UiUpdate::Battery(BatteryState { left, right, case }));
+            }
 
             // Periodic ambient sound poll to sync with earbud physical touches
             if let Ok(pkt) = request(

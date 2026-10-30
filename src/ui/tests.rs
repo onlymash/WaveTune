@@ -637,6 +637,7 @@ fn ui_components_layout_and_behavior() {
         crate::protocol::brands::earfun::EarFunAudioCodec::StableConnection.as_u8(),
         crate::protocol::brands::earfun::EarFunAudioCodec::AptX.as_u8(),
         crate::protocol::brands::earfun::EarFunAudioCodec::AptXAdaptive.as_u8(),
+        crate::protocol::brands::earfun::EarFunAudioCodec::AptXLossless.as_u8(),
         crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8(),
     ];
     crate::ui::sound_state::update_sound_page_features(

@@ -65,8 +65,25 @@ mod tests {
         assert_eq!(fw.left.unwrap(), "0.4.1");
 
         // Real battery capture
-        let bat = parse_earfun_battery_component(&[0x00, 0x5A]).unwrap();
+        let bat = parse_earfun_battery_component(&[0x00, 0x5A])
+            .unwrap()
+            .unwrap();
         assert_eq!(bat.percentage, 90);
+
+        // Disconnected or unavailable battery (e.g. charging case offline/lid closed returns 0xFF / 255)
+        let unavailable_bat = parse_earfun_battery_component(&[0x00, 0xFF]).unwrap();
+        assert!(unavailable_bat.is_none());
+
+        let overflow_bat = parse_earfun_battery_component(&[0x00, 101]).unwrap();
+        assert!(overflow_bat.is_none());
+
+        let zero_bat = parse_earfun_battery_component(&[0x00, 0x00])
+            .unwrap()
+            .unwrap();
+        assert_eq!(zero_bat.percentage, 0);
+
+        assert!(parse_earfun_battery_component(&[0x01, 0x5A]).is_err());
+        assert!(parse_earfun_battery_component(&[0x00]).is_err());
 
         // Real ANC submode capture
         let anc_sub = parse_earfun_anc_sub_mode(&[0x00, 0x04]).unwrap();
@@ -131,12 +148,18 @@ mod tests {
         // Real codec query capture (0x13 = aptX Lossless)
         let codec = parse_earfun_audio_codec(&[0x00, 0x13]).unwrap();
         assert_eq!(codec, 19);
-        assert_eq!(EarFunAudioCodec::from_u8(codec), Some(EarFunAudioCodec::AptXLossless));
+        assert_eq!(
+            EarFunAudioCodec::from_u8(codec),
+            Some(EarFunAudioCodec::AptXLossless)
+        );
 
         // Codec LDAC (0x08)
         let ldac_codec = parse_earfun_audio_codec(&[0x00, 0x08]).unwrap();
         assert_eq!(ldac_codec, 8);
-        assert_eq!(EarFunAudioCodec::from_u8(ldac_codec), Some(EarFunAudioCodec::Ldac));
+        assert_eq!(
+            EarFunAudioCodec::from_u8(ldac_codec),
+            Some(EarFunAudioCodec::Ldac)
+        );
 
         // Real audio mode query (0x03)
         let audio_mode = parse_earfun_audio_mode(&[0x00, 0x03]).unwrap();

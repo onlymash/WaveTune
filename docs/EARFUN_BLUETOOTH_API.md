@@ -118,9 +118,13 @@ When connecting over RFCOMM Channel 11, the official client and Gadgetbridge per
 | Right Battery | `0x0307` | Empty (`[]`) | `0x8307` | `[00, level]` | `level`: 0–100 percentage |
 | Case Battery | `0x0317` | Empty (`[]`) | `0x8317` | `[00, level]` | `level`: 0–100 percentage (not supported on EarFun Air S) |
 
-*Notes on Model Differences*:
+*Notes on Model Differences & Disconnected Case Behavior*:
 - **EarFun Air Pro 4 & Free Pro 3**: Support 3 battery readings (Left, Right, Case).
 - **EarFun Air S**: Only reports Left and Right battery levels (`0x0306`, `0x0307`). Querying Case Battery (`0x0317`) returns an error or times out, so case query is omitted for Air S.
+- **Charging Case Offline Sentinel (`0xFF` / `255`)**:
+  - When the earbuds are removed from the charging case, the case lid is closed, or the charging case is not in a physical communication state with the earbuds, the earbud chipset cannot read the case battery level. Querying the case battery (`0x0317`) returns `[0x00, 0xFF]` (decimal 255).
+  - `0xFF` (255) is an unavailable/offline sentinel value (Unavailable / Disconnected). Clients parsing this response must detect and treat it as `None` or unreported; displaying `255%` directly in the UI is strictly invalid.
+  - A reading is only considered a valid battery percentage when `0 <= level <= 100`.
 
 *Example (live tested)*:
 - Request Left: `FF 04 00 00 00 0A 03 06` $\to$ Response: `FF 03 00 02 00 0A 83 06 00 5A` (90%)
@@ -268,8 +272,8 @@ EarFun exposes audio codec selection and audio mode configuration via GAIA V1/V2
 | `0` (`0x00`) | **Stable Connection** | Standard SBC / AAC connection prioritizing link stability and battery life | Supported | Supported | A2DP Auto Only |
 | `1` (`0x01`) | **aptX** | Standard Qualcomm aptX low-latency audio | Supported | Supported | A2DP Auto Only |
 | `3` (`0x03`) | **aptX Adaptive** | Dynamic bitrate adjustment (279–420 kbps) based on RF quality | Supported | Supported | Unsupported |
-| `8` (`0x08`) | **LDAC** | Sony High-Resolution audio (up to 990 kbps @ 24-bit/96 kHz) | Supported | Unsupported | Unsupported |
 | `19` (`0x13`) | **aptX Adaptive Lossless** | Qualcomm Snapdragon Sound CD-quality lossless (16-bit/44.1 kHz to 24-bit/96 kHz) | Supported | Unsupported | Unsupported |
+| `8` (`0x08`) | **LDAC** | Sony High-Resolution audio (up to 990 kbps @ 24-bit/96 kHz) | Supported | Unsupported | Unsupported |
 
 *Model Differences*:
 - **EarFun Air Pro 4 (QCC3091)**: Full codec menu (Stable, aptX, aptX Adaptive, aptX Lossless, LDAC).
@@ -366,27 +370,24 @@ stateDiagram-v2
 
 ##### Confirmation Dialogs & Message Wording (Official App & Gadgetbridge Alignment)
 1. **Switching to LDAC (when Dual Device is enabled)**:
-   - **Dialog Title**: `切换音频编码 (Switch Audio Codec)`
-   - **Warning Text**: *"启用 LDAC 高清音频编码将自动关闭“双设备连接”功能。设置应用后耳机将自动重启并重新连接。是否继续？"*
-     *(Enabling LDAC high-resolution audio will automatically disable Dual Device Connection. The earbuds will restart and reconnect to apply this change. Do you want to continue?)*
+   - **Dialog Title**: `Switch Audio Codec`
+   - **Warning Text**: *"Enabling LDAC high-resolution audio will automatically disable Dual Device Connection. The earbuds will restart and reconnect to apply this change. Do you want to continue?"*
    - **Action Sequence**:
      1. Send `SET_CONNECT_TWO_DEVICES` `0x0327 [0x00]`.
      2. Send `SET_AUDIO_CODEC` `0x032E [0x08]`.
      3. Send `COMMAND_REBOOT` `0x0308 []`.
      4. Notify UI of pending reboot; monitor expects socket disconnect without raising an unexpected error.
 2. **Enabling Dual Device Connection (when LDAC is active)**:
-   - **Dialog Title**: `开启双设备连接 (Enable Dual Device Connection)`
-   - **Warning Text**: *"开启双设备连接将自动关闭 LDAC 编码，并切换为稳定/自适应编码（如 aptX Adaptive）。设置应用后耳机将自动重启。是否继续？"*
-     *(Enabling Dual Device Connection will disable LDAC and switch to a standard/adaptive codec. The earbuds will restart to apply this change. Do you want to continue?)*
+   - **Dialog Title**: `Enable Dual Device Connection`
+   - **Warning Text**: *"Enabling Dual Device Connection will disable LDAC and switch to a standard/adaptive codec (such as aptX Adaptive). The earbuds will restart to apply this change. Do you want to continue?"*
    - **Action Sequence**:
      1. Send `SET_AUDIO_CODEC` `0x032E [0x03]` (aptX Adaptive, or `0x00` Stable Connection).
      2. Send `SET_CONNECT_TWO_DEVICES` `0x0327 [0x01]`.
      3. Send `COMMAND_REBOOT` `0x0308 []`.
      4. Notify UI of pending reboot.
 3. **Switching between non-LDAC codecs (e.g., aptX $\to$ aptX Lossless)**:
-   - **Dialog Title**: `切换音频编码 (Switch Audio Codec)`
-   - **Warning Text**: *"应用此音频编码设置后，耳机将自动重启以重新协商蓝牙音频连接。是否继续？"*
-     *(After applying this audio codec setting, the earbuds will restart to renegotiate Bluetooth audio. Do you want to continue?)*
+   - **Dialog Title**: `Switch Audio Codec`
+   - **Warning Text**: *"After applying this audio codec setting, the earbuds will restart to renegotiate Bluetooth audio. Do you want to continue?"*
    - **Action Sequence**:
      1. Send `SET_AUDIO_CODEC` `0x032E [codec]`.
      2. Send `COMMAND_REBOOT` `0x0308 []`.

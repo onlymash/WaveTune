@@ -29,8 +29,8 @@ pub static EARFUN_AIR_PRO_4_CODECS: &[EarFunAudioCodec] = &[
     EarFunAudioCodec::StableConnection,
     EarFunAudioCodec::AptX,
     EarFunAudioCodec::AptXAdaptive,
-    EarFunAudioCodec::Ldac,
     EarFunAudioCodec::AptXLossless,
+    EarFunAudioCodec::Ldac,
 ];
 
 pub static EARFUN_FREE_PRO_3_CODECS: &[EarFunAudioCodec] = &[

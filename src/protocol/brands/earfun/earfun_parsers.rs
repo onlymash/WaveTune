@@ -21,16 +21,23 @@ use crate::protocol::core::types::{
 };
 
 /// Parse a single battery level response (commands 0x0306, 0x0307, 0x0317).
-/// EarFun payload format: [0x00 (status), level (0..100)]
-pub fn parse_earfun_battery_component(payload: &[u8]) -> Result<BatteryPart, EarFunProtocolError> {
+/// EarFun payload format: [0x00 (status), level (0..=100)].
+/// When a component is disconnected or unavailable (e.g. charging case when earbuds
+/// are out of the case or lid is closed), the headset reports 0xFF (255) or values > 100.
+pub fn parse_earfun_battery_component(
+    payload: &[u8],
+) -> Result<Option<BatteryPart>, EarFunProtocolError> {
     if payload.len() < 2 || payload[0] != 0x00 {
         return Err(EarFunProtocolError::InvalidPacketLength);
     }
     let percentage = payload[1];
-    Ok(BatteryPart {
+    if percentage > 100 {
+        return Ok(None);
+    }
+    Ok(Some(BatteryPart {
         percentage,
         charging: false,
-    })
+    }))
 }
 
 /// Parse firmware version response (command 0x0309).
