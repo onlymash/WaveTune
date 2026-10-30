@@ -30,6 +30,7 @@ pub(crate) use components::BatteryIndicator;
 pub(crate) use pages::controls::ControlsWidgets;
 pub(crate) use pages::controls::state as controls_state;
 pub(crate) use pages::home::state as home_state;
+pub(crate) use pages::home::state::HomeWidgetRefs;
 pub(crate) use pages::sound::SoundWidgets;
 pub(crate) use pages::sound::state as sound_state;
 pub(crate) use reentrancy::ReentrancyFlag;
@@ -42,6 +43,7 @@ pub(crate) struct PrimaryNoiseControl {
     pub(crate) label: Label,
 }
 
+#[derive(Clone)]
 pub(crate) struct HomeWidgets {
     pub(crate) home_columns: components::AdaptiveColumns,
     pub(crate) model_stack: Stack,
@@ -81,6 +83,7 @@ pub(crate) struct HomeWidgets {
     pub(crate) game_mode_flag: ReentrancyFlag,
 }
 
+#[derive(Clone)]
 pub(crate) struct DeviceWidgets {
     pub(crate) connection: Label,
     pub(crate) name: Label,
@@ -91,6 +94,7 @@ pub(crate) struct DeviceWidgets {
 
 /// Switches every navigation page between the device content and a shared
 /// "no headset connected" empty state.
+#[derive(Clone)]
 pub(crate) struct ConnectionStateWidgets {
     pub(crate) stack: Stack,
     pub(crate) status_page: adw::StatusPage,

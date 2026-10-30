@@ -50,6 +50,7 @@ impl Default for TurntableState {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct HomeWidgetRefs {
     pub(crate) model_stack: gtk::Stack,
     pub(crate) model_picture: gtk::Picture,

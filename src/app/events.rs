@@ -127,6 +127,7 @@ pub enum WorkerCommand {
     },
     SetEqualizer(u8),
     SelectCustomEqualizer(u8),
+    #[allow(dead_code)]
     AddCustomEqualizer {
         name: String,
         bands: Vec<(u16, i8)>,

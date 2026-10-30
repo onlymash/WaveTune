@@ -16,8 +16,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 pub(crate) mod controller;
-pub(crate) mod dbus_service;
+pub(crate) mod desktop;
+pub(crate) use desktop::dbus_service;
+pub(crate) use desktop::tray_service;
 mod device_manager;
 pub mod events;
+pub(crate) mod features;
 pub(crate) mod state;
-pub(crate) mod tray_service;

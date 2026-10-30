@@ -1,0 +1,672 @@
+// WaveTune - Unofficial multi-brand wireless headset control center for Linux
+// Copyright (C) 2026 onlymash <fiepi.dev@gmail.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, version 3.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-only
+
+use std::{cell::RefCell, rc::Rc, time::Duration};
+
+use adw::prelude::*;
+
+use super::component::SoundComponent;
+use crate::{
+    app::{
+        events::{SettingDomain, UiUpdate, WorkerCommand},
+        features::FeatureContext,
+    },
+    protocol::CustomEqualizer,
+    ui::components::ComboRowExtManual,
+};
+
+#[derive(Clone)]
+pub(crate) struct SoundController {
+    component: SoundComponent,
+    context: FeatureContext,
+    bass_debounce_source: Rc<RefCell<Option<gtk::glib::SourceId>>>,
+}
+
+impl SoundController {
+    pub fn new(component: SoundComponent, context: FeatureContext) -> Self {
+        Self {
+            component,
+            context,
+            bass_debounce_source: Rc::new(RefCell::new(None)),
+        }
+    }
+
+    pub fn bind_events(&self) {
+        self.bind_equalizer_events();
+        self.bind_spatial_events();
+        self.bind_game_mode_events();
+        self.bind_bass_events();
+        self.bind_hi_res_events();
+        self.bind_codec_events();
+    }
+
+    fn bind_equalizer_events(&self) {
+        // 1. Home EQ ComboRow
+        let eq_flag = self.component.home_widgets.eq_flag.clone();
+        let sound_widgets = self.component.sound_widgets.clone();
+        let context = self.context.clone();
+
+        self.component
+            .home_widgets
+            .eq_row
+            .connect_selected_notify(move |row| {
+                if eq_flag.is_updating() {
+                    return;
+                }
+                let Some(preset_id) = row.selected_id() else {
+                    return;
+                };
+                row.set_sensitive(false);
+
+                let is_custom = {
+                    let st = context.session_state.borrow();
+                    st.sound.custom_equalizers.iter().any(|c| c.id == preset_id)
+                };
+                let cmd = if is_custom {
+                    WorkerCommand::SelectCustomEqualizer(preset_id)
+                } else {
+                    WorkerCommand::SetEqualizer(preset_id)
+                };
+
+                match context.send_command(cmd) {
+                    Ok(()) => {
+                        crate::ui::sound_state::update_sound_page_equalizer(
+                            &sound_widgets,
+                            Some(preset_id),
+                        );
+                    }
+                    Err(error) => {
+                        context.send_status(crate::t!("equalizer-send-failed", error));
+                        row.set_sensitive(true);
+                        let _guard = eq_flag.enter();
+                        let cur = context.session_state.borrow().sound.current_eq_preset;
+                        row.set_selected_id(cur);
+                    }
+                }
+            });
+
+        // 2. Sound page preset radios
+        for (preset_index, radio, _) in &self.component.sound_widgets.preset_radios {
+            let preset_index = *preset_index;
+            let radio = radio.clone();
+            let sound_eq_flag = self.component.sound_widgets.eq_flag.clone();
+            let widgets_eq_row = self.component.home_widgets.eq_row.clone();
+            let widgets_eq_flag = self.component.home_widgets.eq_flag.clone();
+            let context = self.context.clone();
+
+            radio.connect_toggled(move |r| {
+                if sound_eq_flag.is_updating() {
+                    return;
+                }
+                if !r.is_active() {
+                    return;
+                }
+
+                let cmd = WorkerCommand::SetEqualizer(preset_index);
+                match context.send_command(cmd) {
+                    Ok(()) => {
+                        let _guard = widgets_eq_flag.enter();
+                        widgets_eq_row.set_selected_id(Some(preset_index));
+                        widgets_eq_row.set_sensitive(false);
+                    }
+                    Err(error) => {
+                        context.send_status(crate::t!("equalizer-send-failed", error));
+                        let cur = context.session_state.borrow().sound.current_eq_preset;
+                        let _guard = sound_eq_flag.enter();
+                        r.set_active(cur == Some(preset_index));
+                    }
+                }
+            });
+        }
+    }
+
+    fn bind_spatial_events(&self) {
+        // 1. Home Spatial ComboRow
+        let spatial_flag = self.component.home_widgets.spatial_flag.clone();
+        let sound_widgets = self.component.sound_widgets.clone();
+        let context = self.context.clone();
+
+        self.component
+            .home_widgets
+            .spatial_row
+            .connect_selected_notify(move |row| {
+                if spatial_flag.is_updating() {
+                    return;
+                }
+                let Some(mode) = row.selected_id() else {
+                    return;
+                };
+                row.set_sensitive(false);
+
+                let cmd = WorkerCommand::SetSpatialAudio(mode);
+                match context.send_command(cmd) {
+                    Ok(()) => {
+                        crate::ui::sound_state::update_sound_page_spatial(
+                            &sound_widgets,
+                            Some(mode),
+                        );
+                    }
+                    Err(error) => {
+                        context.send_setting_error(
+                            SettingDomain::SpatialAudio,
+                            crate::t!("spatial-audio-send-failed", error),
+                        );
+                    }
+                }
+            });
+
+        // 2. Sound page spatial radios
+        for (mode, radio, _) in &self.component.sound_widgets.spatial_radios {
+            let mode = *mode;
+            let radio = radio.clone();
+            let sound_spatial_flag = self.component.sound_widgets.spatial_flag.clone();
+            let widgets_spatial_row = self.component.home_widgets.spatial_row.clone();
+            let widgets_spatial_flag = self.component.home_widgets.spatial_flag.clone();
+            let context = self.context.clone();
+
+            radio.connect_toggled(move |r| {
+                if sound_spatial_flag.is_updating() {
+                    return;
+                }
+                if !r.is_active() {
+                    return;
+                }
+
+                let cmd = WorkerCommand::SetSpatialAudio(mode);
+                match context.send_command(cmd) {
+                    Ok(()) => {
+                        let _guard = widgets_spatial_flag.enter();
+                        widgets_spatial_row.set_selected_id(Some(mode));
+                        widgets_spatial_row.set_sensitive(false);
+                    }
+                    Err(error) => {
+                        context.send_setting_error(
+                            SettingDomain::SpatialAudio,
+                            crate::t!("spatial-audio-send-failed", error),
+                        );
+                        let cur = context.session_state.borrow().sound.current_spatial_mode;
+                        let _guard = sound_spatial_flag.enter();
+                        r.set_active(cur == Some(mode));
+                    }
+                }
+            });
+        }
+    }
+
+    fn bind_game_mode_events(&self) {
+        let game_mode_flag = self.component.home_widgets.game_mode_flag.clone();
+        let context = self.context.clone();
+
+        self.component
+            .home_widgets
+            .game_mode_switch
+            .connect_state_set(move |switch, state| {
+                if game_mode_flag.is_updating() {
+                    return gtk::glib::Propagation::Proceed;
+                }
+                switch.set_sensitive(false);
+
+                let cmd = WorkerCommand::SetGameMode(state);
+                match context.send_command(cmd) {
+                    Ok(()) => {}
+                    Err(error) => {
+                        context.send_setting_error(
+                            SettingDomain::GameMode,
+                            crate::t!("game-mode-send-failed", error),
+                        );
+                    }
+                }
+                gtk::glib::Propagation::Stop
+            });
+    }
+
+    fn bind_bass_events(&self) {
+        // 1. Bass switch
+        let bass_switch_flag = self.component.sound_widgets.bass_switch_flag.clone();
+        let context = self.context.clone();
+        let sound_widgets = self.component.sound_widgets.clone();
+
+        self.component
+            .sound_widgets
+            .bass_switch
+            .connect_state_set(move |switch, state| {
+                if bass_switch_flag.is_updating() {
+                    return gtk::glib::Propagation::Proceed;
+                }
+                switch.set_sensitive(false);
+                sound_widgets.bass_slider.set_sensitive(false);
+
+                let cmd = WorkerCommand::SetBassEngineEnabled(state);
+                match context.send_command(cmd) {
+                    Ok(()) => {}
+                    Err(error) => {
+                        context.send_setting_error(
+                            SettingDomain::BassEngine,
+                            crate::t!("bass-engine-send-failed", error),
+                        );
+                        let cur = context.session_state.borrow().sound.bass_engine_enabled;
+                        if let Some(en) = cur {
+                            let _guard = bass_switch_flag.enter();
+                            switch.set_state(en);
+                            switch.set_active(en);
+                        }
+                    }
+                }
+                gtk::glib::Propagation::Stop
+            });
+
+        // 2. Bass slider (debounced)
+        let bass_slider_flag = self.component.sound_widgets.bass_slider_flag.clone();
+        let bass_debounce = self.bass_debounce_source.clone();
+        let context = self.context.clone();
+        let sound_widgets = self.component.sound_widgets.clone();
+
+        self.component
+            .sound_widgets
+            .bass_slider
+            .connect_value_changed(move |slider| {
+                let rounded = slider.value().round();
+                if (slider.value() - rounded).abs() > 0.001 {
+                    slider.set_value(rounded);
+                    return;
+                }
+                let val = rounded as i8;
+                sound_widgets
+                    .bass_slider
+                    .set_tooltip_text(Some(&crate::ui::sound_state::format_bass_level(val)));
+
+                if bass_slider_flag.is_updating() {
+                    return;
+                }
+                if let Some(source_id) = bass_debounce.borrow_mut().take() {
+                    source_id.remove();
+                }
+
+                let debounce_clone = bass_debounce.clone();
+                let context = context.clone();
+
+                let source_id =
+                    gtk::glib::timeout_add_local(Duration::from_millis(500), move || {
+                        *debounce_clone.borrow_mut() = None;
+                        let cmd = WorkerCommand::SetBassEngineLevel(val);
+                        if let Err(error) = context.send_command(cmd) {
+                            context.send_status(crate::t!("bass-engine-send-failed", error));
+                        }
+                        gtk::glib::ControlFlow::Break
+                    });
+                *bass_debounce.borrow_mut() = Some(source_id);
+            });
+    }
+
+    fn bind_hi_res_events(&self) {
+        let hires_switch_flag = self.component.sound_widgets.hires_switch_flag.clone();
+        let context = self.context.clone();
+        let sound_widgets = self.component.sound_widgets.clone();
+
+        self.component
+            .sound_widgets
+            .hires_switch
+            .connect_state_set(move |switch, state| {
+                if hires_switch_flag.is_updating() {
+                    return gtk::glib::Propagation::Proceed;
+                }
+                switch.set_sensitive(false);
+
+                let cmd = WorkerCommand::SetHiRes(state);
+                match context.send_command(cmd) {
+                    Ok(()) => {}
+                    Err(error) => {
+                        context.send_status(crate::t!("hi-res-send-failed", error));
+                        let cur = context.session_state.borrow().sound.hi_res_enabled;
+                        if let Some(enabled) = cur {
+                            crate::ui::sound_state::update_sound_page_hi_res(
+                                &sound_widgets,
+                                enabled,
+                            );
+                        }
+                    }
+                }
+                gtk::glib::Propagation::Stop
+            });
+    }
+
+    fn bind_codec_events(&self) {
+        let codec_flag = self.component.sound_widgets.codec_flag.clone();
+        let context = self.context.clone();
+        let sound_widgets = self.component.sound_widgets.clone();
+
+        self.component
+            .sound_widgets
+            .codec_row
+            .connect_selected_notify(move |row| {
+                if codec_flag.is_updating() {
+                    return;
+                }
+                let Some(codec_idx) = crate::ui::components::ComboRowExtManual::selected_id(row)
+                else {
+                    return;
+                };
+
+                let is_dual_active = context
+                    .session_state
+                    .borrow()
+                    .dual_device
+                    .current_dual_device
+                    == Some(true);
+                let is_ldac =
+                    codec_idx == crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8();
+
+                if is_ldac && is_dual_active {
+                    let row_for_dialog = row.clone();
+                    let codec_flag_clone = codec_flag.clone();
+                    let context_clone = context.clone();
+                    let current_codec = context.session_state.borrow().sound.current_audio_codec;
+
+                    let dialog = adw::AlertDialog::builder()
+                        .heading(&crate::t!("dialog-reboot-required-title"))
+                        .body(&crate::t!("dialog-ldac-conflict-message"))
+                        .build();
+                    dialog.add_response("cancel", &crate::t!("common-cancel"));
+                    dialog.add_response("confirm", &crate::t!("common-confirm"));
+                    dialog.set_response_appearance("confirm", adw::ResponseAppearance::Suggested);
+
+                    let row_for_cb = row_for_dialog.clone();
+                    dialog.choose(
+                        Some(&row_for_dialog),
+                        None::<&gtk::gio::Cancellable>,
+                        move |response| {
+                            if response == "confirm" {
+                                let _ = context_clone
+                                    .send_command(WorkerCommand::SetAudioCodec(codec_idx));
+                            } else {
+                                let _guard = codec_flag_clone.enter();
+                                crate::ui::components::ComboRowExtManual::set_selected_id(
+                                    &row_for_cb,
+                                    current_codec,
+                                );
+                            }
+                        },
+                    );
+                    return;
+                }
+
+                row.set_sensitive(false);
+                let cmd = WorkerCommand::SetAudioCodec(codec_idx);
+                match context.send_command(cmd) {
+                    Ok(()) => {}
+                    Err(error) => {
+                        context.send_status(crate::t!("audio-codec-send-failed", error));
+                        let cur = context.session_state.borrow().sound.current_audio_codec;
+                        if let Some(c) = cur {
+                            crate::ui::sound_state::update_sound_page_audio_codec(
+                                &sound_widgets,
+                                c,
+                            );
+                        }
+                    }
+                }
+            });
+    }
+
+    pub fn on_update(&self, update: &UiUpdate) -> bool {
+        match update {
+            UiUpdate::ProductId { product_id, .. } => {
+                let profile = crate::compatibility::profile_for_product_id(*product_id);
+                let supports_eq = profile.is_some_and(|p| p.supports_equalizer());
+                let supports_custom_eq = profile.is_some_and(|p| p.supports_custom_equalizer());
+                let supports_spatial = profile.is_some_and(|p| p.supports_spatial_audio());
+                let supports_game = profile.is_some_and(|p| p.supports_game_mode());
+                let supports_head_track = profile.is_some_and(|p| p.supports_head_tracking());
+                let supports_bass = profile.is_some_and(|p| p.supports_bass_engine());
+                let supports_hires = profile.is_some_and(|p| p.supports_hi_res());
+                let supports_codec = profile.is_some_and(|p| p.supports_audio_codec());
+                let available_codecs =
+                    crate::compatibility::supported_codecs_for_product(*product_id).to_vec();
+                let presets =
+                    crate::compatibility::equalizer_presets_for_product(*product_id).to_vec();
+
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.sound.supports_eq = supports_eq;
+                    st.sound.supports_custom_eq = supports_custom_eq;
+                    st.sound.supports_spatial = supports_spatial;
+                    st.sound.supports_head_tracking = supports_head_track;
+                    st.sound.supports_game_mode = supports_game;
+                    st.sound.supports_bass_engine = supports_bass;
+                    st.sound.supports_hi_res = supports_hires;
+                    st.sound.supports_audio_codec = supports_codec;
+                    st.sound.available_codecs = available_codecs;
+                    st.sound.presets = presets;
+                }
+                self.component
+                    .render_features(&self.context.session_state.borrow().sound);
+                true
+            }
+            UiUpdate::SoundFeatures {
+                supports_equalizer,
+                supports_custom_equalizer,
+                supports_spatial_audio,
+                supports_head_tracking,
+                supports_game_mode,
+                supports_bass_engine,
+                supports_hi_res,
+                supports_audio_codec,
+                available_codecs,
+                presets,
+            } => {
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.sound.supports_eq = *supports_equalizer;
+                    st.sound.supports_custom_eq = *supports_custom_equalizer;
+                    st.sound.supports_spatial = *supports_spatial_audio;
+                    st.sound.supports_head_tracking = *supports_head_tracking;
+                    st.sound.supports_game_mode = *supports_game_mode;
+                    st.sound.supports_bass_engine = *supports_bass_engine;
+                    st.sound.supports_hi_res = *supports_hi_res;
+                    st.sound.supports_audio_codec = *supports_audio_codec;
+                    st.sound.available_codecs = available_codecs.clone();
+                    st.sound.presets = presets.clone();
+                }
+                self.component
+                    .render_features(&self.context.session_state.borrow().sound);
+                true
+            }
+            UiUpdate::Equalizer(preset) => {
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.sound.current_eq_preset = Some(*preset);
+                }
+                self.component
+                    .render_equalizer(&self.context.session_state.borrow().sound);
+                true
+            }
+            UiUpdate::CustomEqualizers(entries) => {
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.sound.custom_equalizers = entries.clone();
+                    if let Some(selected) = entries.iter().find(|e| e.is_selected) {
+                        st.sound.current_eq_preset = Some(selected.id);
+                    }
+                }
+                self.render_custom_equalizers();
+                true
+            }
+            UiUpdate::SpatialAudio(mode) => {
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.sound.current_spatial_mode = Some(*mode);
+                }
+                self.component
+                    .render_spatial(&self.context.session_state.borrow().sound);
+                true
+            }
+            UiUpdate::GameMode(enabled) => {
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.sound.current_game_mode = Some(*enabled);
+                }
+                self.component
+                    .render_game_mode(&self.context.session_state.borrow().sound);
+                true
+            }
+            UiUpdate::BassEngineEnabled(enabled) => {
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.sound.bass_engine_enabled = Some(*enabled);
+                }
+                self.component
+                    .render_bass(&self.context.session_state.borrow().sound);
+                true
+            }
+            UiUpdate::BassEngineLevel(level) => {
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.sound.bass_engine_level = Some(*level);
+                }
+                self.component
+                    .render_bass(&self.context.session_state.borrow().sound);
+                true
+            }
+            UiUpdate::HiRes(enabled) => {
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.sound.hi_res_enabled = Some(*enabled);
+                }
+                self.component
+                    .render_hi_res(&self.context.session_state.borrow().sound);
+                true
+            }
+            UiUpdate::AudioCodec(codec) => {
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.sound.current_audio_codec = Some(*codec);
+                }
+                self.component
+                    .render_codec(&self.context.session_state.borrow().sound);
+                true
+            }
+            UiUpdate::SettingError { domain, .. } => match domain {
+                SettingDomain::Equalizer => {
+                    self.component
+                        .render_equalizer(&self.context.session_state.borrow().sound);
+                    true
+                }
+                SettingDomain::SpatialAudio => {
+                    self.component
+                        .render_spatial(&self.context.session_state.borrow().sound);
+                    true
+                }
+                SettingDomain::GameMode => {
+                    self.component
+                        .render_game_mode(&self.context.session_state.borrow().sound);
+                    true
+                }
+                SettingDomain::BassEngine => {
+                    self.component
+                        .render_bass(&self.context.session_state.borrow().sound);
+                    true
+                }
+                SettingDomain::HiRes => {
+                    self.component
+                        .render_hi_res(&self.context.session_state.borrow().sound);
+                    true
+                }
+                SettingDomain::AudioCodec => {
+                    self.component
+                        .render_codec(&self.context.session_state.borrow().sound);
+                    true
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    fn render_custom_equalizers(&self) {
+        let context = self.context.clone();
+        let widgets_eq_row = self.component.home_widgets.eq_row.clone();
+        let widgets_eq_flag = self.component.home_widgets.eq_flag.clone();
+
+        let on_select = move |id: u8| {
+            let cmd = WorkerCommand::SelectCustomEqualizer(id);
+            match context.send_command(cmd) {
+                Ok(()) => {
+                    let _guard = widgets_eq_flag.enter();
+                    widgets_eq_row.set_selected_id(Some(id));
+                    widgets_eq_row.set_sensitive(false);
+                }
+                Err(error) => {
+                    context.send_status(crate::t!("equalizer-send-failed", error));
+                }
+            }
+        };
+
+        let context_edit = self.context.clone();
+        let on_edit = move |preset: &CustomEqualizer, row_widget: &gtk::Widget| {
+            let context = context_edit.clone();
+            let id = preset.id;
+            crate::ui::dialogs::show_custom_eq_dialog(
+                row_widget,
+                Some(preset),
+                &preset.name,
+                move |name, bands| {
+                    let cmd = WorkerCommand::SaveCustomEqualizer { id, name, bands };
+                    if let Err(err) = context.send_command(cmd) {
+                        context.send_status(crate::t!("equalizer-send-failed", err));
+                    }
+                },
+            );
+        };
+
+        let context_del = self.context.clone();
+        let on_delete = move |id: u8, row_widget: &gtk::Widget| {
+            let context = context_del.clone();
+            let alert = adw::AlertDialog::builder()
+                .heading(&crate::t!("equalizer-custom-delete-confirm"))
+                .build();
+            alert.add_response("cancel", &crate::t!("common-cancel"));
+            alert.add_response("delete", &crate::t!("common-delete"));
+            alert.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
+            alert.choose(
+                Some(row_widget),
+                None::<&gtk::gio::Cancellable>,
+                move |resp| {
+                    if resp == "delete" {
+                        let cmd = WorkerCommand::DeleteCustomEqualizer(id);
+                        if let Err(err) = context.send_command(cmd) {
+                            context.send_status(crate::t!("equalizer-send-failed", err));
+                        }
+                    }
+                },
+            );
+        };
+
+        self.component.render_custom_equalizers(
+            &self.context.session_state.borrow().sound,
+            on_select,
+            on_edit,
+            on_delete,
+        );
+    }
+
+    pub fn reset(&self) {
+        if let Some(source_id) = self.bass_debounce_source.borrow_mut().take() {
+            source_id.remove();
+        }
+        self.component.reset();
+    }
+}
