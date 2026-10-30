@@ -323,15 +323,15 @@ fn ui_components_layout_and_behavior() {
     // Verify sound_page construction and SoundWidgets layout
     let (_sound_page, sound_widgets) = crate::ui::pages::sound::build_sound_page();
     assert!(!sound_widgets.sound_columns.is_single_column());
-    assert_eq!(sound_widgets.eq.preset_radios.len(), 9);
-    assert!(sound_widgets.eq.preset_list.first_child().is_some());
-    assert_eq!(sound_widgets.spatial.spatial_radios.len(), 3);
-    assert!(sound_widgets.spatial.spatial_list.first_child().is_some());
-    assert!(!sound_widgets.custom_eq.custom_editor.is_visible());
-    assert_eq!(sound_widgets.bass.bass_slider.adjustment().lower(), -5.0);
-    assert_eq!(sound_widgets.bass.bass_slider.adjustment().upper(), 5.0);
-    assert!(!sound_widgets.bass.bass_slider.is_sensitive());
-    assert!(!sound_widgets.custom_eq.add_custom_row.is_sensitive());
+    assert_eq!(sound_widgets.eq.preset_count(), 9);
+    assert!(sound_widgets.eq.first_child_exists());
+    assert_eq!(sound_widgets.spatial.len(), 3);
+    assert!(sound_widgets.spatial.first_child_exists());
+    assert!(!sound_widgets.custom_eq.is_editor_visible());
+    assert_eq!(sound_widgets.bass.slider_range().0, -5.0);
+    assert_eq!(sound_widgets.bass.slider_range().1, 5.0);
+    assert!(!sound_widgets.bass.is_slider_sensitive());
+    assert!(!sound_widgets.custom_eq.is_add_sensitive());
     sound_widgets.sound_columns.set_single_column(true);
     assert!(sound_widgets.sound_columns.is_single_column());
 
@@ -349,62 +349,51 @@ fn ui_components_layout_and_behavior() {
             supports_audio_codec: false,
             available_codecs: &[],
             presets: crate::compatibility::DYNAUDIO_EQ_PRESETS,
+            custom_equalizers: &[],
         },
     );
-    assert!(sound_widgets.eq.card.is_visible());
-    assert!(sound_widgets.spatial.card.is_visible());
-    assert!(sound_widgets.enhancement.card.is_visible());
-    assert!(sound_widgets.enhancement.hires_switch_row.is_visible());
-    assert!(sound_widgets.bass.bass_switch_row.is_visible());
-    assert!(sound_widgets.bass.bass_slider_row.is_visible());
-    assert!(sound_widgets.bass.bass_switch.is_sensitive());
-    assert!(sound_widgets.enhancement.hires_switch.is_sensitive());
-    assert!(sound_widgets.custom_eq.add_custom_row.is_visible());
-    assert!(sound_widgets.custom_eq.add_custom_row.is_sensitive());
+    assert!(sound_widgets.eq.is_card_visible());
+    assert!(sound_widgets.spatial.is_card_visible());
+    assert!(sound_widgets.enhancement.is_card_visible());
+    assert!(sound_widgets.enhancement.is_hires_visible());
+    assert!(sound_widgets.bass.is_switch_row_visible());
+    assert!(sound_widgets.bass.is_slider_row_visible());
+    assert!(sound_widgets.bass.is_switch_sensitive());
+    assert!(sound_widgets.enhancement.is_hires_sensitive());
+    assert!(sound_widgets.custom_eq.is_add_visible());
+    assert!(sound_widgets.custom_eq.is_add_sensitive());
 
     // Exactly 5 Dynaudio preset rows should be visible & sensitive; other 4 hidden
-    for (idx, radio, row) in &sound_widgets.eq.preset_radios {
-        let is_dynaudio = [0, 7, 2, 1, 3].contains(idx);
-        assert_eq!(row.is_visible(), is_dynaudio);
+    for idx in 0..9 {
+        let is_dynaudio = [0, 7, 2, 1, 3].contains(&idx);
+        assert_eq!(sound_widgets.eq.is_preset_visible(idx), is_dynaudio);
         if is_dynaudio {
-            assert!(radio.is_sensitive());
+            assert!(sound_widgets.eq.is_preset_sensitive(idx));
         }
     }
 
     // All 3 spatial modes (Off, Fixed, Head Tracking) should be visible & sensitive
-    for (_, radio, row) in &sound_widgets.spatial.spatial_radios {
-        assert!(row.is_visible());
-        assert!(radio.is_sensitive());
+    for mode in 0..3 {
+        assert!(sound_widgets.spatial.is_mode_visible(mode));
+        assert!(sound_widgets.spatial.is_mode_sensitive(mode));
     }
 
     // Select EQ preset 7 (Dynaudio Hi-Res)
     crate::ui::sound_state::update_sound_page_equalizer(&sound_widgets, Some(7));
-    let radio_7 = sound_widgets
-        .eq
-        .preset_radios
-        .iter()
-        .find(|(idx, _, _)| *idx == 7)
-        .unwrap();
-    assert!(radio_7.1.is_active());
+    assert!(sound_widgets.eq.is_preset_active(7));
 
     // Select Spatial Audio mode 2 (Head Tracking)
     crate::ui::sound_state::update_sound_page_spatial(&sound_widgets, Some(2));
-    let spatial_2 = sound_widgets
-        .spatial
-        .spatial_radios
-        .iter()
-        .find(|(mode, _, _)| *mode == 2)
-        .unwrap();
-    assert!(spatial_2.1.is_active());
+    assert!(sound_widgets.spatial.is_mode_active(2));
 
     // Bass engine switch enabled / disabled
     crate::ui::sound_state::update_sound_page_bass_enabled(&sound_widgets, true);
-    assert!(sound_widgets.bass.bass_switch.is_active());
-    assert!(sound_widgets.bass.bass_slider.is_sensitive());
+    assert!(sound_widgets.bass.is_switch_active());
+    assert!(sound_widgets.bass.is_slider_sensitive());
 
     crate::ui::sound_state::update_sound_page_bass_enabled(&sound_widgets, false);
-    assert!(!sound_widgets.bass.bass_switch.is_active());
-    assert!(!sound_widgets.bass.bass_slider.is_sensitive());
+    assert!(!sound_widgets.bass.is_switch_active());
+    assert!(!sound_widgets.bass.is_slider_sensitive());
 
     // Bass engine slider range & level
     let level = crate::protocol::BassEngineLevel {
@@ -413,15 +402,15 @@ fn ui_components_layout_and_behavior() {
         current: 2,
     };
     crate::ui::sound_state::update_sound_page_bass_level(&sound_widgets, level);
-    assert_eq!(sound_widgets.bass.bass_slider.value(), 2.0);
-    assert_eq!(sound_widgets.bass.bass_slider.adjustment().lower(), -5.0);
-    assert_eq!(sound_widgets.bass.bass_slider.adjustment().upper(), 5.0);
+    assert_eq!(sound_widgets.bass.slider_value(), 2.0);
+    assert_eq!(sound_widgets.bass.slider_range().0, -5.0);
+    assert_eq!(sound_widgets.bass.slider_range().1, 5.0);
 
     // Hi-Res switch state update
     crate::ui::sound_state::update_sound_page_hi_res(&sound_widgets, true);
-    assert!(sound_widgets.enhancement.hires_switch.is_active());
+    assert!(sound_widgets.enhancement.is_hires_active());
     crate::ui::sound_state::update_sound_page_hi_res(&sound_widgets, false);
-    assert!(!sound_widgets.enhancement.hires_switch.is_active());
+    assert!(!sound_widgets.enhancement.is_hires_active());
 
     // Standard presets filter without custom EQ (e.g. Enco X3)
     crate::ui::sound_state::update_sound_page_features(
@@ -436,49 +425,53 @@ fn ui_components_layout_and_behavior() {
             supports_audio_codec: false,
             available_codecs: &[],
             presets: crate::compatibility::STANDARD_EQ_PRESETS,
+            custom_equalizers: &[],
         },
     );
-    assert!(sound_widgets.eq.card.is_visible());
-    assert!(sound_widgets.spatial.card.is_visible());
-    assert!(!sound_widgets.enhancement.card.is_visible());
-    assert!(!sound_widgets.enhancement.hires_switch_row.is_visible());
-    assert!(!sound_widgets.bass.bass_switch_row.is_visible());
-    assert!(!sound_widgets.bass.bass_slider_row.is_visible());
-    assert!(!sound_widgets.custom_eq.add_custom_row.is_visible());
-    assert!(!sound_widgets.custom_eq.add_custom_row.is_sensitive());
+    assert!(sound_widgets.eq.is_card_visible());
+    assert!(sound_widgets.spatial.is_card_visible());
+    assert!(!sound_widgets.enhancement.is_card_visible());
+    assert!(!sound_widgets.enhancement.is_hires_visible());
+    assert!(!sound_widgets.bass.is_switch_row_visible());
+    assert!(!sound_widgets.bass.is_slider_row_visible());
+    assert!(!sound_widgets.custom_eq.is_add_visible());
+    assert!(!sound_widgets.custom_eq.is_add_sensitive());
 
-    for (idx, _, row) in &sound_widgets.eq.preset_radios {
-        if *idx == 7 {
+    for idx in 0..9 {
+        if idx == 7 {
             assert!(
-                !row.is_visible(),
+                !sound_widgets.eq.is_preset_visible(idx),
                 "preset 7 should be hidden for standard models"
             );
         } else {
-            assert!(row.is_visible(), "preset {idx} should be visible");
+            assert!(
+                sound_widgets.eq.is_preset_visible(idx),
+                "preset {idx} should be visible"
+            );
         }
     }
 
     // Spatial mode 2 (head tracking) should be hidden because supports_head_tracking is false
-    for (mode, _, row) in &sound_widgets.spatial.spatial_radios {
-        if *mode == 2 {
-            assert!(!row.is_visible());
+    for mode in 0..3 {
+        if mode == 2 {
+            assert!(!sound_widgets.spatial.is_mode_visible(mode));
         } else {
-            assert!(row.is_visible());
+            assert!(sound_widgets.spatial.is_mode_visible(mode));
         }
     }
 
     // Reset sound page
     crate::ui::sound_state::reset_sound_page(&sound_widgets);
-    assert!(!sound_widgets.eq.card.is_visible());
-    assert!(!sound_widgets.spatial.card.is_visible());
-    assert!(!sound_widgets.enhancement.card.is_visible());
-    assert!(!sound_widgets.bass.bass_switch.is_sensitive());
-    assert!(!sound_widgets.bass.bass_switch.is_active());
-    assert!(!sound_widgets.bass.bass_slider.is_sensitive());
-    assert_eq!(sound_widgets.bass.bass_slider.value(), 0.0);
-    assert!(!sound_widgets.enhancement.hires_switch.is_sensitive());
-    assert!(!sound_widgets.enhancement.hires_switch.is_active());
-    assert!(!sound_widgets.custom_eq.add_custom_row.is_sensitive());
+    assert!(!sound_widgets.eq.is_card_visible());
+    assert!(!sound_widgets.spatial.is_card_visible());
+    assert!(!sound_widgets.enhancement.is_card_visible());
+    assert!(!sound_widgets.bass.is_switch_sensitive());
+    assert!(!sound_widgets.bass.is_switch_active());
+    assert!(!sound_widgets.bass.is_slider_sensitive());
+    assert_eq!(sound_widgets.bass.slider_value(), 0.0);
+    assert!(!sound_widgets.enhancement.is_hires_sensitive());
+    assert!(!sound_widgets.enhancement.is_hires_active());
+    assert!(!sound_widgets.custom_eq.is_add_sensitive());
 
     // Enable sound features with custom EQ for custom EQ tests
     crate::ui::sound_state::update_sound_page_features(
@@ -493,6 +486,7 @@ fn ui_components_layout_and_behavior() {
             supports_audio_codec: false,
             available_codecs: &[],
             presets: crate::compatibility::DYNAUDIO_EQ_PRESETS,
+            custom_equalizers: &[],
         },
     );
 
@@ -564,8 +558,8 @@ fn ui_components_layout_and_behavior() {
         |_, _| {},
         |_, _| {},
     );
-    assert_eq!(sound_widgets.custom_eq.preset_rows.borrow().len(), 1);
-    assert!(sound_widgets.custom_eq.add_custom_row.is_visible());
+    assert_eq!(sound_widgets.custom_eq.preset_count(), 1);
+    assert!(sound_widgets.custom_eq.is_add_visible());
 
     // 3 custom EQs: reaches maximum limit (3), so add_custom_row is hidden
     crate::ui::sound_state::update_sound_page_custom_equalizers(
@@ -580,15 +574,13 @@ fn ui_components_layout_and_behavior() {
         |_, _| {},
         |_, _| {},
     );
-    assert_eq!(sound_widgets.custom_eq.preset_rows.borrow().len(), 3);
-    assert!(!sound_widgets.custom_eq.add_custom_row.is_visible());
+    assert_eq!(sound_widgets.custom_eq.preset_count(), 3);
+    assert!(!sound_widgets.custom_eq.is_add_visible());
 
     // custom_eq_2 was marked is_selected = true, verify its radio is active
-    let rows = sound_widgets.custom_eq.preset_rows.borrow();
-    assert!(!rows[0].1.is_active());
-    assert!(rows[1].1.is_active());
-    assert!(!rows[2].1.is_active());
-    drop(rows);
+    assert!(!sound_widgets.custom_eq.is_preset_active(0));
+    assert!(sound_widgets.custom_eq.is_preset_active(1));
+    assert!(!sound_widgets.custom_eq.is_preset_active(2));
 
     // Delete one custom EQ (back to 2): add_custom_row becomes visible again
     crate::ui::sound_state::update_sound_page_custom_equalizers(
@@ -599,8 +591,8 @@ fn ui_components_layout_and_behavior() {
         |_, _| {},
         |_, _| {},
     );
-    assert_eq!(sound_widgets.custom_eq.preset_rows.borrow().len(), 2);
-    assert!(sound_widgets.custom_eq.add_custom_row.is_visible());
+    assert_eq!(sound_widgets.custom_eq.preset_count(), 2);
+    assert!(sound_widgets.custom_eq.is_add_visible());
 
     // Audio codec row tests
     let available_codecs = &[
@@ -622,11 +614,12 @@ fn ui_components_layout_and_behavior() {
             supports_audio_codec: true,
             available_codecs,
             presets: crate::compatibility::DYNAUDIO_EQ_PRESETS,
+            custom_equalizers: &[],
         },
     );
-    assert!(sound_widgets.enhancement.card.is_visible());
-    assert!(sound_widgets.enhancement.codec_row.is_visible());
-    assert!(sound_widgets.enhancement.codec_row.is_sensitive());
+    assert!(sound_widgets.enhancement.is_card_visible());
+    assert!(sound_widgets.enhancement.is_codec_visible());
+    assert!(sound_widgets.enhancement.is_codec_sensitive());
 
     // Update active codec to LDAC
     crate::ui::sound_state::update_sound_page_audio_codec(
@@ -634,18 +627,15 @@ fn ui_components_layout_and_behavior() {
         crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8(),
     );
     assert_eq!(
-        crate::ui::components::ComboRowExtManual::selected_id(&sound_widgets.enhancement.codec_row),
+        sound_widgets.enhancement.selected_codec(),
         Some(crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8())
     );
 
     // Reset sound page hides codec row and clears selection
     crate::ui::sound_state::reset_sound_page(&sound_widgets);
-    assert!(!sound_widgets.enhancement.codec_row.is_visible());
-    assert!(!sound_widgets.enhancement.codec_row.is_sensitive());
-    assert_eq!(
-        crate::ui::components::ComboRowExtManual::selected_id(&sound_widgets.enhancement.codec_row),
-        None
-    );
+    assert!(!sound_widgets.enhancement.is_codec_visible());
+    assert!(!sound_widgets.enhancement.is_codec_sensitive());
+    assert_eq!(sound_widgets.enhancement.selected_codec(), None);
 
     // Switch to single-column (Vertical)
     widgets.home_columns.set_single_column(true);

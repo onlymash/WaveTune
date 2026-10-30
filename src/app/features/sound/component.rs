@@ -68,6 +68,7 @@ impl SoundComponent {
                 supports_audio_codec: state.supports_audio_codec,
                 available_codecs: &state.available_codecs,
                 presets: &state.presets,
+                custom_equalizers: &state.custom_equalizers,
             },
         );
     }
@@ -130,12 +131,7 @@ impl SoundComponent {
         }
         self.sound_widgets
             .bass
-            .bass_switch
-            .set_sensitive(state.supports_bass_engine);
-        self.sound_widgets
-            .bass
-            .bass_switch_row
-            .set_sensitive(state.supports_bass_engine);
+            .set_switch_sensitive(state.supports_bass_engine);
     }
 
     pub fn render_hi_res(&self, state: &SoundState) {
@@ -144,12 +140,7 @@ impl SoundComponent {
         }
         self.sound_widgets
             .enhancement
-            .hires_switch
-            .set_sensitive(state.supports_hi_res);
-        self.sound_widgets
-            .enhancement
-            .hires_switch_row
-            .set_sensitive(state.supports_hi_res);
+            .set_hires_sensitive(state.supports_hi_res);
     }
 
     pub fn render_codec(&self, state: &SoundState) {
@@ -158,8 +149,7 @@ impl SoundComponent {
         }
         self.sound_widgets
             .enhancement
-            .codec_row
-            .set_sensitive(state.supports_audio_codec);
+            .set_codec_sensitive(state.supports_audio_codec);
     }
 
     pub fn reset(&self) {

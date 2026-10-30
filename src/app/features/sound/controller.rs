@@ -100,22 +100,15 @@ impl SoundController {
             });
 
         // 2. Sound page preset radios
-        for (preset_index, radio, _) in &self.component.sound_widgets.eq.preset_radios {
-            let preset_index = *preset_index;
-            let radio = radio.clone();
-            let sound_eq_flag = self.component.sound_widgets.eq.flag.clone();
-            let widgets_eq_row = self.component.home_widgets.eq_row.clone();
-            let widgets_eq_flag = self.component.home_widgets.eq_flag.clone();
-            let context = self.context.clone();
+        let widgets_eq_row = self.component.home_widgets.eq_row.clone();
+        let widgets_eq_flag = self.component.home_widgets.eq_flag.clone();
+        let sound_widgets = self.component.sound_widgets.clone();
+        let context = self.context.clone();
 
-            radio.connect_toggled(move |r| {
-                if sound_eq_flag.is_updating() {
-                    return;
-                }
-                if !r.is_active() {
-                    return;
-                }
-
+        self.component
+            .sound_widgets
+            .eq
+            .connect_preset_selected(move |preset_index| {
                 let cmd = WorkerCommand::SetEqualizer(preset_index);
                 match context.send_command(cmd) {
                     Ok(()) => {
@@ -126,12 +119,10 @@ impl SoundController {
                     Err(error) => {
                         context.send_status(crate::t!("equalizer-send-failed", error));
                         let cur = context.session_state.borrow().sound.current_eq_preset;
-                        let _guard = sound_eq_flag.enter();
-                        r.set_active(cur == Some(preset_index));
+                        sound_widgets.eq.set_selected(cur);
                     }
                 }
             });
-        }
     }
 
     fn bind_spatial_events(&self) {
@@ -170,22 +161,15 @@ impl SoundController {
             });
 
         // 2. Sound page spatial radios
-        for (mode, radio, _) in &self.component.sound_widgets.spatial.spatial_radios {
-            let mode = *mode;
-            let radio = radio.clone();
-            let sound_spatial_flag = self.component.sound_widgets.spatial.flag.clone();
-            let widgets_spatial_row = self.component.home_widgets.spatial_row.clone();
-            let widgets_spatial_flag = self.component.home_widgets.spatial_flag.clone();
-            let context = self.context.clone();
+        let widgets_spatial_row = self.component.home_widgets.spatial_row.clone();
+        let widgets_spatial_flag = self.component.home_widgets.spatial_flag.clone();
+        let sound_widgets = self.component.sound_widgets.clone();
+        let context = self.context.clone();
 
-            radio.connect_toggled(move |r| {
-                if sound_spatial_flag.is_updating() {
-                    return;
-                }
-                if !r.is_active() {
-                    return;
-                }
-
+        self.component
+            .sound_widgets
+            .spatial
+            .connect_mode_selected(move |mode| {
                 let cmd = WorkerCommand::SetSpatialAudio(mode);
                 match context.send_command(cmd) {
                     Ok(()) => {
@@ -199,12 +183,10 @@ impl SoundController {
                             crate::t!("spatial-audio-send-failed", error),
                         );
                         let cur = context.session_state.borrow().sound.current_spatial_mode;
-                        let _guard = sound_spatial_flag.enter();
-                        r.set_active(cur == Some(mode));
+                        sound_widgets.spatial.set_selected(cur);
                     }
                 }
             });
-        }
     }
 
     fn bind_game_mode_events(&self) {
@@ -236,21 +218,13 @@ impl SoundController {
 
     fn bind_bass_events(&self) {
         // 1. Bass switch
-        let bass_switch_flag = self.component.sound_widgets.bass.bass_switch_flag.clone();
         let context = self.context.clone();
         let sound_widgets = self.component.sound_widgets.clone();
 
         self.component
             .sound_widgets
             .bass
-            .bass_switch
-            .connect_state_set(move |switch, state| {
-                if bass_switch_flag.is_updating() {
-                    return gtk::glib::Propagation::Proceed;
-                }
-                switch.set_sensitive(false);
-                sound_widgets.bass.bass_slider.set_sensitive(false);
-
+            .connect_switch_toggled(move |state| {
                 let cmd = WorkerCommand::SetBassEngineEnabled(state);
                 match context.send_command(cmd) {
                     Ok(()) => {}
@@ -261,40 +235,20 @@ impl SoundController {
                         );
                         let cur = context.session_state.borrow().sound.bass_engine_enabled;
                         if let Some(en) = cur {
-                            let _guard = bass_switch_flag.enter();
-                            switch.set_state(en);
-                            switch.set_active(en);
+                            sound_widgets.bass.set_enabled(en);
                         }
                     }
                 }
-                gtk::glib::Propagation::Stop
             });
 
         // 2. Bass slider (debounced)
-        let bass_slider_flag = self.component.sound_widgets.bass.bass_slider_flag.clone();
         let bass_debounce = self.bass_debounce_source.clone();
         let context = self.context.clone();
-        let sound_widgets = self.component.sound_widgets.clone();
 
         self.component
             .sound_widgets
             .bass
-            .bass_slider
-            .connect_value_changed(move |slider| {
-                let rounded = slider.value().round();
-                if (slider.value() - rounded).abs() > 0.001 {
-                    slider.set_value(rounded);
-                    return;
-                }
-                let val = rounded as i8;
-                sound_widgets
-                    .bass
-                    .bass_slider
-                    .set_tooltip_text(Some(&crate::ui::sound_state::format_bass_level(val)));
-
-                if bass_slider_flag.is_updating() {
-                    return;
-                }
+            .connect_slider_changed(move |val| {
                 if let Some(source_id) = bass_debounce.borrow_mut().take() {
                     source_id.remove();
                 }
@@ -316,25 +270,13 @@ impl SoundController {
     }
 
     fn bind_hi_res_events(&self) {
-        let hires_switch_flag = self
-            .component
-            .sound_widgets
-            .enhancement
-            .hires_switch_flag
-            .clone();
         let context = self.context.clone();
         let sound_widgets = self.component.sound_widgets.clone();
 
         self.component
             .sound_widgets
             .enhancement
-            .hires_switch
-            .connect_state_set(move |switch, state| {
-                if hires_switch_flag.is_updating() {
-                    return gtk::glib::Propagation::Proceed;
-                }
-                switch.set_sensitive(false);
-
+            .connect_hires_toggled(move |state| {
                 let cmd = WorkerCommand::SetHiRes(state);
                 match context.send_command(cmd) {
                     Ok(()) => {}
@@ -342,35 +284,21 @@ impl SoundController {
                         context.send_status(crate::t!("hi-res-send-failed", error));
                         let cur = context.session_state.borrow().sound.hi_res_enabled;
                         if let Some(enabled) = cur {
-                            crate::ui::sound_state::update_sound_page_hi_res(
-                                &sound_widgets,
-                                enabled,
-                            );
+                            sound_widgets.enhancement.set_hires_enabled(enabled);
                         }
                     }
                 }
-                gtk::glib::Propagation::Stop
             });
     }
 
     fn bind_codec_events(&self) {
-        let codec_flag = self.component.sound_widgets.enhancement.codec_flag.clone();
         let context = self.context.clone();
         let sound_widgets = self.component.sound_widgets.clone();
 
         self.component
             .sound_widgets
             .enhancement
-            .codec_row
-            .connect_selected_notify(move |row| {
-                if codec_flag.is_updating() {
-                    return;
-                }
-                let Some(codec_idx) = crate::ui::components::ComboRowExtManual::selected_id(row)
-                else {
-                    return;
-                };
-
+            .connect_codec_selected(move |codec_idx| {
                 let is_dual_active = context
                     .session_state
                     .borrow()
@@ -381,10 +309,9 @@ impl SoundController {
                     codec_idx == crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8();
 
                 if is_ldac && is_dual_active {
-                    let row_for_dialog = row.clone();
-                    let codec_flag_clone = codec_flag.clone();
                     let context_clone = context.clone();
                     let current_codec = context.session_state.borrow().sound.current_audio_codec;
+                    let sound_widgets_clone = sound_widgets.clone();
 
                     let dialog = adw::AlertDialog::builder()
                         .heading(&crate::t!("dialog-reboot-required-title"))
@@ -394,39 +321,31 @@ impl SoundController {
                     dialog.add_response("confirm", &crate::t!("common-confirm"));
                     dialog.set_response_appearance("confirm", adw::ResponseAppearance::Suggested);
 
-                    let row_for_cb = row_for_dialog.clone();
                     dialog.choose(
-                        Some(&row_for_dialog),
+                        None::<&gtk::Widget>,
                         None::<&gtk::gio::Cancellable>,
                         move |response| {
                             if response == "confirm" {
                                 let _ = context_clone
                                     .send_command(WorkerCommand::SetAudioCodec(codec_idx));
                             } else {
-                                let _guard = codec_flag_clone.enter();
-                                crate::ui::components::ComboRowExtManual::set_selected_id(
-                                    &row_for_cb,
-                                    current_codec,
-                                );
+                                sound_widgets_clone
+                                    .enhancement
+                                    .set_selected_codec(current_codec);
                             }
                         },
                     );
                     return;
                 }
 
-                row.set_sensitive(false);
+                sound_widgets.enhancement.set_codec_sensitive(false);
                 let cmd = WorkerCommand::SetAudioCodec(codec_idx);
                 match context.send_command(cmd) {
                     Ok(()) => {}
                     Err(error) => {
                         context.send_status(crate::t!("audio-codec-send-failed", error));
                         let cur = context.session_state.borrow().sound.current_audio_codec;
-                        if let Some(c) = cur {
-                            crate::ui::sound_state::update_sound_page_audio_codec(
-                                &sound_widgets,
-                                c,
-                            );
-                        }
+                        sound_widgets.enhancement.set_selected_codec(cur);
                     }
                 }
             });
