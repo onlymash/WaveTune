@@ -20,4 +20,3 @@ pub(crate) mod controller;
 
 pub(crate) use component::SoundComponent;
 pub(crate) use controller::SoundController;
-

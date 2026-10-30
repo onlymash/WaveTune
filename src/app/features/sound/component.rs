@@ -129,9 +129,11 @@ impl SoundComponent {
             sound_state::update_sound_page_bass_level(&self.sound_widgets, level);
         }
         self.sound_widgets
+            .bass
             .bass_switch
             .set_sensitive(state.supports_bass_engine);
         self.sound_widgets
+            .bass
             .bass_switch_row
             .set_sensitive(state.supports_bass_engine);
     }
@@ -141,9 +143,11 @@ impl SoundComponent {
             sound_state::update_sound_page_hi_res(&self.sound_widgets, enabled);
         }
         self.sound_widgets
+            .enhancement
             .hires_switch
             .set_sensitive(state.supports_hi_res);
         self.sound_widgets
+            .enhancement
             .hires_switch_row
             .set_sensitive(state.supports_hi_res);
     }
@@ -153,6 +157,7 @@ impl SoundComponent {
             sound_state::update_sound_page_audio_codec(&self.sound_widgets, codec);
         }
         self.sound_widgets
+            .enhancement
             .codec_row
             .set_sensitive(state.supports_audio_codec);
     }

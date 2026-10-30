@@ -100,10 +100,10 @@ impl SoundController {
             });
 
         // 2. Sound page preset radios
-        for (preset_index, radio, _) in &self.component.sound_widgets.preset_radios {
+        for (preset_index, radio, _) in &self.component.sound_widgets.eq.preset_radios {
             let preset_index = *preset_index;
             let radio = radio.clone();
-            let sound_eq_flag = self.component.sound_widgets.eq_flag.clone();
+            let sound_eq_flag = self.component.sound_widgets.eq.flag.clone();
             let widgets_eq_row = self.component.home_widgets.eq_row.clone();
             let widgets_eq_flag = self.component.home_widgets.eq_flag.clone();
             let context = self.context.clone();
@@ -170,10 +170,10 @@ impl SoundController {
             });
 
         // 2. Sound page spatial radios
-        for (mode, radio, _) in &self.component.sound_widgets.spatial_radios {
+        for (mode, radio, _) in &self.component.sound_widgets.spatial.spatial_radios {
             let mode = *mode;
             let radio = radio.clone();
-            let sound_spatial_flag = self.component.sound_widgets.spatial_flag.clone();
+            let sound_spatial_flag = self.component.sound_widgets.spatial.flag.clone();
             let widgets_spatial_row = self.component.home_widgets.spatial_row.clone();
             let widgets_spatial_flag = self.component.home_widgets.spatial_flag.clone();
             let context = self.context.clone();
@@ -236,19 +236,20 @@ impl SoundController {
 
     fn bind_bass_events(&self) {
         // 1. Bass switch
-        let bass_switch_flag = self.component.sound_widgets.bass_switch_flag.clone();
+        let bass_switch_flag = self.component.sound_widgets.bass.bass_switch_flag.clone();
         let context = self.context.clone();
         let sound_widgets = self.component.sound_widgets.clone();
 
         self.component
             .sound_widgets
+            .bass
             .bass_switch
             .connect_state_set(move |switch, state| {
                 if bass_switch_flag.is_updating() {
                     return gtk::glib::Propagation::Proceed;
                 }
                 switch.set_sensitive(false);
-                sound_widgets.bass_slider.set_sensitive(false);
+                sound_widgets.bass.bass_slider.set_sensitive(false);
 
                 let cmd = WorkerCommand::SetBassEngineEnabled(state);
                 match context.send_command(cmd) {
@@ -270,13 +271,14 @@ impl SoundController {
             });
 
         // 2. Bass slider (debounced)
-        let bass_slider_flag = self.component.sound_widgets.bass_slider_flag.clone();
+        let bass_slider_flag = self.component.sound_widgets.bass.bass_slider_flag.clone();
         let bass_debounce = self.bass_debounce_source.clone();
         let context = self.context.clone();
         let sound_widgets = self.component.sound_widgets.clone();
 
         self.component
             .sound_widgets
+            .bass
             .bass_slider
             .connect_value_changed(move |slider| {
                 let rounded = slider.value().round();
@@ -286,6 +288,7 @@ impl SoundController {
                 }
                 let val = rounded as i8;
                 sound_widgets
+                    .bass
                     .bass_slider
                     .set_tooltip_text(Some(&crate::ui::sound_state::format_bass_level(val)));
 
@@ -313,12 +316,18 @@ impl SoundController {
     }
 
     fn bind_hi_res_events(&self) {
-        let hires_switch_flag = self.component.sound_widgets.hires_switch_flag.clone();
+        let hires_switch_flag = self
+            .component
+            .sound_widgets
+            .enhancement
+            .hires_switch_flag
+            .clone();
         let context = self.context.clone();
         let sound_widgets = self.component.sound_widgets.clone();
 
         self.component
             .sound_widgets
+            .enhancement
             .hires_switch
             .connect_state_set(move |switch, state| {
                 if hires_switch_flag.is_updating() {
@@ -345,12 +354,13 @@ impl SoundController {
     }
 
     fn bind_codec_events(&self) {
-        let codec_flag = self.component.sound_widgets.codec_flag.clone();
+        let codec_flag = self.component.sound_widgets.enhancement.codec_flag.clone();
         let context = self.context.clone();
         let sound_widgets = self.component.sound_widgets.clone();
 
         self.component
             .sound_widgets
+            .enhancement
             .codec_row
             .connect_selected_notify(move |row| {
                 if codec_flag.is_updating() {

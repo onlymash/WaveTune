@@ -20,4 +20,3 @@ pub(crate) mod controller;
 
 pub(crate) use component::ControlsComponent;
 pub(crate) use controller::ControlsController;
-

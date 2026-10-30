@@ -20,4 +20,3 @@ pub(crate) mod controller;
 
 pub(crate) use component::DeviceComponent;
 pub(crate) use controller::DeviceController;
-

@@ -20,4 +20,3 @@ pub(crate) mod controller;
 
 pub(crate) use component::NoiseComponent;
 pub(crate) use controller::NoiseController;
-
