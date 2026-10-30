@@ -35,22 +35,24 @@ use crate::{
         PairedDeviceAddress,
     },
     ui::home_state::{
-        merge_battery, merge_wear, reset_sound_controls, set_battery, update_equalizer,
-        update_equalizer_items, update_game_mode, update_noise_controls, update_sound_features,
-        update_spatial_audio, wear_part_name, widgets_ref,
+        HomeSoundFeaturesViewState, HomeSoundUpdateFlags, NoiseControlsViewState, merge_battery,
+        merge_wear, reset_sound_controls, set_battery, update_equalizer, update_equalizer_items,
+        update_game_mode, update_noise_controls, update_sound_features, update_spatial_audio,
+        wear_part_name, widgets_ref,
     },
     ui::{
         ConnectionStateWidgets, ControlsWidgets, DeviceWidgets, HomeWidgets, SoundWidgets,
         components::ComboRowExtManual,
-        controls_state,
+        controls_state::{self, ControlsFeaturesViewState},
         dialogs::{paired_device_icon_name, show_paired_device_dialog},
-        sound_state,
+        sound_state::{self, SoundPageFeaturesViewState, SoundPageUpdateFlags},
     },
 };
 
 use super::{
     dbus_service::{
-        QuickSettingsService, build_snapshot, is_non_off_writable_mode, resolve_toggle_target,
+        DesktopSnapshotInput, QuickSettingsService, build_snapshot, is_non_off_writable_mode,
+        resolve_toggle_target,
     },
     device_manager::{start_device_discovery, start_monitor_for_device},
     tray_service::TrayService,
@@ -80,18 +82,18 @@ fn sync_desktop_services(
         return;
     }
     let st = state.borrow();
-    let snap = build_snapshot(
-        st.connected,
-        &st.device_name,
-        st.noise_controls_enabled,
-        st.supports_wear_detection,
-        &st.wear,
-        &st.battery,
-        st.case_battery_stale,
-        st.current_noise_mode,
-        &st.supported_indices,
-        &st.modes,
-    );
+    let snap = build_snapshot(&DesktopSnapshotInput {
+        connected: st.connected,
+        device_name: &st.device_name,
+        noise_controls_enabled: st.noise_controls_enabled,
+        supports_wear_detection: st.supports_wear_detection,
+        wear: &st.wear,
+        battery: &st.battery,
+        case_battery_stale: st.case_battery_stale,
+        current_noise_mode: st.current_noise_mode,
+        supported_indices: &st.supported_indices,
+        modes: &st.modes,
+    });
     drop(st);
     if let Some(service) = quick_settings {
         service.update(snap.clone());
@@ -101,18 +103,49 @@ fn sync_desktop_services(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn wire_bluetooth_controls(
-    widgets: HomeWidgets,
-    sound_widgets: SoundWidgets,
-    controls_widgets: ControlsWidgets,
-    device_widgets: DeviceWidgets,
-    connection_state: ConnectionStateWidgets,
-    quick_settings: Option<Rc<QuickSettingsService>>,
-    tray: Option<Rc<TrayService>>,
-    present_window: crate::ui::PresentWindowFn,
-    quit_app: crate::ui::QuitAppFn,
-) {
+pub(crate) struct AppUiWidgets {
+    pub home: HomeWidgets,
+    pub sound: SoundWidgets,
+    pub controls: ControlsWidgets,
+    pub device: DeviceWidgets,
+    pub connection_state: ConnectionStateWidgets,
+}
+
+pub(crate) struct DesktopServices {
+    pub quick_settings: Option<Rc<QuickSettingsService>>,
+    pub tray: Option<Rc<TrayService>>,
+}
+
+pub(crate) struct AppActions {
+    pub present_window: crate::ui::PresentWindowFn,
+    pub quit_app: crate::ui::QuitAppFn,
+}
+
+pub(crate) struct AppControllerContext {
+    pub widgets: AppUiWidgets,
+    pub services: DesktopServices,
+    pub actions: AppActions,
+}
+
+pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
+    let AppControllerContext {
+        widgets:
+            AppUiWidgets {
+                home: widgets,
+                sound: sound_widgets,
+                controls: controls_widgets,
+                device: device_widgets,
+                connection_state,
+            },
+        services: DesktopServices {
+            quick_settings,
+            tray,
+        },
+        actions: AppActions {
+            present_window,
+            quit_app,
+        },
+    } = ctx;
     let (updates_tx, updates_rx) = mpsc::channel();
     let worker_commands: Rc<RefCell<Option<mpsc::Sender<WorkerCommand>>>> =
         Rc::new(RefCell::new(None));
@@ -1684,13 +1717,15 @@ pub(crate) fn wire_bluetooth_controls(
                         SettingDomain::NoiseMode => {
                             update_noise_controls(
                                 &widgets,
-                                &noise_mode_indices,
-                                &noise_mode_support_note,
-                                noise_controls_enabled && connected,
-                                supports_wear_detection,
-                                &wear,
-                                current_noise_mode,
-                                &noise_modes,
+                                &NoiseControlsViewState {
+                                    supported_indices: &noise_mode_indices,
+                                    support_note: &noise_mode_support_note,
+                                    capability_enabled: noise_controls_enabled && connected,
+                                    supports_wear_detection,
+                                    wear: &wear,
+                                    current_mode: current_noise_mode,
+                                    modes: &noise_modes,
+                                },
                                 &updating_noise_option_selector,
                             );
                         }
@@ -1830,18 +1865,22 @@ pub(crate) fn wire_bluetooth_controls(
                             *device_choices_for_updates.borrow_mut() = devices.clone();
 
                             render_candidate_devices(
-                                &widgets.device_list,
-                                &widgets.device_list_empty,
+                                &CandidateDeviceListWidgets {
+                                    list: &widgets.device_list,
+                                    empty_label: &widgets.device_list_empty,
+                                    popover: &widgets.device_popover,
+                                    connection_tag: &widgets.connection_tag,
+                                    device_name: &widgets.device_name,
+                                },
                                 &devices,
                                 connected_device_for_updates.borrow().as_ref(),
-                                &widgets.device_popover,
-                                &updates_tx_for_updates,
-                                &worker_commands_for_updates,
-                                &pending_connect_for_updates,
-                                &widgets.connection_tag,
-                                &widgets.device_name,
-                                &connected_device_for_updates,
-                                &auto_connect_pending_for_updates,
+                                &CandidateDeviceContext {
+                                    updates_tx: &updates_tx_for_updates,
+                                    worker_commands: &worker_commands_for_updates,
+                                    pending_connect: &pending_connect_for_updates,
+                                    active_connected_device: &connected_device_for_updates,
+                                    auto_connect_pending: &auto_connect_pending_for_updates,
+                                },
                             );
 
                             if connected_device_for_updates.borrow().is_none() {
@@ -1941,13 +1980,15 @@ pub(crate) fn wire_bluetooth_controls(
                     sync_desktop_services(&quick_settings, &tray, &qs_state);
                     update_noise_controls(
                         &widgets,
-                        &noise_mode_indices,
-                        &noise_mode_support_note,
-                        false,
-                        supports_wear_detection,
-                        &wear,
-                        None,
-                        &noise_modes,
+                        &NoiseControlsViewState {
+                            supported_indices: &noise_mode_indices,
+                            support_note: &noise_mode_support_note,
+                            capability_enabled: false,
+                            supports_wear_detection,
+                            wear: &wear,
+                            current_mode: None,
+                            modes: &noise_modes,
+                        },
                         &updating_noise_option_selector,
                     );
                     current_eq_preset.set(None);
@@ -1968,9 +2009,11 @@ pub(crate) fn wire_bluetooth_controls(
                     current_hi_res_enabled.set(None);
                     reset_sound_controls(
                         &widgets,
-                        &updating_eq_selector,
-                        &updating_spatial_selector,
-                        &updating_game_mode_switch,
+                        &HomeSoundUpdateFlags {
+                            updating_eq: &updating_eq_selector,
+                            updating_spatial: &updating_spatial_selector,
+                            updating_game_mode: &updating_game_mode_switch,
+                        },
                     );
                     sound_state::reset_sound_page(
                         &sound_widgets,
@@ -2006,18 +2049,22 @@ pub(crate) fn wire_bluetooth_controls(
                         .device_menu_button
                         .set_tooltip_text(Some(&device.name));
                     render_candidate_devices(
-                        &widgets.device_list,
-                        &widgets.device_list_empty,
+                        &CandidateDeviceListWidgets {
+                            list: &widgets.device_list,
+                            empty_label: &widgets.device_list_empty,
+                            popover: &widgets.device_popover,
+                            connection_tag: &widgets.connection_tag,
+                            device_name: &widgets.device_name,
+                        },
                         &device_choices_for_updates.borrow(),
                         Some(&device),
-                        &widgets.device_popover,
-                        &updates_tx_for_updates,
-                        &worker_commands_for_updates,
-                        &pending_connect_for_updates,
-                        &widgets.connection_tag,
-                        &widgets.device_name,
-                        &connected_device_for_updates,
-                        &auto_connect_pending_for_updates,
+                        &CandidateDeviceContext {
+                            updates_tx: &updates_tx_for_updates,
+                            worker_commands: &worker_commands_for_updates,
+                            pending_connect: &pending_connect_for_updates,
+                            active_connected_device: &connected_device_for_updates,
+                            auto_connect_pending: &auto_connect_pending_for_updates,
+                        },
                     );
                     device_widgets
                         .connection
@@ -2083,30 +2130,38 @@ pub(crate) fn wire_bluetooth_controls(
 
                     update_sound_features(
                         &widgets,
-                        supports_eq,
-                        supports_spatial,
-                        supports_head_track,
-                        supports_game,
-                        &presets,
-                        &current_custom_eqs.borrow(),
-                        &updating_eq_selector,
-                        &updating_spatial_selector,
-                        &updating_game_mode_switch,
+                        &HomeSoundFeaturesViewState {
+                            supports_equalizer: supports_eq,
+                            supports_spatial_audio: supports_spatial,
+                            supports_head_tracking: supports_head_track,
+                            supports_game_mode: supports_game,
+                            presets: &presets,
+                            custom_equalizers: &current_custom_eqs.borrow(),
+                        },
+                        &HomeSoundUpdateFlags {
+                            updating_eq: &updating_eq_selector,
+                            updating_spatial: &updating_spatial_selector,
+                            updating_game_mode: &updating_game_mode_switch,
+                        },
                     );
                     sound_state::update_sound_page_features(
                         &sound_widgets,
-                        supports_eq,
-                        supports_custom_eq,
-                        supports_spatial,
-                        supports_head_track,
-                        supports_bass,
-                        supports_hires,
-                        supports_codec,
-                        &available_codecs,
-                        &presets,
-                        &updating_sound_eq,
-                        &updating_sound_spatial,
-                        &updating_sound_codec,
+                        &SoundPageFeaturesViewState {
+                            supports_equalizer: supports_eq,
+                            supports_custom_equalizer: supports_custom_eq,
+                            supports_spatial_audio: supports_spatial,
+                            supports_head_tracking: supports_head_track,
+                            supports_bass_engine: supports_bass,
+                            supports_hi_res: supports_hires,
+                            supports_audio_codec: supports_codec,
+                            available_codecs: &available_codecs,
+                            presets: &presets,
+                        },
+                        &SoundPageUpdateFlags {
+                            updating_eq: &updating_sound_eq,
+                            updating_spatial: &updating_sound_spatial,
+                            updating_codec: &updating_sound_codec,
+                        },
                     );
                     device_widgets
                         .product_id
@@ -2213,13 +2268,15 @@ pub(crate) fn wire_bluetooth_controls(
                     }
                     update_noise_controls(
                         &widgets,
-                        &noise_mode_indices,
-                        &noise_mode_support_note,
-                        noise_controls_enabled && connected,
-                        supports_wear_detection,
-                        &wear,
-                        current_noise_mode,
-                        &noise_modes,
+                        &NoiseControlsViewState {
+                            supported_indices: &noise_mode_indices,
+                            support_note: &noise_mode_support_note,
+                            capability_enabled: noise_controls_enabled && connected,
+                            supports_wear_detection,
+                            wear: &wear,
+                            current_mode: current_noise_mode,
+                            modes: &noise_modes,
+                        },
                         &updating_noise_option_selector,
                     );
                     qs_state.borrow_mut().wear = wear.clone();
@@ -2299,13 +2356,15 @@ pub(crate) fn wire_bluetooth_controls(
                     }
                     update_noise_controls(
                         &widgets,
-                        &noise_mode_indices,
-                        &noise_mode_support_note,
-                        noise_controls_enabled && connected,
-                        supports_wear_detection,
-                        &wear,
-                        current_noise_mode,
-                        &noise_modes,
+                        &NoiseControlsViewState {
+                            supported_indices: &noise_mode_indices,
+                            support_note: &noise_mode_support_note,
+                            capability_enabled: noise_controls_enabled && connected,
+                            supports_wear_detection,
+                            wear: &wear,
+                            current_mode: current_noise_mode,
+                            modes: &noise_modes,
+                        },
                         &updating_noise_option_selector,
                     );
                     {
@@ -2322,13 +2381,15 @@ pub(crate) fn wire_bluetooth_controls(
                     noise_controls_enabled = enabled;
                     update_noise_controls(
                         &widgets,
-                        &noise_mode_indices,
-                        &noise_mode_support_note,
-                        noise_controls_enabled && connected,
-                        supports_wear_detection,
-                        &wear,
-                        current_noise_mode,
-                        &noise_modes,
+                        &NoiseControlsViewState {
+                            supported_indices: &noise_mode_indices,
+                            support_note: &noise_mode_support_note,
+                            capability_enabled: noise_controls_enabled && connected,
+                            supports_wear_detection,
+                            wear: &wear,
+                            current_mode: current_noise_mode,
+                            modes: &noise_modes,
+                        },
                         &updating_noise_option_selector,
                     );
                     qs_state.borrow_mut().noise_controls_enabled = enabled && connected;
@@ -2344,13 +2405,15 @@ pub(crate) fn wire_bluetooth_controls(
                     noise_modes = modes;
                     update_noise_controls(
                         &widgets,
-                        &noise_mode_indices,
-                        &noise_mode_support_note,
-                        noise_controls_enabled && connected,
-                        supports_wear_detection,
-                        &wear,
-                        current_noise_mode,
-                        &noise_modes,
+                        &NoiseControlsViewState {
+                            supported_indices: &noise_mode_indices,
+                            support_note: &noise_mode_support_note,
+                            capability_enabled: noise_controls_enabled && connected,
+                            supports_wear_detection,
+                            wear: &wear,
+                            current_mode: current_noise_mode,
+                            modes: &noise_modes,
+                        },
                         &updating_noise_option_selector,
                     );
                     {
@@ -2388,30 +2451,38 @@ pub(crate) fn wire_bluetooth_controls(
                     *current_eq_presets.borrow_mut() = presets.clone();
                     update_sound_features(
                         &widgets,
-                        supports_equalizer,
-                        supports_spatial_audio,
-                        supports_head_tracking,
-                        supports_game_mode,
-                        &presets,
-                        &current_custom_eqs.borrow(),
-                        &updating_eq_selector,
-                        &updating_spatial_selector,
-                        &updating_game_mode_switch,
+                        &HomeSoundFeaturesViewState {
+                            supports_equalizer,
+                            supports_spatial_audio,
+                            supports_head_tracking,
+                            supports_game_mode,
+                            presets: &presets,
+                            custom_equalizers: &current_custom_eqs.borrow(),
+                        },
+                        &HomeSoundUpdateFlags {
+                            updating_eq: &updating_eq_selector,
+                            updating_spatial: &updating_spatial_selector,
+                            updating_game_mode: &updating_game_mode_switch,
+                        },
                     );
                     sound_state::update_sound_page_features(
                         &sound_widgets,
-                        supports_equalizer,
-                        supports_custom_equalizer,
-                        supports_spatial_audio,
-                        supports_head_tracking,
-                        supports_bass_engine,
-                        supports_hi_res,
-                        supports_audio_codec,
-                        &available_codecs,
-                        &presets,
-                        &updating_sound_eq,
-                        &updating_sound_spatial,
-                        &updating_sound_codec,
+                        &SoundPageFeaturesViewState {
+                            supports_equalizer,
+                            supports_custom_equalizer,
+                            supports_spatial_audio,
+                            supports_head_tracking,
+                            supports_bass_engine,
+                            supports_hi_res,
+                            supports_audio_codec,
+                            available_codecs: &available_codecs,
+                            presets: &presets,
+                        },
+                        &SoundPageUpdateFlags {
+                            updating_eq: &updating_sound_eq,
+                            updating_spatial: &updating_sound_spatial,
+                            updating_codec: &updating_sound_codec,
+                        },
                     );
                 }
                 Ok(UiUpdate::Equalizer(preset)) => {
@@ -2629,15 +2700,17 @@ pub(crate) fn wire_bluetooth_controls(
                     *current_gesture_rows.borrow_mut() = gesture_rows.clone();
                     controls_state::update_controls_features(
                         &controls_widgets,
-                        supports_touch_customization,
-                        supports_dual_device,
-                        supports_wear_detection,
-                        supports_sleep_detection,
-                        supports_head_motion,
-                        supports_find_device,
-                        supports_fit_detection,
-                        supports_prompt_volume,
-                        &gesture_rows,
+                        &ControlsFeaturesViewState {
+                            supports_touch: supports_touch_customization,
+                            supports_dual: supports_dual_device,
+                            supports_wear: supports_wear_detection,
+                            supports_sleep: supports_sleep_detection,
+                            supports_head: supports_head_motion,
+                            supports_find: supports_find_device,
+                            supports_fit: supports_fit_detection,
+                            supports_volume: supports_prompt_volume,
+                            gesture_rows: &gesture_rows,
+                        },
                     );
                 }
                 Ok(UiUpdate::KeyFunctions(functions)) => {
@@ -2789,13 +2862,15 @@ pub(crate) fn wire_bluetooth_controls(
                     supports_wear_detection = true;
                     update_noise_controls(
                         &widgets,
-                        &noise_mode_indices,
-                        &noise_mode_support_note,
-                        false,
-                        supports_wear_detection,
-                        &wear,
-                        current_noise_mode,
-                        &noise_modes,
+                        &NoiseControlsViewState {
+                            supported_indices: &noise_mode_indices,
+                            support_note: &noise_mode_support_note,
+                            capability_enabled: false,
+                            supports_wear_detection,
+                            wear: &wear,
+                            current_mode: current_noise_mode,
+                            modes: &noise_modes,
+                        },
                         &updating_noise_option_selector,
                     );
                     current_eq_preset.set(None);
@@ -2815,9 +2890,11 @@ pub(crate) fn wire_bluetooth_controls(
                     current_hi_res_enabled.set(None);
                     reset_sound_controls(
                         &widgets,
-                        &updating_eq_selector,
-                        &updating_spatial_selector,
-                        &updating_game_mode_switch,
+                        &HomeSoundUpdateFlags {
+                            updating_eq: &updating_eq_selector,
+                            updating_spatial: &updating_spatial_selector,
+                            updating_game_mode: &updating_game_mode_switch,
+                        },
                     );
                     sound_state::reset_sound_page(
                         &sound_widgets,
@@ -2878,18 +2955,22 @@ pub(crate) fn wire_bluetooth_controls(
                         .device_menu_button
                         .set_tooltip_text(Some(&crate::t!("device-title")));
                     render_candidate_devices(
-                        &widgets.device_list,
-                        &widgets.device_list_empty,
+                        &CandidateDeviceListWidgets {
+                            list: &widgets.device_list,
+                            empty_label: &widgets.device_list_empty,
+                            popover: &widgets.device_popover,
+                            connection_tag: &widgets.connection_tag,
+                            device_name: &widgets.device_name,
+                        },
                         &device_choices_for_updates.borrow(),
                         None,
-                        &widgets.device_popover,
-                        &updates_tx_for_updates,
-                        &worker_commands_for_updates,
-                        &pending_connect_for_updates,
-                        &widgets.connection_tag,
-                        &widgets.device_name,
-                        &connected_device_for_updates,
-                        &auto_connect_pending_for_updates,
+                        &CandidateDeviceContext {
+                            updates_tx: &updates_tx_for_updates,
+                            worker_commands: &worker_commands_for_updates,
+                            pending_connect: &pending_connect_for_updates,
+                            active_connected_device: &connected_device_for_updates,
+                            auto_connect_pending: &auto_connect_pending_for_updates,
+                        },
                     );
                 }
                 Err(TryRecvError::Empty) => break,
@@ -2902,32 +2983,40 @@ pub(crate) fn wire_bluetooth_controls(
     });
 }
 
+struct CandidateDeviceListWidgets<'a> {
+    list: &'a gtk::ListBox,
+    empty_label: &'a Label,
+    popover: &'a gtk::Popover,
+    connection_tag: &'a Label,
+    device_name: &'a Label,
+}
+
+struct CandidateDeviceContext<'a> {
+    updates_tx: &'a mpsc::Sender<UiUpdate>,
+    worker_commands: &'a Rc<RefCell<Option<mpsc::Sender<WorkerCommand>>>>,
+    pending_connect: &'a Rc<RefCell<Option<bluetooth::DeviceChoice>>>,
+    active_connected_device: &'a Rc<RefCell<Option<bluetooth::DeviceChoice>>>,
+    auto_connect_pending: &'a Rc<Cell<bool>>,
+}
+
 fn render_candidate_devices(
-    device_list: &gtk::ListBox,
-    empty_label: &Label,
+    widgets: &CandidateDeviceListWidgets,
     devices: &[bluetooth::DeviceChoice],
     connected_device: Option<&bluetooth::DeviceChoice>,
-    popover: &gtk::Popover,
-    updates_tx: &mpsc::Sender<UiUpdate>,
-    worker_commands: &Rc<RefCell<Option<mpsc::Sender<WorkerCommand>>>>,
-    pending_connect: &Rc<RefCell<Option<bluetooth::DeviceChoice>>>,
-    connection_tag: &Label,
-    device_name: &Label,
-    active_connected_device: &Rc<RefCell<Option<bluetooth::DeviceChoice>>>,
-    auto_connect_pending: &Rc<Cell<bool>>,
+    ctx: &CandidateDeviceContext,
 ) {
-    while let Some(child) = device_list.first_child() {
-        device_list.remove(&child);
+    while let Some(child) = widgets.list.first_child() {
+        widgets.list.remove(&child);
     }
 
     if devices.is_empty() {
-        empty_label.set_visible(true);
-        device_list.set_visible(false);
+        widgets.empty_label.set_visible(true);
+        widgets.list.set_visible(false);
         return;
     }
 
-    empty_label.set_visible(false);
-    device_list.set_visible(true);
+    widgets.empty_label.set_visible(false);
+    widgets.list.set_visible(true);
 
     for (index, device) in devices.iter().enumerate() {
         let duplicate_name = devices
@@ -2967,14 +3056,14 @@ fn render_candidate_devices(
         }
 
         let dev = device.clone();
-        let pop = popover.clone();
-        let tx = updates_tx.clone();
-        let cmds = Rc::clone(worker_commands);
-        let pending = Rc::clone(pending_connect);
-        let tag = connection_tag.clone();
-        let name_lbl = device_name.clone();
-        let active_conn = Rc::clone(active_connected_device);
-        let auto_pending = Rc::clone(auto_connect_pending);
+        let pop = widgets.popover.clone();
+        let tx = ctx.updates_tx.clone();
+        let cmds = Rc::clone(ctx.worker_commands);
+        let pending = Rc::clone(ctx.pending_connect);
+        let tag = widgets.connection_tag.clone();
+        let name_lbl = widgets.device_name.clone();
+        let active_conn = Rc::clone(ctx.active_connected_device);
+        let auto_pending = Rc::clone(ctx.auto_connect_pending);
 
         row.connect_activated(move |_| {
             pop.popdown();
@@ -3009,7 +3098,7 @@ fn render_candidate_devices(
             }
         });
 
-        device_list.append(&row);
+        widgets.list.append(&row);
     }
 }
 

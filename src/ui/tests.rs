@@ -104,13 +104,15 @@ fn noise_control_circular_buttons_and_combobox_row() {
     // 1. Off mode (index 0): no submodes, noise_option_row remains hidden, mode_group is visible
     crate::ui::home_state::update_noise_controls(
         &widget_refs,
-        &supported_indices,
-        "",
-        true,
-        true,
-        &wear,
-        Some(0),
-        modes,
+        &crate::ui::home_state::NoiseControlsViewState {
+            supported_indices: &supported_indices,
+            support_note: "",
+            capability_enabled: true,
+            supports_wear_detection: true,
+            wear: &wear,
+            current_mode: Some(0),
+            modes,
+        },
         &updating_noise,
     );
     assert!(widget_refs.mode_group.is_visible());
@@ -127,13 +129,15 @@ fn noise_control_circular_buttons_and_combobox_row() {
     // primary button 1 should be suggested-action, and noise_option_row visible with active index 7
     crate::ui::home_state::update_noise_controls(
         &widget_refs,
-        &supported_indices,
-        "",
-        true,
-        true,
-        &wear,
-        Some(7),
-        modes,
+        &crate::ui::home_state::NoiseControlsViewState {
+            supported_indices: &supported_indices,
+            support_note: "",
+            capability_enabled: true,
+            supports_wear_detection: true,
+            wear: &wear,
+            current_mode: Some(7),
+            modes,
+        },
         &updating_noise,
     );
     assert!(widget_refs.noise_option_row.is_visible());
@@ -154,13 +158,15 @@ fn noise_control_circular_buttons_and_combobox_row() {
     // 3. Unsupported headset (empty noise modes): mode_group card must be hidden
     crate::ui::home_state::update_noise_controls(
         &widget_refs,
-        &[],
-        "",
-        false,
-        false,
-        &wear,
-        None,
-        &[],
+        &crate::ui::home_state::NoiseControlsViewState {
+            supported_indices: &[],
+            support_note: "",
+            capability_enabled: false,
+            supports_wear_detection: false,
+            wear: &wear,
+            current_mode: None,
+            modes: &[],
+        },
         &updating_noise,
     );
     assert!(!widget_refs.mode_group.is_visible());
@@ -344,18 +350,22 @@ fn ui_components_layout_and_behavior() {
     // Initial update with Dynaudio presets & all sound features enabled
     crate::ui::sound_state::update_sound_page_features(
         &sound_widgets,
-        true,
-        true, // supports_custom_equalizer
-        true,
-        true,
-        true,
-        true,
-        false,
-        &[],
-        crate::compatibility::DYNAUDIO_EQ_PRESETS,
-        &updating_eq,
-        &updating_spatial,
-        &updating_codec,
+        &crate::ui::sound_state::SoundPageFeaturesViewState {
+            supports_equalizer: true,
+            supports_custom_equalizer: true,
+            supports_spatial_audio: true,
+            supports_head_tracking: true,
+            supports_bass_engine: true,
+            supports_hi_res: true,
+            supports_audio_codec: false,
+            available_codecs: &[],
+            presets: crate::compatibility::DYNAUDIO_EQ_PRESETS,
+        },
+        &crate::ui::sound_state::SoundPageUpdateFlags {
+            updating_eq: &updating_eq,
+            updating_spatial: &updating_spatial,
+            updating_codec: &updating_codec,
+        },
     );
     assert!(sound_widgets.eq_card.is_visible());
     assert!(sound_widgets.spatial_card.is_visible());
@@ -442,18 +452,22 @@ fn ui_components_layout_and_behavior() {
     // Standard presets filter without custom EQ (e.g. Enco X3)
     crate::ui::sound_state::update_sound_page_features(
         &sound_widgets,
-        true,
-        false, // supports_custom_equalizer unsupported
-        true,
-        false, // head tracking unsupported
-        false, // bass engine unsupported
-        false, // hi-res unsupported
-        false, // supports_audio_codec
-        &[],
-        crate::compatibility::STANDARD_EQ_PRESETS,
-        &updating_eq,
-        &updating_spatial,
-        &updating_codec,
+        &crate::ui::sound_state::SoundPageFeaturesViewState {
+            supports_equalizer: true,
+            supports_custom_equalizer: false,
+            supports_spatial_audio: true,
+            supports_head_tracking: false,
+            supports_bass_engine: false,
+            supports_hi_res: false,
+            supports_audio_codec: false,
+            available_codecs: &[],
+            presets: crate::compatibility::STANDARD_EQ_PRESETS,
+        },
+        &crate::ui::sound_state::SoundPageUpdateFlags {
+            updating_eq: &updating_eq,
+            updating_spatial: &updating_spatial,
+            updating_codec: &updating_codec,
+        },
     );
     assert!(sound_widgets.eq_card.is_visible());
     assert!(sound_widgets.spatial_card.is_visible());
@@ -508,18 +522,22 @@ fn ui_components_layout_and_behavior() {
     // Enable sound features with custom EQ for custom EQ tests
     crate::ui::sound_state::update_sound_page_features(
         &sound_widgets,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        false,
-        &[],
-        crate::compatibility::DYNAUDIO_EQ_PRESETS,
-        &updating_eq,
-        &updating_spatial,
-        &updating_codec,
+        &crate::ui::sound_state::SoundPageFeaturesViewState {
+            supports_equalizer: true,
+            supports_custom_equalizer: true,
+            supports_spatial_audio: true,
+            supports_head_tracking: true,
+            supports_bass_engine: true,
+            supports_hi_res: true,
+            supports_audio_codec: false,
+            available_codecs: &[],
+            presets: crate::compatibility::DYNAUDIO_EQ_PRESETS,
+        },
+        &crate::ui::sound_state::SoundPageUpdateFlags {
+            updating_eq: &updating_eq,
+            updating_spatial: &updating_spatial,
+            updating_codec: &updating_codec,
+        },
     );
 
     // Custom Equalizers tests: dynamic row insertion, selection, menu, and max cap
@@ -642,18 +660,22 @@ fn ui_components_layout_and_behavior() {
     ];
     crate::ui::sound_state::update_sound_page_features(
         &sound_widgets,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true, // supports_audio_codec
-        available_codecs,
-        crate::compatibility::DYNAUDIO_EQ_PRESETS,
-        &updating_eq,
-        &updating_spatial,
-        &updating_codec,
+        &crate::ui::sound_state::SoundPageFeaturesViewState {
+            supports_equalizer: true,
+            supports_custom_equalizer: true,
+            supports_spatial_audio: true,
+            supports_head_tracking: true,
+            supports_bass_engine: true,
+            supports_hi_res: true,
+            supports_audio_codec: true,
+            available_codecs,
+            presets: crate::compatibility::DYNAUDIO_EQ_PRESETS,
+        },
+        &crate::ui::sound_state::SoundPageUpdateFlags {
+            updating_eq: &updating_eq,
+            updating_spatial: &updating_spatial,
+            updating_codec: &updating_codec,
+        },
     );
     assert!(sound_widgets.enhancement_card.is_visible());
     assert!(sound_widgets.codec_row.is_visible());

@@ -22,41 +22,58 @@ use adw::prelude::*;
 use super::SoundWidgets;
 use crate::{compatibility::EqualizerPreset, protocol::BassEngineLevel};
 
+#[derive(Clone, Copy)]
+pub(crate) struct SoundPageFeaturesViewState<'a> {
+    pub supports_equalizer: bool,
+    pub supports_custom_equalizer: bool,
+    pub supports_spatial_audio: bool,
+    pub supports_head_tracking: bool,
+    pub supports_bass_engine: bool,
+    pub supports_hi_res: bool,
+    pub supports_audio_codec: bool,
+    pub available_codecs: &'a [u8],
+    pub presets: &'a [EqualizerPreset],
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct SoundPageUpdateFlags<'a> {
+    pub updating_eq: &'a Cell<bool>,
+    pub updating_spatial: &'a Cell<bool>,
+    pub updating_codec: &'a Cell<bool>,
+}
+
 pub(crate) fn update_sound_page_features(
     sound_widgets: &SoundWidgets,
-    supports_equalizer: bool,
-    supports_custom_equalizer: bool,
-    supports_spatial_audio: bool,
-    supports_head_tracking: bool,
-    supports_bass_engine: bool,
-    supports_hi_res: bool,
-    supports_audio_codec: bool,
-    available_codecs: &[u8],
-    presets: &[EqualizerPreset],
-    updating_eq: &Cell<bool>,
-    updating_spatial: &Cell<bool>,
-    updating_codec: &Cell<bool>,
+    state: &SoundPageFeaturesViewState,
+    flags: &SoundPageUpdateFlags,
 ) {
-    sound_widgets.eq_card.set_visible(supports_equalizer);
+    sound_widgets.eq_card.set_visible(state.supports_equalizer);
     sound_widgets
         .spatial_card
-        .set_visible(supports_spatial_audio);
+        .set_visible(state.supports_spatial_audio);
+    sound_widgets.enhancement_card.set_visible(
+        state.supports_hi_res || state.supports_bass_engine || state.supports_audio_codec,
+    );
     sound_widgets
-        .enhancement_card
-        .set_visible(supports_hi_res || supports_bass_engine || supports_audio_codec);
-    sound_widgets.hires_switch_row.set_visible(supports_hi_res);
+        .hires_switch_row
+        .set_visible(state.supports_hi_res);
     sound_widgets
         .bass_switch_row
-        .set_visible(supports_bass_engine);
+        .set_visible(state.supports_bass_engine);
     sound_widgets
         .bass_slider_row
-        .set_visible(supports_bass_engine);
+        .set_visible(state.supports_bass_engine);
 
-    sound_widgets.codec_row.set_visible(supports_audio_codec);
-    sound_widgets.codec_row.set_sensitive(supports_audio_codec);
-    if supports_audio_codec {
-        updating_codec.set(true);
-        let items: Vec<(u8, String)> = available_codecs
+    sound_widgets
+        .codec_row
+        .set_visible(state.supports_audio_codec);
+    sound_widgets
+        .codec_row
+        .set_sensitive(state.supports_audio_codec);
+    if state.supports_audio_codec {
+        flags.updating_codec.set(true);
+        let items: Vec<(u8, String)> = state
+            .available_codecs
             .iter()
             .map(|&c| {
                 let name = match crate::protocol::brands::earfun::EarFunAudioCodec::from_u8(c) {
@@ -67,57 +84,60 @@ pub(crate) fn update_sound_page_features(
             })
             .collect();
         crate::ui::components::ComboRowExtManual::set_items(&sound_widgets.codec_row, &items);
-        updating_codec.set(false);
+        flags.updating_codec.set(false);
     }
 
-    updating_eq.set(true);
+    flags.updating_eq.set(true);
     for (idx, radio, row) in &sound_widgets.preset_radios {
-        if let Some(matching) = presets.iter().find(|p| p.index == *idx) {
+        if let Some(matching) = state.presets.iter().find(|p| p.index == *idx) {
             row.set_visible(true);
             row.set_title(&crate::t!(matching.key));
-            radio.set_sensitive(supports_equalizer);
+            radio.set_sensitive(state.supports_equalizer);
         } else {
             row.set_visible(false);
             radio.set_sensitive(false);
         }
     }
-    updating_eq.set(false);
+    flags.updating_eq.set(false);
     let custom_count = sound_widgets.custom_equalizers.borrow().len();
-    let can_add_custom = supports_equalizer && supports_custom_equalizer && custom_count < 3;
+    let can_add_custom =
+        state.supports_equalizer && state.supports_custom_equalizer && custom_count < 3;
     sound_widgets.add_custom_row.set_visible(can_add_custom);
     sound_widgets.add_custom_row.set_sensitive(can_add_custom);
-    if !supports_custom_equalizer {
+    if !state.supports_custom_equalizer {
         sound_widgets.custom_list.set_visible(false);
         sound_widgets.custom_editor.set_visible(false);
     }
 
-    updating_spatial.set(true);
+    flags.updating_spatial.set(true);
     for (mode, radio, row) in &sound_widgets.spatial_radios {
         match *mode {
             0 | 1 => {
                 row.set_visible(true);
-                radio.set_sensitive(supports_spatial_audio);
+                radio.set_sensitive(state.supports_spatial_audio);
             }
             2 => {
-                row.set_visible(supports_head_tracking);
-                radio.set_sensitive(supports_spatial_audio && supports_head_tracking);
+                row.set_visible(state.supports_head_tracking);
+                radio.set_sensitive(state.supports_spatial_audio && state.supports_head_tracking);
             }
             _ => {}
         }
     }
-    updating_spatial.set(false);
+    flags.updating_spatial.set(false);
 
     sound_widgets
         .bass_switch
-        .set_sensitive(supports_bass_engine);
+        .set_sensitive(state.supports_bass_engine);
     sound_widgets
         .bass_switch_row
-        .set_sensitive(supports_bass_engine);
+        .set_sensitive(state.supports_bass_engine);
 
-    sound_widgets.hires_switch.set_sensitive(supports_hi_res);
+    sound_widgets
+        .hires_switch
+        .set_sensitive(state.supports_hi_res);
     sound_widgets
         .hires_switch_row
-        .set_sensitive(supports_hi_res);
+        .set_sensitive(state.supports_hi_res);
 }
 
 pub(crate) fn update_sound_page_equalizer(

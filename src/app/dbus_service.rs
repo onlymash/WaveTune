@@ -213,30 +213,32 @@ fn format_active_mode_label(current_mode: Option<u8>, modes: &[NoiseMode]) -> St
     mode_text
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn build_snapshot(
-    connected: bool,
-    device_name: &str,
-    noise_controls_enabled: bool,
-    supports_wear_detection: bool,
-    wear: &WearState,
-    battery: &BatteryState,
-    case_battery_stale: bool,
-    current_noise_mode: Option<u8>,
-    supported_indices: &[u8],
-    modes: &[NoiseMode],
-) -> QuickSettingsSnapshot {
-    if !connected {
+#[derive(Clone, Copy)]
+pub(crate) struct DesktopSnapshotInput<'a> {
+    pub connected: bool,
+    pub device_name: &'a str,
+    pub noise_controls_enabled: bool,
+    pub supports_wear_detection: bool,
+    pub wear: &'a WearState,
+    pub battery: &'a BatteryState,
+    pub case_battery_stale: bool,
+    pub current_noise_mode: Option<u8>,
+    pub supported_indices: &'a [u8],
+    pub modes: &'a [NoiseMode],
+}
+
+pub(crate) fn build_snapshot(input: &DesktopSnapshotInput) -> QuickSettingsSnapshot {
+    if !input.connected {
         return QuickSettingsSnapshot::default();
     }
 
-    let worn = !supports_wear_detection || wear.any_earbud_in_ear();
+    let worn = !input.supports_wear_detection || input.wear.any_earbud_in_ear();
     let mut primary_modes = Vec::new();
     for index in compatibility::catalog_noise_indices() {
-        if let Some(mode) = compatibility::noise_mode_for(modes, index)
+        if let Some(mode) = compatibility::noise_mode_for(input.modes, index)
             && mode.parent.is_none()
-            && compatibility::noise_mode_supported_for(index, supported_indices, modes)
-            && noise_mode_write_payload_for(index, modes).is_some()
+            && compatibility::noise_mode_supported_for(index, input.supported_indices, input.modes)
+            && noise_mode_write_payload_for(index, input.modes).is_some()
         {
             let label = crate::t!(mode.kind.as_str());
             let icon = noise_mode_icon_name(mode.kind).to_string();
@@ -244,12 +246,12 @@ pub(crate) fn build_snapshot(
         }
     }
 
-    let controls_enabled = noise_controls_enabled && worn && !primary_modes.is_empty();
+    let controls_enabled = input.noise_controls_enabled && worn && !primary_modes.is_empty();
     let status_hint = if controls_enabled {
         String::new()
-    } else if modes.is_empty() && current_noise_mode.is_none() {
+    } else if input.modes.is_empty() && input.current_noise_mode.is_none() {
         crate::t!("qs-syncing")
-    } else if !noise_controls_enabled || primary_modes.is_empty() {
+    } else if !input.noise_controls_enabled || primary_modes.is_empty() {
         crate::t!("qs-unavailable")
     } else if !worn {
         crate::t!("qs-not-worn")
@@ -257,34 +259,40 @@ pub(crate) fn build_snapshot(
         String::new()
     };
 
-    let current_group =
-        current_noise_mode.and_then(|idx| compatibility::noise_mode_group_for(modes, idx));
+    let current_group = input
+        .current_noise_mode
+        .and_then(|idx| compatibility::noise_mode_group_for(input.modes, idx));
     let active_group_index = current_group.map(i32::from).unwrap_or(-1);
-    let active_mode_index = current_noise_mode.map(i32::from).unwrap_or(-1);
-    let active_mode_label = format_active_mode_label(current_noise_mode, modes);
+    let active_mode_index = input.current_noise_mode.map(i32::from).unwrap_or(-1);
+    let active_mode_label = format_active_mode_label(input.current_noise_mode, input.modes);
     let active_mode_icon = current_group
-        .and_then(|grp| compatibility::noise_mode_for(modes, grp))
+        .and_then(|grp| compatibility::noise_mode_for(input.modes, grp))
         .map(|mode| noise_mode_icon_name(mode.kind))
         .unwrap_or("audio-headphones-symbolic")
         .to_string();
 
     let noise_control_active = current_group
-        .and_then(|grp| compatibility::noise_mode_for(modes, grp))
+        .and_then(|grp| compatibility::noise_mode_for(input.modes, grp))
         .is_some_and(|m| m.kind != NoiseModeKind::Off);
 
     let mut sub_modes = Vec::new();
     let mut sub_modes_title = String::new();
     if let Some(group) = current_group {
-        let visible_submodes: Vec<_> = modes
+        let visible_submodes: Vec<_> = input
+            .modes
             .iter()
             .filter(|mode| {
                 mode.parent == Some(group)
-                    && compatibility::noise_mode_supported_for(mode.index, supported_indices, modes)
-                    && noise_mode_write_payload_for(mode.index, modes).is_some()
+                    && compatibility::noise_mode_supported_for(
+                        mode.index,
+                        input.supported_indices,
+                        input.modes,
+                    )
+                    && noise_mode_write_payload_for(mode.index, input.modes).is_some()
             })
             .collect();
         if visible_submodes.len() > 1 {
-            sub_modes_title = noise_options_title_for(group, modes);
+            sub_modes_title = noise_options_title_for(group, input.modes);
             sub_modes = visible_submodes
                 .into_iter()
                 .map(|m| (i32::from(m.index), crate::t!(m.kind.as_str())))
@@ -298,13 +306,13 @@ pub(crate) fn build_snapshot(
             None => (-1, false),
         }
     };
-    let (l_pct, l_chg) = pack_part(battery.left, false);
-    let (r_pct, r_chg) = pack_part(battery.right, false);
-    let (c_pct, c_chg) = pack_part(battery.case, case_battery_stale);
+    let (l_pct, l_chg) = pack_part(input.battery.left, false);
+    let (r_pct, r_chg) = pack_part(input.battery.right, false);
+    let (c_pct, c_chg) = pack_part(input.battery.case, input.case_battery_stale);
 
     QuickSettingsSnapshot {
         connected: true,
-        device_name: device_name.to_string(),
+        device_name: input.device_name.to_string(),
         controls_enabled,
         status_hint,
         active_group_index,
@@ -316,7 +324,7 @@ pub(crate) fn build_snapshot(
         sub_modes_title,
         sub_modes,
         battery: (l_pct, l_chg, r_pct, r_chg, c_pct, c_chg),
-        battery_summary: format_battery_summary(battery, case_battery_stale),
+        battery_summary: format_battery_summary(input.battery, input.case_battery_stale),
         open_app_label: crate::t!("qs-open-app"),
     }
 }
@@ -587,18 +595,19 @@ mod tests {
         };
 
         // Worn + Deep ANC (index 4, group 1)
-        let snap = build_snapshot(
-            true,
-            "OPPO Enco X4",
-            true,
-            true,
-            &sample_wear(true),
-            &battery,
-            false,
-            Some(4),
-            &supported,
+        let worn_wear = sample_wear(true);
+        let snap = build_snapshot(&DesktopSnapshotInput {
+            connected: true,
+            device_name: "OPPO Enco X4",
+            noise_controls_enabled: true,
+            supports_wear_detection: true,
+            wear: &worn_wear,
+            battery: &battery,
+            case_battery_stale: false,
+            current_noise_mode: Some(4),
+            supported_indices: &supported,
             modes,
-        );
+        });
         assert!(snap.connected);
         assert_eq!(snap.device_name, "OPPO Enco X4");
         assert!(snap.controls_enabled);
@@ -614,35 +623,36 @@ mod tests {
         assert_eq!(snap.battery_summary, "左耳 80% · 右耳 75%⚡");
 
         // Adaptive + Standard (index 13, group 11) combines group and submode label
-        let adaptive_snap = build_snapshot(
-            true,
-            "OPPO Enco X4",
-            true,
-            true,
-            &sample_wear(true),
-            &battery,
-            false,
-            Some(13),
-            &supported,
+        let adaptive_snap = build_snapshot(&DesktopSnapshotInput {
+            connected: true,
+            device_name: "OPPO Enco X4",
+            noise_controls_enabled: true,
+            supports_wear_detection: true,
+            wear: &worn_wear,
+            battery: &battery,
+            case_battery_stale: false,
+            current_noise_mode: Some(13),
+            supported_indices: &supported,
             modes,
-        );
+        });
         assert_eq!(adaptive_snap.active_mode_label, "自适应 · 标准");
         assert_eq!(adaptive_snap.active_mode_icon, "starred-symbolic");
         assert!(adaptive_snap.noise_control_active);
 
         // Out-of-ear disables controls and sets status_hint
-        let unworn_snap = build_snapshot(
-            true,
-            "OPPO Enco X4",
-            true,
-            true,
-            &sample_wear(false),
-            &battery,
-            false,
-            Some(3),
-            &supported,
+        let unworn_wear = sample_wear(false);
+        let unworn_snap = build_snapshot(&DesktopSnapshotInput {
+            connected: true,
+            device_name: "OPPO Enco X4",
+            noise_controls_enabled: true,
+            supports_wear_detection: true,
+            wear: &unworn_wear,
+            battery: &battery,
+            case_battery_stale: false,
+            current_noise_mode: Some(3),
+            supported_indices: &supported,
             modes,
-        );
+        });
         assert!(!unworn_snap.controls_enabled);
         assert_eq!(unworn_snap.status_hint, "未佩戴");
         assert!(!unworn_snap.noise_control_active);

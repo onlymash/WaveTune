@@ -28,55 +28,60 @@ use crate::{
     ui::components::ComboRowExtManual,
 };
 
+#[derive(Clone, Copy)]
+pub(crate) struct ControlsFeaturesViewState<'a> {
+    pub supports_touch: bool,
+    pub supports_dual: bool,
+    pub supports_wear: bool,
+    pub supports_sleep: bool,
+    pub supports_head: bool,
+    pub supports_find: bool,
+    pub supports_fit: bool,
+    pub supports_volume: bool,
+    pub gesture_rows: &'a [GestureRow],
+}
+
 pub(crate) fn update_controls_features(
     widgets: &ControlsWidgets,
-    supports_touch: bool,
-    supports_dual: bool,
-    supports_wear: bool,
-    supports_sleep: bool,
-    supports_head: bool,
-    supports_find: bool,
-    supports_fit: bool,
-    supports_volume: bool,
-    gesture_rows: &[GestureRow],
+    state: &ControlsFeaturesViewState,
 ) {
     widgets
         .gesture_group
-        .set_visible(supports_touch && !gesture_rows.is_empty());
+        .set_visible(state.supports_touch && !state.gesture_rows.is_empty());
     widgets
         .call_gesture_group
-        .set_visible(supports_touch && gesture_rows.iter().any(|r| r.is_call_control));
-    widgets.ear_selector.set_visible(supports_touch);
+        .set_visible(state.supports_touch && state.gesture_rows.iter().any(|r| r.is_call_control));
+    widgets.ear_selector.set_visible(state.supports_touch);
 
-    widgets
-        .features_group
-        .set_visible(supports_dual || supports_wear || supports_sleep || supports_volume);
-    widgets.dual_row.set_visible(supports_dual);
-    widgets.dual_switch.set_sensitive(supports_dual);
-    widgets.dual_row.set_sensitive(supports_dual);
+    widgets.features_group.set_visible(
+        state.supports_dual || state.supports_wear || state.supports_sleep || state.supports_volume,
+    );
+    widgets.dual_row.set_visible(state.supports_dual);
+    widgets.dual_switch.set_sensitive(state.supports_dual);
+    widgets.dual_row.set_sensitive(state.supports_dual);
 
-    widgets.preferred_row.set_visible(supports_dual);
-    widgets.preferred_row.set_sensitive(supports_dual);
+    widgets.preferred_row.set_visible(state.supports_dual);
+    widgets.preferred_row.set_sensitive(state.supports_dual);
 
-    widgets.in_ear_row.set_visible(supports_wear);
-    widgets.in_ear_switch.set_sensitive(supports_wear);
-    widgets.in_ear_row.set_sensitive(supports_wear);
+    widgets.in_ear_row.set_visible(state.supports_wear);
+    widgets.in_ear_switch.set_sensitive(state.supports_wear);
+    widgets.in_ear_row.set_sensitive(state.supports_wear);
 
-    widgets.sleep_row.set_visible(supports_sleep);
-    widgets.sleep_switch.set_sensitive(supports_sleep);
-    widgets.sleep_row.set_sensitive(supports_sleep);
+    widgets.sleep_row.set_visible(state.supports_sleep);
+    widgets.sleep_switch.set_sensitive(state.supports_sleep);
+    widgets.sleep_row.set_sensitive(state.supports_sleep);
 
-    widgets.prompt_volume_row.set_visible(supports_volume);
+    widgets.prompt_volume_row.set_visible(state.supports_volume);
 
-    widgets.head_group.set_visible(supports_head);
-    widgets.head_switch.set_sensitive(supports_head);
-    widgets.head_switch_row.set_sensitive(supports_head);
+    widgets.head_group.set_visible(state.supports_head);
+    widgets.head_switch.set_sensitive(state.supports_head);
+    widgets.head_switch_row.set_sensitive(state.supports_head);
 
     widgets
         .utility_group
-        .set_visible(supports_find || supports_fit);
-    widgets.find_card.set_visible(supports_find);
-    widgets.fit_card.set_visible(supports_fit);
+        .set_visible(state.supports_find || state.supports_fit);
+    widgets.find_card.set_visible(state.supports_find);
+    widgets.fit_card.set_visible(state.supports_fit);
 }
 
 pub(crate) fn update_key_functions(

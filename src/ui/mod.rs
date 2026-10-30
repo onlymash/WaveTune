@@ -372,17 +372,23 @@ pub fn build(
         }
     });
 
-    crate::app::controller::wire_bluetooth_controls(
-        widgets,
-        sound_widgets,
-        controls_widgets,
-        device_widgets,
-        connection_state,
-        quick_settings,
-        tray,
-        present_window,
-        quit_app,
-    );
+    crate::app::controller::wire_bluetooth_controls(crate::app::controller::AppControllerContext {
+        widgets: crate::app::controller::AppUiWidgets {
+            home: widgets,
+            sound: sound_widgets,
+            controls: controls_widgets,
+            device: device_widgets,
+            connection_state,
+        },
+        services: crate::app::controller::DesktopServices {
+            quick_settings,
+            tray,
+        },
+        actions: crate::app::controller::AppActions {
+            present_window,
+            quit_app,
+        },
+    });
 
     window
 }

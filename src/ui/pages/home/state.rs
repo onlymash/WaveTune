@@ -358,24 +358,30 @@ fn refresh_noise_controls(
     updating_noise_option.set(false);
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct NoiseControlsViewState<'a> {
+    pub supported_indices: &'a [u8],
+    #[allow(dead_code)]
+    pub support_note: &'a str,
+    pub capability_enabled: bool,
+    pub supports_wear_detection: bool,
+    pub wear: &'a crate::protocol::WearState,
+    pub current_mode: Option<u8>,
+    pub modes: &'a [compatibility::NoiseMode],
+}
+
 pub(crate) fn update_noise_controls(
     widgets: &HomeWidgetRefs,
-    supported_indices: &[u8],
-    _support_note: &str,
-    capability_enabled: bool,
-    supports_wear_detection: bool,
-    wear: &crate::protocol::WearState,
-    current_mode: Option<u8>,
-    modes: &[compatibility::NoiseMode],
+    state: &NoiseControlsViewState,
     updating_noise_option: &std::cell::Cell<bool>,
 ) {
-    let worn = !supports_wear_detection || wear.any_earbud_in_ear();
+    let worn = !state.supports_wear_detection || state.wear.any_earbud_in_ear();
     refresh_noise_controls(
         widgets,
-        supported_indices,
-        capability_enabled && worn,
-        current_mode,
-        modes,
+        state.supported_indices,
+        state.capability_enabled && worn,
+        state.current_mode,
+        state.modes,
         updating_noise_option,
     );
 }
@@ -469,37 +475,50 @@ pub(crate) fn update_equalizer_items(
     updating_eq.set(false);
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct HomeSoundFeaturesViewState<'a> {
+    pub supports_equalizer: bool,
+    pub supports_spatial_audio: bool,
+    pub supports_head_tracking: bool,
+    pub supports_game_mode: bool,
+    pub presets: &'a [EqualizerPreset],
+    pub custom_equalizers: &'a [CustomEqualizer],
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct HomeSoundUpdateFlags<'a> {
+    pub updating_eq: &'a std::cell::Cell<bool>,
+    pub updating_spatial: &'a std::cell::Cell<bool>,
+    pub updating_game_mode: &'a std::cell::Cell<bool>,
+}
+
 pub(crate) fn update_sound_features(
     widgets: &HomeWidgetRefs,
-    supports_equalizer: bool,
-    supports_spatial_audio: bool,
-    supports_head_tracking: bool,
-    supports_game_mode: bool,
-    presets: &[EqualizerPreset],
-    custom_equalizers: &[CustomEqualizer],
-    updating_eq: &std::cell::Cell<bool>,
-    updating_spatial: &std::cell::Cell<bool>,
-    updating_game_mode: &std::cell::Cell<bool>,
+    state: &HomeSoundFeaturesViewState,
+    flags: &HomeSoundUpdateFlags,
 ) {
-    let any_supported = supports_equalizer || supports_spatial_audio || supports_game_mode;
+    let any_supported =
+        state.supports_equalizer || state.supports_spatial_audio || state.supports_game_mode;
     widgets.sound_card_section.set_visible(any_supported);
 
     update_equalizer_items(
         widgets,
-        supports_equalizer,
-        presets,
-        custom_equalizers,
+        state.supports_equalizer,
+        state.presets,
+        state.custom_equalizers,
         None,
-        updating_eq,
+        flags.updating_eq,
     );
 
-    widgets.spatial_row.set_visible(supports_spatial_audio);
-    updating_spatial.set(true);
+    widgets
+        .spatial_row
+        .set_visible(state.supports_spatial_audio);
+    flags.updating_spatial.set(true);
     let prev_spatial = widgets.spatial_row.selected_id();
     widgets.spatial_row.clear_items();
     let supported_modes = compatibility::spatial_audio_modes_for_profile(
-        supports_spatial_audio,
-        supports_head_tracking,
+        state.supports_spatial_audio,
+        state.supports_head_tracking,
     );
     let spatial_items: Vec<(u8, String)> = supported_modes
         .iter()
@@ -511,16 +530,18 @@ pub(crate) fn update_sound_features(
     }
     widgets
         .spatial_row
-        .set_sensitive(supports_spatial_audio && !supported_modes.is_empty());
-    updating_spatial.set(false);
+        .set_sensitive(state.supports_spatial_audio && !supported_modes.is_empty());
+    flags.updating_spatial.set(false);
 
-    widgets.game_mode_section.set_visible(supports_game_mode);
-    if !supports_game_mode {
-        updating_game_mode.set(true);
+    widgets
+        .game_mode_section
+        .set_visible(state.supports_game_mode);
+    if !state.supports_game_mode {
+        flags.updating_game_mode.set(true);
         widgets.game_mode_switch.set_state(false);
         widgets.game_mode_switch.set_active(false);
         widgets.game_mode_switch.set_sensitive(false);
-        updating_game_mode.set(false);
+        flags.updating_game_mode.set(false);
     }
 }
 
@@ -562,29 +583,24 @@ pub(crate) fn update_game_mode(
     updating_switch.set(false);
 }
 
-pub(crate) fn reset_sound_controls(
-    widgets: &HomeWidgetRefs,
-    updating_eq: &std::cell::Cell<bool>,
-    updating_spatial: &std::cell::Cell<bool>,
-    updating_game_mode: &std::cell::Cell<bool>,
-) {
+pub(crate) fn reset_sound_controls(widgets: &HomeWidgetRefs, flags: &HomeSoundUpdateFlags) {
     widgets.sound_card_section.set_visible(true);
     widgets.eq_row.set_visible(true);
     widgets.spatial_row.set_visible(true);
     widgets.game_mode_section.set_visible(true);
-    updating_eq.set(true);
+    flags.updating_eq.set(true);
     widgets.eq_row.clear_items();
     widgets.eq_row.set_sensitive(false);
-    updating_eq.set(false);
+    flags.updating_eq.set(false);
 
-    updating_spatial.set(true);
+    flags.updating_spatial.set(true);
     widgets.spatial_row.clear_items();
     widgets.spatial_row.set_sensitive(false);
-    updating_spatial.set(false);
+    flags.updating_spatial.set(false);
 
-    updating_game_mode.set(true);
+    flags.updating_game_mode.set(true);
     widgets.game_mode_switch.set_state(false);
     widgets.game_mode_switch.set_active(false);
     widgets.game_mode_switch.set_sensitive(false);
-    updating_game_mode.set(false);
+    flags.updating_game_mode.set(false);
 }
