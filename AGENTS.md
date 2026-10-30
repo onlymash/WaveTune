@@ -170,6 +170,11 @@ or details about other paired devices.
 - Never add real device identifiers or locally observed battery/status values as application
   defaults or fixtures unless they are anonymized test data.
 
+## Logging and internationalization
+
+- Console log messages, probe output, and diagnostic prints via `println!`, `eprintln!`, or `tracing` must use plain English and do NOT need internationalization (`crate::t!`).
+- Only user-facing text displayed in the GTK/Libadwaita UI (dialogs, labels, settings, status notifications, etc.) requires internationalization through Fluent translation files (`locales/`).
+
 ## Documentation and change expectations
 
 - Update `docs/OPPO_BLUETOOTH_API.md` when protocol facts or confidence levels change.

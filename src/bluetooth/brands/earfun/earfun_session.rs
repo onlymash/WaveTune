@@ -1369,28 +1369,16 @@ fn print_earfun_snapshot(snapshot: &EarFunDeviceSnapshot) {
     );
 
     if let Some(game) = snapshot.game_mode_enabled {
-        let state_str = if game {
-            crate::t!("common-on")
-        } else {
-            crate::t!("common-off")
-        };
-        println!("{}", crate::t!("probe-game-mode", state_str));
+        println!("Game Mode: {}", if game { "On" } else { "Off" });
     }
     if let Some(dual) = snapshot.dual_device_enabled {
-        let state_str = if dual {
-            crate::t!("common-on")
-        } else {
-            crate::t!("common-off")
-        };
-        println!("{}", crate::t!("probe-dual-device", state_str));
+        println!(
+            "Dual-Device Connection: {}",
+            if dual { "On" } else { "Off" }
+        );
     }
     if let Some(in_ear) = snapshot.in_ear_detection_enabled {
-        let state_str = if in_ear {
-            crate::t!("common-on")
-        } else {
-            crate::t!("common-off")
-        };
-        println!("{}", crate::t!("probe-in-ear-detection", state_str));
+        println!("In-Ear Detection: {}", if in_ear { "On" } else { "Off" });
     }
 
     if snapshot.supports_equalizer {
@@ -1399,31 +1387,31 @@ fn print_earfun_snapshot(snapshot: &EarFunDeviceSnapshot) {
             let preset_name = crate::compatibility::equalizer_preset_key(preset, presets)
                 .map(|key| crate::t!(key))
                 .unwrap_or_else(|| preset.to_string());
-            println!("{}", crate::t!("probe-headset-eq", preset_name));
+            println!("Headset Equalizer Preset: {preset_name}");
         } else {
-            println!("{}", crate::t!("equalizer-not-returned"));
+            println!("Equalizer preset: Not returned");
         }
     }
 
     if snapshot.supports_paired_devices {
         match &snapshot.paired_devices {
             Ok(devices) => {
-                println!("{}", crate::t!("probe-paired-devices", devices.len()));
+                println!("Paired Devices: {}", devices.len());
                 for dev in devices {
                     let host_tag = if dev.is_current_host {
-                        format!(" ({})", crate::t!("dual-device-this-host"))
+                        " (This Device)"
                     } else {
-                        String::new()
+                        ""
                     };
                     let status_str = if dev.connected {
-                        crate::t!("common-connected")
+                        "Connected"
                     } else {
-                        crate::t!("common-disconnected")
+                        "Disconnected"
                     };
                     println!("  - {}{host_tag} [{status_str}]", dev.name);
                 }
             }
-            Err(e) => println!("{}", crate::t!("probe-paired-devices-failed", e)),
+            Err(e) => println!("Failed to query paired devices: {e}"),
         }
     }
 }
