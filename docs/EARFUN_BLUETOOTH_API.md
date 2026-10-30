@@ -190,8 +190,9 @@ When Master Mode is `2` (Transparency):
 ### 4.6 Graphic Equalizer (10-Band vs 6-Band)
 EarFun headsets support hardware equalization using Qualcomm GAIA V3 non-standard extensions (`Vendor ID = 0x001D`).
 
-- **Command**: `0x0E01` (Set Band Gain)
-- **Response**: `0x0F81 [01]`
+- **Write Command**: `0x0E01` (Set Band Gain)
+- **Response**: `0x0F81 [01]` (ACK returned for each band written)
+- **Query Command (`0x0E02`) Status**: **Not Supported (`COMMAND_NOT_SUPPORTED`)**
 - **Gain Encoding**:
   - GAIA uses a factor of 60 for 1 dB. EarFun maps $\pm 6 \text{ dB}$ over a slider scale of $\pm 10$.
   - Formula: $\text{gain\_raw} = \text{round}(\text{gain\_val} \times 60 \times 0.6) = \text{round}(\text{gain\_val} \times 36)$.
@@ -203,6 +204,19 @@ EarFun headsets support hardware equalization using Qualcomm GAIA V3 non-standar
   Byte 5..6: Gain (16-bit signed Big-Endian)
   Byte 7..8: Q-Factor (16-bit Big-Endian)
   ```
+
+#### Write-Only Characteristics & Architecture Differences
+1. **No Hardware Preset Concept**:
+   - Unlike OPPO/OnePlus headsets which feature a firmware-level preset manager queried via `0x010F` (`CMD_GET_EQUALIZER`), EarFun headsets operate at the raw Qualcomm Kymera DSP PEQ (Parametric Equalizer) filter layer.
+   - The headset firmware does not know what "Classic" or "Bass Boost" is; it only receives and stores raw DSP filter coefficients.
+2. **Query Attempt (`0x0E02`) Rejected**:
+   - Live probing with `0x0E02` (`REQUEST_RESPONSE_EQUALIZER_CONFIG`) across multiple payload variants (empty, band ID `0xA1`, `0x00`, `0x01`) consistently triggers the GAIA error frame:
+     `FF 03 00 01 00 1D 0F 82 01` (`0x0F82` is `0x0E02 | 0x0180` error flag, payload `0x01` = `STATUS_NOT_SUPPORTED`).
+   - The headset does not provide a mechanism to read back active PEQ coefficients from the DSP registers.
+3. **Client-Side State Tracking & Persistence**:
+   - Both the official EarFun companion app and Gadgetbridge maintain preset definitions and active preset states entirely within client-side local storage (`SharedPreferences` in Android).
+   - In WaveTune, the selected preset is persisted in `~/.config/wavetune/settings.ini` under an anonymous device key derived from the SHA-256 hash of the device MAC (`[Device_{PID}_{SHA256(MAC)[..12]}]`). This guarantees uniqueness across multiple headsets of the same model without persisting or exposing raw Bluetooth addresses.
+   - On session establishment, WaveTune checks if a non-default preset was previously active and automatically synchronizes the 10-band DSP parameters to the earbud, ensuring consistent audio reproduction even after headset power cycles.
 
 #### 10-Band Models (EarFun Air Pro 4 & Free Pro 3):
 | Band | Band ID | Frequency (Hz) | Q-Factor |
@@ -295,5 +309,11 @@ RFCOMM Connection to Channel 11: SUCCESS
 
 [TX] Codec Query:       FF 04 00 00 00 0A 03 2F
 [RX] Codec Response:    FF 03 00 02 00 0A 83 2F 00 13  (aptX Lossless)
+
+[TX] Set 10-Band EQ:    FF 04 00 09 00 1D 0E 01 A1 FF 98 00 5E 01 20 0B 33 ... (10 frames)
+[RX] 10-Band EQ ACKs:   FF 03 00 01 00 1D 0F 81 01 (x10 ACKs received)
+
+[TX] Query EQ (0x0E02): FF 04 00 00 00 1D 0E 02
+[RX] Query Rejected:    FF 03 00 01 00 1D 0F 82 01 (Error 0x0F82, STATUS_NOT_SUPPORTED)
 ```
 
