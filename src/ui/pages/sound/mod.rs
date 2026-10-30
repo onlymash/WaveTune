@@ -56,6 +56,12 @@ pub(crate) struct SoundWidgets {
     pub(crate) spatial_card: adw::PreferencesGroup,
     pub(crate) spatial_list: ListBox,
     pub(crate) spatial_radios: Vec<(u8, CheckButton, adw::ActionRow)>,
+    pub(crate) eq_flag: crate::ui::ReentrancyFlag,
+    pub(crate) spatial_flag: crate::ui::ReentrancyFlag,
+    pub(crate) bass_switch_flag: crate::ui::ReentrancyFlag,
+    pub(crate) bass_slider_flag: crate::ui::ReentrancyFlag,
+    pub(crate) hires_switch_flag: crate::ui::ReentrancyFlag,
+    pub(crate) codec_flag: crate::ui::ReentrancyFlag,
 }
 
 pub(crate) fn build_sound_page() -> (GtkBox, SoundWidgets) {
@@ -280,6 +286,12 @@ pub(crate) fn build_sound_page() -> (GtkBox, SoundWidgets) {
             spatial_card,
             spatial_list,
             spatial_radios,
+            eq_flag: crate::ui::ReentrancyFlag::new(),
+            spatial_flag: crate::ui::ReentrancyFlag::new(),
+            bass_switch_flag: crate::ui::ReentrancyFlag::new(),
+            bass_slider_flag: crate::ui::ReentrancyFlag::new(),
+            hires_switch_flag: crate::ui::ReentrancyFlag::new(),
+            codec_flag: crate::ui::ReentrancyFlag::new(),
         },
     )
 }

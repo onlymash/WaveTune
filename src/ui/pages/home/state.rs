@@ -82,6 +82,10 @@ pub(crate) struct HomeWidgetRefs {
     pub(crate) spatial_row: adw::ComboRow,
     pub(crate) game_mode_section: adw::ActionRow,
     pub(crate) game_mode_switch: Switch,
+    pub(crate) noise_option_flag: crate::ui::ReentrancyFlag,
+    pub(crate) eq_flag: crate::ui::ReentrancyFlag,
+    pub(crate) spatial_flag: crate::ui::ReentrancyFlag,
+    pub(crate) game_mode_flag: crate::ui::ReentrancyFlag,
 }
 
 pub(crate) fn widgets_ref(widgets: &HomeWidgets) -> HomeWidgetRefs {
@@ -115,6 +119,10 @@ pub(crate) fn widgets_ref(widgets: &HomeWidgets) -> HomeWidgetRefs {
         spatial_row: widgets.spatial_row.clone(),
         game_mode_section: widgets.game_mode_section.clone(),
         game_mode_switch: widgets.game_mode_switch.clone(),
+        noise_option_flag: widgets.noise_option_flag.clone(),
+        eq_flag: widgets.eq_flag.clone(),
+        spatial_flag: widgets.spatial_flag.clone(),
+        game_mode_flag: widgets.game_mode_flag.clone(),
     }
 }
 
@@ -274,7 +282,6 @@ fn refresh_noise_controls(
     enabled: bool,
     current_mode: Option<u8>,
     modes: &[compatibility::NoiseMode],
-    updating_noise_option: &std::cell::Cell<bool>,
 ) {
     let current_group =
         current_mode.and_then(|index| compatibility::noise_mode_group_for(modes, index));
@@ -328,7 +335,7 @@ fn refresh_noise_controls(
     });
     let has_active_subgroup = visible_submodes.len() > 1;
 
-    updating_noise_option.set(true);
+    let _guard = widgets.noise_option_flag.enter();
     let prev_active = current_mode;
     widgets.noise_option_row.clear_items();
 
@@ -355,7 +362,6 @@ fn refresh_noise_controls(
         widgets.noise_option_row.set_visible(false);
         widgets.noise_option_row.set_sensitive(false);
     }
-    updating_noise_option.set(false);
 }
 
 #[derive(Clone, Copy)]
@@ -370,11 +376,7 @@ pub(crate) struct NoiseControlsViewState<'a> {
     pub modes: &'a [compatibility::NoiseMode],
 }
 
-pub(crate) fn update_noise_controls(
-    widgets: &HomeWidgetRefs,
-    state: &NoiseControlsViewState,
-    updating_noise_option: &std::cell::Cell<bool>,
-) {
+pub(crate) fn update_noise_controls(widgets: &HomeWidgetRefs, state: &NoiseControlsViewState) {
     let worn = !state.supports_wear_detection || state.wear.any_earbud_in_ear();
     refresh_noise_controls(
         widgets,
@@ -382,7 +384,6 @@ pub(crate) fn update_noise_controls(
         state.capability_enabled && worn,
         state.current_mode,
         state.modes,
-        updating_noise_option,
     );
 }
 
@@ -452,10 +453,9 @@ pub(crate) fn update_equalizer_items(
     presets: &[EqualizerPreset],
     custom_equalizers: &[CustomEqualizer],
     selected_id: Option<u8>,
-    updating_eq: &std::cell::Cell<bool>,
 ) {
     widgets.eq_row.set_visible(supports_equalizer);
-    updating_eq.set(true);
+    let _guard = widgets.eq_flag.enter();
     let prev_eq = selected_id.or_else(|| widgets.eq_row.selected_id());
     widgets.eq_row.clear_items();
     let mut eq_items: Vec<(u8, String)> = presets
@@ -472,7 +472,6 @@ pub(crate) fn update_equalizer_items(
     widgets
         .eq_row
         .set_sensitive(supports_equalizer && !eq_items.is_empty());
-    updating_eq.set(false);
 }
 
 #[derive(Clone, Copy)]
@@ -485,18 +484,7 @@ pub(crate) struct HomeSoundFeaturesViewState<'a> {
     pub custom_equalizers: &'a [CustomEqualizer],
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct HomeSoundUpdateFlags<'a> {
-    pub updating_eq: &'a std::cell::Cell<bool>,
-    pub updating_spatial: &'a std::cell::Cell<bool>,
-    pub updating_game_mode: &'a std::cell::Cell<bool>,
-}
-
-pub(crate) fn update_sound_features(
-    widgets: &HomeWidgetRefs,
-    state: &HomeSoundFeaturesViewState,
-    flags: &HomeSoundUpdateFlags,
-) {
+pub(crate) fn update_sound_features(widgets: &HomeWidgetRefs, state: &HomeSoundFeaturesViewState) {
     let any_supported =
         state.supports_equalizer || state.supports_spatial_audio || state.supports_game_mode;
     widgets.sound_card_section.set_visible(any_supported);
@@ -507,70 +495,55 @@ pub(crate) fn update_sound_features(
         state.presets,
         state.custom_equalizers,
         None,
-        flags.updating_eq,
     );
 
     widgets
         .spatial_row
         .set_visible(state.supports_spatial_audio);
-    flags.updating_spatial.set(true);
-    let prev_spatial = widgets.spatial_row.selected_id();
-    widgets.spatial_row.clear_items();
-    let supported_modes = compatibility::spatial_audio_modes_for_profile(
-        state.supports_spatial_audio,
-        state.supports_head_tracking,
-    );
-    let spatial_items: Vec<(u8, String)> = supported_modes
-        .iter()
-        .map(|(mode, label)| (*mode, crate::t!(*label)))
-        .collect();
-    widgets.spatial_row.set_items(&spatial_items);
-    if let Some(id) = prev_spatial {
-        widgets.spatial_row.set_selected_id(Some(id));
+    {
+        let _guard = widgets.spatial_flag.enter();
+        let prev_spatial = widgets.spatial_row.selected_id();
+        widgets.spatial_row.clear_items();
+        let supported_modes = compatibility::spatial_audio_modes_for_profile(
+            state.supports_spatial_audio,
+            state.supports_head_tracking,
+        );
+        let spatial_items: Vec<(u8, String)> = supported_modes
+            .iter()
+            .map(|(mode, label)| (*mode, crate::t!(*label)))
+            .collect();
+        widgets.spatial_row.set_items(&spatial_items);
+        if let Some(id) = prev_spatial {
+            widgets.spatial_row.set_selected_id(Some(id));
+        }
+        widgets
+            .spatial_row
+            .set_sensitive(state.supports_spatial_audio && !supported_modes.is_empty());
     }
-    widgets
-        .spatial_row
-        .set_sensitive(state.supports_spatial_audio && !supported_modes.is_empty());
-    flags.updating_spatial.set(false);
 
     widgets
         .game_mode_section
         .set_visible(state.supports_game_mode);
     if !state.supports_game_mode {
-        flags.updating_game_mode.set(true);
+        let _guard = widgets.game_mode_flag.enter();
         widgets.game_mode_switch.set_state(false);
         widgets.game_mode_switch.set_active(false);
         widgets.game_mode_switch.set_sensitive(false);
-        flags.updating_game_mode.set(false);
     }
 }
 
-pub(crate) fn update_equalizer(
-    widgets: &HomeWidgetRefs,
-    current_preset: Option<u8>,
-    updating_eq: &std::cell::Cell<bool>,
-) {
-    updating_eq.set(true);
+pub(crate) fn update_equalizer(widgets: &HomeWidgetRefs, current_preset: Option<u8>) {
+    let _guard = widgets.eq_flag.enter();
     widgets.eq_row.set_selected_id(current_preset);
-    updating_eq.set(false);
 }
 
-pub(crate) fn update_spatial_audio(
-    widgets: &HomeWidgetRefs,
-    current_mode: Option<u8>,
-    updating_spatial: &std::cell::Cell<bool>,
-) {
-    updating_spatial.set(true);
+pub(crate) fn update_spatial_audio(widgets: &HomeWidgetRefs, current_mode: Option<u8>) {
+    let _guard = widgets.spatial_flag.enter();
     widgets.spatial_row.set_selected_id(current_mode);
-    updating_spatial.set(false);
 }
 
-pub(crate) fn update_game_mode(
-    widgets: &HomeWidgetRefs,
-    enabled: Option<bool>,
-    updating_switch: &std::cell::Cell<bool>,
-) {
-    updating_switch.set(true);
+pub(crate) fn update_game_mode(widgets: &HomeWidgetRefs, enabled: Option<bool>) {
+    let _guard = widgets.game_mode_flag.enter();
     if let Some(enabled) = enabled {
         widgets.game_mode_switch.set_state(enabled);
         widgets.game_mode_switch.set_active(enabled);
@@ -580,27 +553,29 @@ pub(crate) fn update_game_mode(
         widgets.game_mode_switch.set_active(false);
         widgets.game_mode_switch.set_sensitive(false);
     }
-    updating_switch.set(false);
 }
 
-pub(crate) fn reset_sound_controls(widgets: &HomeWidgetRefs, flags: &HomeSoundUpdateFlags) {
+pub(crate) fn reset_sound_controls(widgets: &HomeWidgetRefs) {
     widgets.sound_card_section.set_visible(true);
     widgets.eq_row.set_visible(true);
     widgets.spatial_row.set_visible(true);
     widgets.game_mode_section.set_visible(true);
-    flags.updating_eq.set(true);
-    widgets.eq_row.clear_items();
-    widgets.eq_row.set_sensitive(false);
-    flags.updating_eq.set(false);
+    {
+        let _guard = widgets.eq_flag.enter();
+        widgets.eq_row.clear_items();
+        widgets.eq_row.set_sensitive(false);
+    }
 
-    flags.updating_spatial.set(true);
-    widgets.spatial_row.clear_items();
-    widgets.spatial_row.set_sensitive(false);
-    flags.updating_spatial.set(false);
+    {
+        let _guard = widgets.spatial_flag.enter();
+        widgets.spatial_row.clear_items();
+        widgets.spatial_row.set_sensitive(false);
+    }
 
-    flags.updating_game_mode.set(true);
-    widgets.game_mode_switch.set_state(false);
-    widgets.game_mode_switch.set_active(false);
-    widgets.game_mode_switch.set_sensitive(false);
-    flags.updating_game_mode.set(false);
+    {
+        let _guard = widgets.game_mode_flag.enter();
+        widgets.game_mode_switch.set_state(false);
+        widgets.game_mode_switch.set_active(false);
+        widgets.game_mode_switch.set_sensitive(false);
+    }
 }

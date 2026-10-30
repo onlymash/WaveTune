@@ -16,7 +16,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use adw::prelude::*;
-use std::cell::Cell;
 
 use super::ControlsWidgets;
 use crate::{
@@ -90,6 +89,7 @@ pub(crate) fn update_key_functions(
     selected_ear: EarSide,
     gesture_rows: &[GestureRow],
 ) {
+    let _guard = widgets.gesture_combos_flag.enter();
     for (row_def, combo) in &widgets.gesture_combos {
         let current_func = key_functions
             .iter()
@@ -131,9 +131,8 @@ pub(crate) fn update_noise_cycle(
     widgets: &ControlsWidgets,
     cycle: NoiseCycleState,
     selected_ear: EarSide,
-    updating_flag: &Cell<bool>,
 ) {
-    updating_flag.set(true);
+    let _guard = widgets.noise_cycle_flag.enter();
     let mask = if selected_ear == EarSide::Right {
         cycle.right_mask
     } else {
@@ -146,7 +145,6 @@ pub(crate) fn update_noise_cycle(
         .cycle_check_transparency
         .set_active((mask & (1 << 2)) != 0);
     widgets.cycle_check_off.set_active((mask & (1 << 0)) != 0);
-    updating_flag.set(false);
 }
 
 pub(crate) fn update_finding_earbuds(widgets: &ControlsWidgets, finding: bool) {
@@ -204,36 +202,25 @@ pub(crate) fn update_fit_test_result(widgets: &ControlsWidgets, result: FitTestR
     widgets.fit_result_label.set_text(&text);
 }
 
-pub(crate) fn update_prompt_volume(
-    widgets: &ControlsWidgets,
-    volume: u8,
-    updating_flag: &Cell<bool>,
-) {
-    updating_flag.set(true);
+pub(crate) fn update_prompt_volume(widgets: &ControlsWidgets, volume: u8) {
+    let _guard = widgets.prompt_volume_flag.enter();
     widgets.prompt_volume_scale.set_value(volume as f64);
     widgets.prompt_volume_label.set_text(&volume.to_string());
     widgets.prompt_volume_scale.set_sensitive(true);
-    updating_flag.set(false);
 }
 
-pub(crate) fn update_head_motion(
-    widgets: &ControlsWidgets,
-    motion_type: u8,
-    updating_flag: &Cell<bool>,
-) {
-    updating_flag.set(true);
+pub(crate) fn update_head_motion(widgets: &ControlsWidgets, motion_type: u8) {
+    let _guard = widgets.head_motion_flag.enter();
     widgets.head_motion_row.set_selected_id(Some(motion_type));
     widgets.head_motion_row.set_sensitive(true);
-    updating_flag.set(false);
 }
 
 pub(crate) fn update_preferred_devices(
     widgets: &ControlsWidgets,
     preferred: Option<PairedDeviceAddress>,
     devices: &[PairedDevice],
-    updating_flag: &Cell<bool>,
 ) {
-    updating_flag.set(true);
+    let _guard = widgets.preferred_flag.enter();
     let mut items: Vec<(u8, String)> = vec![(0, crate::t!("controls-preferred-device-auto"))];
     let mut selected_id = 0u8;
 
@@ -255,61 +242,40 @@ pub(crate) fn update_preferred_devices(
     widgets.preferred_row.set_items(&items);
     widgets.preferred_row.set_selected_id(Some(selected_id));
     widgets.preferred_row.set_sensitive(true);
-    updating_flag.set(false);
 }
 
-pub(crate) fn update_dual_device(
-    widgets: &ControlsWidgets,
-    enabled: bool,
-    updating_flag: &Cell<bool>,
-) {
-    updating_flag.set(true);
+pub(crate) fn update_dual_device(widgets: &ControlsWidgets, enabled: bool) {
+    let _guard = widgets.dual_device_flag.enter();
     widgets.dual_switch.set_state(enabled);
     widgets.dual_switch.set_active(enabled);
     widgets.dual_switch.set_sensitive(true);
     widgets.dual_row.set_sensitive(true);
     widgets.preferred_row.set_sensitive(enabled);
-    updating_flag.set(false);
 }
 
-pub(crate) fn update_in_ear_detection(
-    widgets: &ControlsWidgets,
-    enabled: bool,
-    updating_flag: &Cell<bool>,
-) {
-    updating_flag.set(true);
+pub(crate) fn update_in_ear_detection(widgets: &ControlsWidgets, enabled: bool) {
+    let _guard = widgets.in_ear_flag.enter();
     widgets.in_ear_switch.set_state(enabled);
     widgets.in_ear_switch.set_active(enabled);
     widgets.in_ear_switch.set_sensitive(true);
     widgets.in_ear_row.set_sensitive(true);
-    updating_flag.set(false);
 }
 
-pub(crate) fn update_sleep_detection(
-    widgets: &ControlsWidgets,
-    enabled: bool,
-    updating_flag: &Cell<bool>,
-) {
-    updating_flag.set(true);
+pub(crate) fn update_sleep_detection(widgets: &ControlsWidgets, enabled: bool) {
+    let _guard = widgets.sleep_flag.enter();
     widgets.sleep_switch.set_state(enabled);
     widgets.sleep_switch.set_active(enabled);
     widgets.sleep_switch.set_sensitive(true);
     widgets.sleep_row.set_sensitive(true);
-    updating_flag.set(false);
 }
 
-pub(crate) fn update_head_switch(
-    widgets: &ControlsWidgets,
-    enabled: bool,
-    updating_flag: &Cell<bool>,
-) {
-    updating_flag.set(true);
+pub(crate) fn update_head_switch(widgets: &ControlsWidgets, enabled: bool) {
+    let _guard = widgets.head_motion_flag.enter();
     widgets.head_switch.set_state(enabled);
     widgets.head_switch.set_active(enabled);
     widgets.head_switch.set_sensitive(true);
     widgets.head_switch_row.set_sensitive(true);
     widgets.head_motion_row.set_sensitive(enabled);
-    updating_flag.set(false);
 }
 
 pub(crate) fn reset_controls_page(widgets: &ControlsWidgets) {

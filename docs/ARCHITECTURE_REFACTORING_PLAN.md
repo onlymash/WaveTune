@@ -158,7 +158,7 @@ WaveTune 最初基于 GTK4/Libadwaita 与 BlueZ 开发，由于初期缺乏严�
 
 ---
 
-### 阶段四：引入 RAII 防重入守卫（封装 Component）
+### 阶段四：引入 RAII 防重入守卫（封装 Component）[已完成]
 **目标**：彻底消除散布在各处的 `updating_xxx: &Cell<bool>` 标志位。
 
 #### 具体任务：

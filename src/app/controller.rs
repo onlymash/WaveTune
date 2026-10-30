@@ -35,8 +35,8 @@ use crate::{
         PairedDeviceAddress,
     },
     ui::home_state::{
-        HomeSoundFeaturesViewState, HomeSoundUpdateFlags, NoiseControlsViewState, merge_battery,
-        merge_wear, reset_sound_controls, set_battery, update_equalizer, update_equalizer_items,
+        HomeSoundFeaturesViewState, NoiseControlsViewState, merge_battery, merge_wear,
+        reset_sound_controls, set_battery, update_equalizer, update_equalizer_items,
         update_game_mode, update_noise_controls, update_sound_features, update_spatial_audio,
         wear_part_name, widgets_ref,
     },
@@ -45,7 +45,7 @@ use crate::{
         components::ComboRowExtManual,
         controls_state::{self, ControlsFeaturesViewState},
         dialogs::{paired_device_icon_name, show_paired_device_dialog},
-        sound_state::{self, SoundPageFeaturesViewState, SoundPageUpdateFlags},
+        sound_state::{self, SoundPageFeaturesViewState},
     },
 };
 
@@ -201,16 +201,15 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
         });
     }
 
-    let updating_noise_option_selector = Rc::new(Cell::new(false));
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_noise_option = Rc::clone(&updating_noise_option_selector);
+        let noise_flag = widgets.noise_option_flag.clone();
         let noise_buttons = primary_buttons.clone();
         widgets
             .noise_option_row
             .connect_selected_notify(move |row| {
-                if updating_noise_option.get() {
+                if noise_flag.is_updating() {
                     return;
                 }
                 let Some(mode) = row.selected_id() else {
@@ -242,14 +241,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
             });
     }
 
-    let updating_eq_selector = Rc::new(Cell::new(false));
-    let updating_spatial_selector = Rc::new(Cell::new(false));
-    let updating_game_mode_switch = Rc::new(Cell::new(false));
-    let updating_sound_eq = Rc::new(Cell::new(false));
-    let updating_sound_spatial = Rc::new(Cell::new(false));
-    let updating_sound_bass_switch = Rc::new(Cell::new(false));
-    let updating_sound_bass_slider = Rc::new(Cell::new(false));
-    let updating_sound_hires_switch = Rc::new(Cell::new(false));
     let bass_debounce_source = Rc::new(RefCell::new(None::<gtk::glib::SourceId>));
 
     let current_eq_preset = Rc::new(Cell::new(None::<u8>));
@@ -266,7 +257,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     let current_supports_audio_codec = Rc::new(Cell::new(false));
     let current_available_codecs = Rc::new(RefCell::new(Vec::<u8>::new()));
     let current_audio_codec = Rc::new(Cell::new(None::<u8>));
-    let updating_sound_codec = Rc::new(Cell::new(false));
     let current_bass_engine_enabled = Rc::new(Cell::new(None::<bool>));
     let current_bass_engine_level = Rc::new(RefCell::new(None::<crate::protocol::BassEngineLevel>));
     let current_hi_res_enabled = Rc::new(Cell::new(None::<bool>));
@@ -275,14 +265,13 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_eq = Rc::clone(&updating_eq_selector);
+        let eq_flag = widgets.eq_flag.clone();
         let sound_widgets = sound_widgets.clone();
-        let updating_sound_eq = Rc::clone(&updating_sound_eq);
         let current_custom_eqs = Rc::clone(&current_custom_eqs);
         let current_eq_preset = Rc::clone(&current_eq_preset);
 
         widgets.eq_row.connect_selected_notify(move |row| {
-            if updating_eq.get() {
+            if eq_flag.is_updating() {
                 return;
             }
             let Some(preset_id) = row.selected_id() else {
@@ -307,26 +296,20 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                 .map(|sender| sender.send(cmd));
             match command_result {
                 Some(Ok(())) => {
-                    sound_state::update_sound_page_equalizer(
-                        &sound_widgets,
-                        Some(preset_id),
-                        &updating_sound_eq,
-                    );
+                    sound_state::update_sound_page_equalizer(&sound_widgets, Some(preset_id));
                 }
                 Some(Err(error)) => {
                     let _ = updates_tx
                         .send(UiUpdate::Status(crate::t!("equalizer-send-failed", error)));
                     row.set_sensitive(true);
-                    updating_eq.set(true);
+                    let _guard = eq_flag.enter();
                     row.set_selected_id(current_eq_preset.get());
-                    updating_eq.set(false);
                 }
                 None => {
                     let _ = updates_tx.send(UiUpdate::Status(crate::t!("channel-not-connected")));
                     row.set_sensitive(true);
-                    updating_eq.set(true);
+                    let _guard = eq_flag.enter();
                     row.set_selected_id(current_eq_preset.get());
-                    updating_eq.set(false);
                 }
             }
         });
@@ -335,16 +318,16 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     for (preset_index, radio, _) in &sound_widgets.preset_radios {
         let preset_index = *preset_index;
         let radio = radio.clone();
-        let updating_sound_eq = Rc::clone(&updating_sound_eq);
+        let sound_eq_flag = sound_widgets.eq_flag.clone();
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
         let widgets_eq_row = widgets.eq_row.clone();
-        let updating_eq_selector = Rc::clone(&updating_eq_selector);
+        let widgets_eq_flag = widgets.eq_flag.clone();
         let current_eq_preset = Rc::clone(&current_eq_preset);
         let sound_widgets_for_revert = sound_widgets.clone();
 
         radio.connect_toggled(move |r| {
-            if !r.is_active() || updating_sound_eq.get() {
+            if !r.is_active() || sound_eq_flag.is_updating() {
                 return;
             }
             let command_result = worker_commands
@@ -353,10 +336,9 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                 .map(|sender| sender.send(WorkerCommand::SetEqualizer(preset_index)));
             match command_result {
                 Some(Ok(())) => {
-                    updating_eq_selector.set(true);
+                    let _guard = widgets_eq_flag.enter();
                     widgets_eq_row.set_selected_id(Some(preset_index));
                     widgets_eq_row.set_sensitive(false);
-                    updating_eq_selector.set(false);
                 }
                 Some(Err(error)) => {
                     let _ = updates_tx
@@ -364,7 +346,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                     sound_state::update_sound_page_equalizer(
                         &sound_widgets_for_revert,
                         current_eq_preset.get(),
-                        &updating_sound_eq,
                     );
                 }
                 None => {
@@ -372,7 +353,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                     sound_state::update_sound_page_equalizer(
                         &sound_widgets_for_revert,
                         current_eq_preset.get(),
-                        &updating_sound_eq,
                     );
                 }
             }
@@ -434,12 +414,11 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_spatial = Rc::clone(&updating_spatial_selector);
+        let spatial_flag = widgets.spatial_flag.clone();
         let sound_widgets = sound_widgets.clone();
-        let updating_sound_spatial = Rc::clone(&updating_sound_spatial);
 
         widgets.spatial_row.connect_selected_notify(move |row| {
-            if updating_spatial.get() {
+            if spatial_flag.is_updating() {
                 return;
             }
             let Some(mode) = row.selected_id() else {
@@ -453,11 +432,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                 .map(|sender| sender.send(WorkerCommand::SetSpatialAudio(mode)));
             match command_result {
                 Some(Ok(())) => {
-                    sound_state::update_sound_page_spatial(
-                        &sound_widgets,
-                        Some(mode),
-                        &updating_sound_spatial,
-                    );
+                    sound_state::update_sound_page_spatial(&sound_widgets, Some(mode));
                 }
                 Some(Err(error)) => {
                     let _ = updates_tx.send(UiUpdate::SettingError {
@@ -478,16 +453,16 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     for (mode, radio, _) in &sound_widgets.spatial_radios {
         let mode = *mode;
         let radio = radio.clone();
-        let updating_sound_spatial = Rc::clone(&updating_sound_spatial);
+        let sound_spatial_flag = sound_widgets.spatial_flag.clone();
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
         let widgets_spatial_row = widgets.spatial_row.clone();
-        let updating_spatial_selector = Rc::clone(&updating_spatial_selector);
+        let widgets_spatial_flag = widgets.spatial_flag.clone();
         let current_spatial_mode = Rc::clone(&current_spatial_mode);
         let sound_widgets_for_revert = sound_widgets.clone();
 
         radio.connect_toggled(move |r| {
-            if !r.is_active() || updating_sound_spatial.get() {
+            if !r.is_active() || sound_spatial_flag.is_updating() {
                 return;
             }
 
@@ -497,10 +472,9 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                 .map(|sender| sender.send(WorkerCommand::SetSpatialAudio(mode)));
             match command_result {
                 Some(Ok(())) => {
-                    updating_spatial_selector.set(true);
+                    let _guard = widgets_spatial_flag.enter();
                     widgets_spatial_row.set_selected_id(Some(mode));
                     widgets_spatial_row.set_sensitive(false);
-                    updating_spatial_selector.set(false);
                 }
                 Some(Err(error)) => {
                     let _ = updates_tx.send(UiUpdate::Status(crate::t!(
@@ -510,7 +484,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                     sound_state::update_sound_page_spatial(
                         &sound_widgets_for_revert,
                         current_spatial_mode.get(),
-                        &updating_sound_spatial,
                     );
                 }
                 None => {
@@ -518,7 +491,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                     sound_state::update_sound_page_spatial(
                         &sound_widgets_for_revert,
                         current_spatial_mode.get(),
-                        &updating_sound_spatial,
                     );
                 }
             }
@@ -528,11 +500,11 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_switch = Rc::clone(&updating_game_mode_switch);
+        let game_mode_flag = widgets.game_mode_flag.clone();
         widgets
             .game_mode_switch
             .connect_state_set(move |switch, state| {
-                if updating_switch.get() {
+                if game_mode_flag.is_updating() {
                     return gtk::glib::Propagation::Proceed;
                 }
                 let command_result = worker_commands
@@ -563,14 +535,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_bass_switch = Rc::clone(&updating_sound_bass_switch);
+        let bass_switch_flag = sound_widgets.bass_switch_flag.clone();
         let sound_widgets_revert = sound_widgets.clone();
         let current_bass_engine_enabled = Rc::clone(&current_bass_engine_enabled);
 
         sound_widgets
             .bass_switch
             .connect_state_set(move |switch, state| {
-                if updating_bass_switch.get() {
+                if bass_switch_flag.is_updating() {
                     return gtk::glib::Propagation::Proceed;
                 }
                 let command_result = worker_commands
@@ -590,7 +562,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             sound_state::update_sound_page_bass_enabled(
                                 &sound_widgets_revert,
                                 enabled,
-                                &updating_bass_switch,
                             );
                         }
                     }
@@ -601,7 +572,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             sound_state::update_sound_page_bass_enabled(
                                 &sound_widgets_revert,
                                 enabled,
-                                &updating_bass_switch,
                             );
                         }
                     }
@@ -613,7 +583,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_bass_slider = Rc::clone(&updating_sound_bass_slider);
+        let bass_slider_flag = sound_widgets.bass_slider_flag.clone();
         let bass_debounce_source = Rc::clone(&bass_debounce_source);
 
         sound_widgets
@@ -625,7 +595,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                     return;
                 }
                 let value = rounded as i8;
-                if updating_bass_slider.get() {
+                if bass_slider_flag.is_updating() {
                     return;
                 }
                 if let Some(source_id) = bass_debounce_source.borrow_mut().take() {
@@ -665,14 +635,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_hires_switch = Rc::clone(&updating_sound_hires_switch);
+        let hires_switch_flag = sound_widgets.hires_switch_flag.clone();
         let sound_widgets_revert = sound_widgets.clone();
         let current_hi_res_enabled = Rc::clone(&current_hi_res_enabled);
 
         sound_widgets
             .hires_switch
             .connect_state_set(move |switch, state| {
-                if updating_hires_switch.get() {
+                if hires_switch_flag.is_updating() {
                     return gtk::glib::Propagation::Proceed;
                 }
                 let command_result = worker_commands
@@ -687,22 +657,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         let _ = updates_tx
                             .send(UiUpdate::Status(crate::t!("hi-res-send-failed", error)));
                         if let Some(enabled) = current_hi_res_enabled.get() {
-                            sound_state::update_sound_page_hi_res(
-                                &sound_widgets_revert,
-                                enabled,
-                                &updating_hires_switch,
-                            );
+                            sound_state::update_sound_page_hi_res(&sound_widgets_revert, enabled);
                         }
                     }
                     None => {
                         let _ =
                             updates_tx.send(UiUpdate::Status(crate::t!("channel-not-connected")));
                         if let Some(enabled) = current_hi_res_enabled.get() {
-                            sound_state::update_sound_page_hi_res(
-                                &sound_widgets_revert,
-                                enabled,
-                                &updating_hires_switch,
-                            );
+                            sound_state::update_sound_page_hi_res(&sound_widgets_revert, enabled);
                         }
                     }
                 }
@@ -713,12 +675,12 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_codec = Rc::clone(&updating_sound_codec);
+        let codec_flag = sound_widgets.codec_flag.clone();
         let current_codec = Rc::clone(&current_audio_codec);
         let current_dual = Rc::clone(&current_dual_device);
 
         sound_widgets.codec_row.connect_selected_notify(move |row| {
-            if updating_codec.get() {
+            if codec_flag.is_updating() {
                 return;
             }
             let Some(target_codec) = crate::ui::components::ComboRowExtManual::selected_id(row)
@@ -752,7 +714,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
             let updates_tx = updates_tx.clone();
 
             let row_revert = row.clone();
-            let updating_codec_cancel = Rc::clone(&updating_codec);
+            let codec_flag_cancel = codec_flag.clone();
             let current_codec_cancel = Rc::clone(&current_codec);
 
             let dialog = adw::AlertDialog::builder()
@@ -781,12 +743,11 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             });
                         }
                     } else {
-                        updating_codec_cancel.set(true);
+                        let _guard = codec_flag_cancel.enter();
                         crate::ui::components::ComboRowExtManual::set_selected_id(
                             &row_revert,
                             current_codec_cancel.get(),
                         );
-                        updating_codec_cancel.set(false);
                     }
                 },
             );
@@ -807,15 +768,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     let cached_paired_devices = Rc::new(RefCell::new(Vec::<PairedDevice>::new()));
     let current_wear = Rc::new(RefCell::new(crate::protocol::WearState::default()));
 
-    let updating_gesture_combos = Rc::new(Cell::new(false));
-    let updating_noise_cycle = Rc::new(Cell::new(false));
-    let updating_prompt_volume = Rc::new(Cell::new(false));
-    let updating_head_motion = Rc::new(Cell::new(false));
-    let updating_dual_device = Rc::new(Cell::new(false));
-    let updating_in_ear = Rc::new(Cell::new(false));
-    let updating_sleep = Rc::new(Cell::new(false));
-    let updating_preferred = Rc::new(Cell::new(false));
-
     let prompt_volume_debounce_source = Rc::new(RefCell::new(None::<gtk::glib::SourceId>));
 
     {
@@ -824,7 +776,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
         let current_key_functions = Rc::clone(&current_key_functions);
         let current_gesture_rows = Rc::clone(&current_gesture_rows);
         let current_noise_cycle = Rc::clone(&current_noise_cycle);
-        let updating_noise_cycle = Rc::clone(&updating_noise_cycle);
 
         controls_widgets.ear_left_btn.connect_toggled(move |btn| {
             if btn.is_active() {
@@ -840,7 +791,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         &controls_widgets_clone,
                         cycle,
                         EarSide::Left,
-                        &updating_noise_cycle,
                     );
                 }
             }
@@ -853,7 +803,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
         let current_key_functions = Rc::clone(&current_key_functions);
         let current_gesture_rows = Rc::clone(&current_gesture_rows);
         let current_noise_cycle = Rc::clone(&current_noise_cycle);
-        let updating_noise_cycle = Rc::clone(&updating_noise_cycle);
 
         controls_widgets.ear_right_btn.connect_toggled(move |btn| {
             if btn.is_active() {
@@ -869,7 +818,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         &controls_widgets_clone,
                         cycle,
                         EarSide::Right,
-                        &updating_noise_cycle,
                     );
                 }
             }
@@ -882,13 +830,13 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
         let selected_ear = Rc::clone(&selected_ear);
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_gesture_combos = Rc::clone(&updating_gesture_combos);
+        let gesture_combos_flag = controls_widgets.gesture_combos_flag.clone();
         let controls_widgets_clone = controls_widgets.clone();
         let current_key_functions = Rc::clone(&current_key_functions);
         let current_gesture_rows = Rc::clone(&current_gesture_rows);
 
         combo.connect_selected_notify(move |c| {
-            if updating_gesture_combos.get() {
+            if gesture_combos_flag.is_updating() {
                 return;
             }
             if let Some(func_id) = c.selected_id() {
@@ -946,11 +894,11 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
         let selected_ear = Rc::clone(&selected_ear);
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_noise_cycle = Rc::clone(&updating_noise_cycle);
+        let noise_cycle_flag = controls_widgets.noise_cycle_flag.clone();
         let current_noise_cycle = Rc::clone(&current_noise_cycle);
 
         check.connect_toggled(move |_| {
-            if updating_noise_cycle.get() {
+            if noise_cycle_flag.is_updating() {
                 return;
             }
             let anc = controls_widgets_clone.cycle_check_anc.is_active();
@@ -966,7 +914,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         &controls_widgets_clone,
                         cycle,
                         selected_ear.get(),
-                        &updating_noise_cycle,
                     );
                 }
                 return;
@@ -1007,7 +954,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             &controls_widgets_clone,
                             cycle,
                             selected_ear.get(),
-                            &updating_noise_cycle,
                         );
                     }
                 }
@@ -1018,7 +964,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             &controls_widgets_clone,
                             cycle,
                             selected_ear.get(),
-                            &updating_noise_cycle,
                         );
                     }
                 }
@@ -1137,7 +1082,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_volume = Rc::clone(&updating_prompt_volume);
+        let prompt_volume_flag = controls_widgets.prompt_volume_flag.clone();
         let prompt_volume_debounce_source = Rc::clone(&prompt_volume_debounce_source);
         let controls_widgets_clone = controls_widgets.clone();
 
@@ -1153,7 +1098,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                 controls_widgets_clone
                     .prompt_volume_label
                     .set_text(&value.to_string());
-                if updating_volume.get() {
+                if prompt_volume_flag.is_updating() {
                     return;
                 }
                 if let Some(source_id) = prompt_volume_debounce_source.borrow_mut().take() {
@@ -1193,14 +1138,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_head = Rc::clone(&updating_head_motion);
+        let head_motion_flag = controls_widgets.head_motion_flag.clone();
         let controls_widgets_clone = controls_widgets.clone();
         let current_head = Rc::clone(&current_head_motion);
 
         controls_widgets
             .head_switch
             .connect_state_set(move |switch, state| {
-                if updating_head.get() {
+                if head_motion_flag.is_updating() {
                     return gtk::glib::Propagation::Proceed;
                 }
                 let motion_type = if state {
@@ -1226,32 +1171,16 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             err
                         )));
                         if let Some(m) = current_head.get() {
-                            controls_state::update_head_switch(
-                                &controls_widgets_clone,
-                                m > 0,
-                                &updating_head,
-                            );
-                            controls_state::update_head_motion(
-                                &controls_widgets_clone,
-                                m,
-                                &updating_head,
-                            );
+                            controls_state::update_head_switch(&controls_widgets_clone, m > 0);
+                            controls_state::update_head_motion(&controls_widgets_clone, m);
                         }
                     }
                     None => {
                         let _ =
                             updates_tx.send(UiUpdate::Status(crate::t!("channel-not-connected")));
                         if let Some(m) = current_head.get() {
-                            controls_state::update_head_switch(
-                                &controls_widgets_clone,
-                                m > 0,
-                                &updating_head,
-                            );
-                            controls_state::update_head_motion(
-                                &controls_widgets_clone,
-                                m,
-                                &updating_head,
-                            );
+                            controls_state::update_head_switch(&controls_widgets_clone, m > 0);
+                            controls_state::update_head_motion(&controls_widgets_clone, m);
                         }
                     }
                 }
@@ -1262,14 +1191,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_head = Rc::clone(&updating_head_motion);
+        let head_motion_flag = controls_widgets.head_motion_flag.clone();
         let controls_widgets_clone = controls_widgets.clone();
         let current_head = Rc::clone(&current_head_motion);
 
         controls_widgets
             .head_motion_row
             .connect_selected_notify(move |row| {
-                if updating_head.get() {
+                if head_motion_flag.is_updating() {
                     return;
                 }
                 if let Some(motion_type) = row.selected_id() {
@@ -1287,22 +1216,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                                     err
                                 )));
                                 if let Some(m) = current_head.get() {
-                                    controls_state::update_head_motion(
-                                        &controls_widgets_clone,
-                                        m,
-                                        &updating_head,
-                                    );
+                                    controls_state::update_head_motion(&controls_widgets_clone, m);
                                 }
                             }
                             None => {
                                 let _ = updates_tx
                                     .send(UiUpdate::Status(crate::t!("channel-not-connected")));
                                 if let Some(m) = current_head.get() {
-                                    controls_state::update_head_motion(
-                                        &controls_widgets_clone,
-                                        m,
-                                        &updating_head,
-                                    );
+                                    controls_state::update_head_motion(&controls_widgets_clone, m);
                                 }
                             }
                         }
@@ -1314,7 +1235,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_dual = Rc::clone(&updating_dual_device);
+        let dual_device_flag = controls_widgets.dual_device_flag.clone();
         let controls_widgets_clone = controls_widgets.clone();
         let current_dual = Rc::clone(&current_dual_device);
         let current_codec = Rc::clone(&current_audio_codec);
@@ -1322,7 +1243,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
         controls_widgets
             .dual_switch
             .connect_state_set(move |switch, state| {
-                if updating_dual.get() {
+                if dual_device_flag.is_updating() {
                     return gtk::glib::Propagation::Proceed;
                 }
 
@@ -1332,7 +1253,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                 if state && is_ldac {
                     let switch_for_dialog = switch.clone();
                     let switch_for_action = switch.clone();
-                    let updating_dual_confirm = Rc::clone(&updating_dual);
+                    let updating_dual_confirm = dual_device_flag.clone();
                     let worker_commands = Rc::clone(&worker_commands);
                     let dialog = adw::AlertDialog::builder()
                         .heading(&crate::t!("dialog-reboot-required-title"))
@@ -1353,10 +1274,9 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                                     .as_ref()
                                     .map(|s| s.send(WorkerCommand::SetDualDeviceConnection(true)));
                             } else {
-                                updating_dual_confirm.set(true);
+                                let _guard = updating_dual_confirm.enter();
                                 switch_for_action.set_state(false);
                                 switch_for_action.set_active(false);
-                                updating_dual_confirm.set(false);
                             }
                         },
                     );
@@ -1375,22 +1295,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         let _ = updates_tx
                             .send(UiUpdate::Status(crate::t!("dual-device-send-failed", err)));
                         if let Some(en) = current_dual.get() {
-                            controls_state::update_dual_device(
-                                &controls_widgets_clone,
-                                en,
-                                &updating_dual,
-                            );
+                            controls_state::update_dual_device(&controls_widgets_clone, en);
                         }
                     }
                     None => {
                         let _ =
                             updates_tx.send(UiUpdate::Status(crate::t!("channel-not-connected")));
                         if let Some(en) = current_dual.get() {
-                            controls_state::update_dual_device(
-                                &controls_widgets_clone,
-                                en,
-                                &updating_dual,
-                            );
+                            controls_state::update_dual_device(&controls_widgets_clone, en);
                         }
                     }
                 }
@@ -1401,14 +1313,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_in_ear = Rc::clone(&updating_in_ear);
+        let in_ear_flag = controls_widgets.in_ear_flag.clone();
         let controls_widgets_clone = controls_widgets.clone();
         let current_in_ear = Rc::clone(&current_in_ear);
 
         controls_widgets
             .in_ear_switch
             .connect_state_set(move |switch, state| {
-                if updating_in_ear.get() {
+                if in_ear_flag.is_updating() {
                     return gtk::glib::Propagation::Proceed;
                 }
                 switch.set_sensitive(false);
@@ -1422,22 +1334,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         let _ =
                             updates_tx.send(UiUpdate::Status(crate::t!("wear-send-failed", err)));
                         if let Some(en) = current_in_ear.get() {
-                            controls_state::update_in_ear_detection(
-                                &controls_widgets_clone,
-                                en,
-                                &updating_in_ear,
-                            );
+                            controls_state::update_in_ear_detection(&controls_widgets_clone, en);
                         }
                     }
                     None => {
                         let _ =
                             updates_tx.send(UiUpdate::Status(crate::t!("channel-not-connected")));
                         if let Some(en) = current_in_ear.get() {
-                            controls_state::update_in_ear_detection(
-                                &controls_widgets_clone,
-                                en,
-                                &updating_in_ear,
-                            );
+                            controls_state::update_in_ear_detection(&controls_widgets_clone, en);
                         }
                     }
                 }
@@ -1448,14 +1352,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_sleep = Rc::clone(&updating_sleep);
+        let sleep_flag = controls_widgets.sleep_flag.clone();
         let controls_widgets_clone = controls_widgets.clone();
         let current_sleep = Rc::clone(&current_sleep);
 
         controls_widgets
             .sleep_switch
             .connect_state_set(move |switch, state| {
-                if updating_sleep.get() {
+                if sleep_flag.is_updating() {
                     return gtk::glib::Propagation::Proceed;
                 }
                 switch.set_sensitive(false);
@@ -1471,22 +1375,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             err
                         )));
                         if let Some(en) = current_sleep.get() {
-                            controls_state::update_sleep_detection(
-                                &controls_widgets_clone,
-                                en,
-                                &updating_sleep,
-                            );
+                            controls_state::update_sleep_detection(&controls_widgets_clone, en);
                         }
                     }
                     None => {
                         let _ =
                             updates_tx.send(UiUpdate::Status(crate::t!("channel-not-connected")));
                         if let Some(en) = current_sleep.get() {
-                            controls_state::update_sleep_detection(
-                                &controls_widgets_clone,
-                                en,
-                                &updating_sleep,
-                            );
+                            controls_state::update_sleep_detection(&controls_widgets_clone, en);
                         }
                     }
                 }
@@ -1497,7 +1393,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     {
         let worker_commands = Rc::clone(&worker_commands);
         let updates_tx = updates_tx.clone();
-        let updating_preferred = Rc::clone(&updating_preferred);
+        let preferred_flag = controls_widgets.preferred_flag.clone();
         let controls_widgets_clone = controls_widgets.clone();
         let cached_devices = Rc::clone(&cached_paired_devices);
         let current_pref = Rc::clone(&current_preferred_device);
@@ -1505,7 +1401,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
         controls_widgets
             .preferred_row
             .connect_selected_notify(move |row| {
-                if updating_preferred.get() {
+                if preferred_flag.is_updating() {
                     return;
                 }
                 if let Some(id) = row.selected_id() {
@@ -1531,7 +1427,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                                 &controls_widgets_clone,
                                 *current_pref.borrow(),
                                 &cached_devices.borrow(),
-                                &updating_preferred,
                             );
                         }
                         None => {
@@ -1541,7 +1436,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                                 &controls_widgets_clone,
                                 *current_pref.borrow(),
                                 &cached_devices.borrow(),
-                                &updating_preferred,
                             );
                         }
                     }
@@ -1719,43 +1613,28 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                                     current_mode: current_noise_mode,
                                     modes: &noise_modes,
                                 },
-                                &updating_noise_option_selector,
                             );
                         }
                         SettingDomain::Equalizer => {
-                            update_equalizer(
-                                &widgets,
-                                current_eq_preset.get(),
-                                &updating_eq_selector,
-                            );
+                            update_equalizer(&widgets, current_eq_preset.get());
                             widgets.eq_row.set_sensitive(current_supports_eq.get());
                             sound_state::update_sound_page_equalizer(
                                 &sound_widgets,
                                 current_eq_preset.get(),
-                                &updating_sound_eq,
                             );
                         }
                         SettingDomain::SpatialAudio => {
-                            update_spatial_audio(
-                                &widgets,
-                                current_spatial_mode.get(),
-                                &updating_spatial_selector,
-                            );
+                            update_spatial_audio(&widgets, current_spatial_mode.get());
                             widgets
                                 .spatial_row
                                 .set_sensitive(current_supports_spatial.get());
                             sound_state::update_sound_page_spatial(
                                 &sound_widgets,
                                 current_spatial_mode.get(),
-                                &updating_sound_spatial,
                             );
                         }
                         SettingDomain::GameMode => {
-                            update_game_mode(
-                                &widgets,
-                                current_game_mode.get(),
-                                &updating_game_mode_switch,
-                            );
+                            update_game_mode(&widgets, current_game_mode.get());
                             widgets
                                 .game_mode_switch
                                 .set_sensitive(current_supports_game_mode.get());
@@ -1765,15 +1644,10 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                                 sound_state::update_sound_page_bass_enabled(
                                     &sound_widgets,
                                     enabled,
-                                    &updating_sound_bass_switch,
                                 );
                             }
                             if let Some(level) = current_bass_engine_level.borrow().as_ref() {
-                                sound_state::update_sound_page_bass_level(
-                                    &sound_widgets,
-                                    *level,
-                                    &updating_sound_bass_slider,
-                                );
+                                sound_state::update_sound_page_bass_level(&sound_widgets, *level);
                             }
                             sound_widgets
                                 .bass_switch
@@ -1784,11 +1658,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         }
                         SettingDomain::HiRes => {
                             if let Some(enabled) = current_hi_res_enabled.get() {
-                                sound_state::update_sound_page_hi_res(
-                                    &sound_widgets,
-                                    enabled,
-                                    &updating_sound_hires_switch,
-                                );
+                                sound_state::update_sound_page_hi_res(&sound_widgets, enabled);
                             }
                             sound_widgets
                                 .hires_switch
@@ -1799,11 +1669,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         }
                         SettingDomain::AudioCodec => {
                             if let Some(codec) = current_audio_codec.get() {
-                                sound_state::update_sound_page_audio_codec(
-                                    &sound_widgets,
-                                    codec,
-                                    &updating_sound_codec,
-                                );
+                                sound_state::update_sound_page_audio_codec(&sound_widgets, codec);
                             }
                             sound_widgets
                                 .codec_row
@@ -1984,7 +1850,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             current_mode: None,
                             modes: &noise_modes,
                         },
-                        &updating_noise_option_selector,
                     );
                     current_eq_preset.set(None);
                     current_spatial_mode.set(None);
@@ -2002,23 +1867,8 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                     current_bass_engine_enabled.set(None);
                     *current_bass_engine_level.borrow_mut() = None;
                     current_hi_res_enabled.set(None);
-                    reset_sound_controls(
-                        &widgets,
-                        &HomeSoundUpdateFlags {
-                            updating_eq: &updating_eq_selector,
-                            updating_spatial: &updating_spatial_selector,
-                            updating_game_mode: &updating_game_mode_switch,
-                        },
-                    );
-                    sound_state::reset_sound_page(
-                        &sound_widgets,
-                        &updating_sound_eq,
-                        &updating_sound_spatial,
-                        &updating_sound_bass_switch,
-                        &updating_sound_bass_slider,
-                        &updating_sound_hires_switch,
-                        &updating_sound_codec,
-                    );
+                    reset_sound_controls(&widgets);
+                    sound_state::reset_sound_page(&sound_widgets);
                     widgets.device_name.set_text(&device.name);
                     widgets
                         .connection_tag
@@ -2156,11 +2006,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             presets: &presets,
                             custom_equalizers: &current_custom_eqs.borrow(),
                         },
-                        &HomeSoundUpdateFlags {
-                            updating_eq: &updating_eq_selector,
-                            updating_spatial: &updating_spatial_selector,
-                            updating_game_mode: &updating_game_mode_switch,
-                        },
                     );
                     sound_state::update_sound_page_features(
                         &sound_widgets,
@@ -2174,11 +2019,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             supports_audio_codec: supports_codec,
                             available_codecs: &available_codecs,
                             presets: &presets,
-                        },
-                        &SoundPageUpdateFlags {
-                            updating_eq: &updating_sound_eq,
-                            updating_spatial: &updating_sound_spatial,
-                            updating_codec: &updating_sound_codec,
                         },
                     );
                     device_widgets
@@ -2296,7 +2136,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             current_mode: current_noise_mode,
                             modes: &noise_modes,
                         },
-                        &updating_noise_option_selector,
                     );
                     session_state_for_updates.borrow_mut().wear = wear.clone();
                     sync_desktop_services(
@@ -2335,7 +2174,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             &controls_widgets,
                             *current_preferred_device.borrow(),
                             devs,
-                            &updating_preferred,
                         );
                     }
                     session_state_for_updates
@@ -2400,7 +2238,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             current_mode: current_noise_mode,
                             modes: &noise_modes,
                         },
-                        &updating_noise_option_selector,
                     );
                     {
                         let mut st = session_state_for_updates.borrow_mut();
@@ -2429,7 +2266,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             current_mode: current_noise_mode,
                             modes: &noise_modes,
                         },
-                        &updating_noise_option_selector,
                     );
                     session_state_for_updates.borrow_mut().noise.enabled = enabled && connected;
                     sync_desktop_services(
@@ -2457,7 +2293,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             current_mode: current_noise_mode,
                             modes: &noise_modes,
                         },
-                        &updating_noise_option_selector,
                     );
                     {
                         let mut st = session_state_for_updates.borrow_mut();
@@ -2520,11 +2355,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             presets: &presets,
                             custom_equalizers: &current_custom_eqs.borrow(),
                         },
-                        &HomeSoundUpdateFlags {
-                            updating_eq: &updating_eq_selector,
-                            updating_spatial: &updating_spatial_selector,
-                            updating_game_mode: &updating_game_mode_switch,
-                        },
                     );
                     sound_state::update_sound_page_features(
                         &sound_widgets,
@@ -2539,11 +2369,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             available_codecs: &available_codecs,
                             presets: &presets,
                         },
-                        &SoundPageUpdateFlags {
-                            updating_eq: &updating_sound_eq,
-                            updating_spatial: &updating_sound_spatial,
-                            updating_codec: &updating_sound_codec,
-                        },
                     );
                 }
                 UiUpdate::Equalizer(preset) => {
@@ -2552,19 +2377,18 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         .sound
                         .current_eq_preset = Some(preset);
                     current_eq_preset.set(Some(preset));
-                    update_equalizer(&widgets, current_eq_preset.get(), &updating_eq_selector);
+                    update_equalizer(&widgets, current_eq_preset.get());
                     widgets.eq_row.set_sensitive(current_supports_eq.get());
                     sound_state::update_sound_page_equalizer(
                         &sound_widgets,
                         current_eq_preset.get(),
-                        &updating_sound_eq,
                     );
                 }
                 UiUpdate::CustomEqualizers(entries) => {
                     let worker_commands_select = Rc::clone(&worker_commands);
                     let updates_tx_select = updates_tx.clone();
                     let widgets_eq_row_select = widgets.eq_row.clone();
-                    let updating_eq_selector_select = Rc::clone(&updating_eq_selector);
+                    let widgets_eq_flag_select = widgets.eq_flag.clone();
 
                     let on_select = move |id: u8| {
                         let command_result = worker_commands_select
@@ -2573,10 +2397,9 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             .map(|sender| sender.send(WorkerCommand::SelectCustomEqualizer(id)));
                         match command_result {
                             Some(Ok(())) => {
-                                updating_eq_selector_select.set(true);
+                                let _guard = widgets_eq_flag_select.enter();
                                 widgets_eq_row_select.set_selected_id(Some(id));
                                 widgets_eq_row_select.set_sensitive(false);
-                                updating_eq_selector_select.set(false);
                             }
                             Some(Err(error)) => {
                                 let _ = updates_tx_select.send(UiUpdate::Status(crate::t!(
@@ -2667,14 +2490,12 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         &current_eq_presets.borrow(),
                         &entries,
                         current_eq_preset.get(),
-                        &updating_eq_selector,
                     );
 
                     sound_state::update_sound_page_custom_equalizers(
                         &sound_widgets,
                         &entries,
                         current_supports_custom_eq.get(),
-                        &updating_sound_eq,
                         on_select,
                         on_edit,
                         on_delete,
@@ -2686,18 +2507,13 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         .sound
                         .current_spatial_mode = Some(mode);
                     current_spatial_mode.set(Some(mode));
-                    update_spatial_audio(
-                        &widgets,
-                        current_spatial_mode.get(),
-                        &updating_spatial_selector,
-                    );
+                    update_spatial_audio(&widgets, current_spatial_mode.get());
                     widgets
                         .spatial_row
                         .set_sensitive(current_supports_spatial.get());
                     sound_state::update_sound_page_spatial(
                         &sound_widgets,
                         current_spatial_mode.get(),
-                        &updating_sound_spatial,
                     );
                 }
                 UiUpdate::GameMode(enabled) => {
@@ -2706,11 +2522,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         .sound
                         .current_game_mode = Some(enabled);
                     current_game_mode.set(Some(enabled));
-                    update_game_mode(
-                        &widgets,
-                        current_game_mode.get(),
-                        &updating_game_mode_switch,
-                    );
+                    update_game_mode(&widgets, current_game_mode.get());
                 }
                 UiUpdate::BassEngineEnabled(enabled) => {
                     session_state_for_updates
@@ -2718,11 +2530,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         .sound
                         .bass_engine_enabled = Some(enabled);
                     current_bass_engine_enabled.set(Some(enabled));
-                    sound_state::update_sound_page_bass_enabled(
-                        &sound_widgets,
-                        enabled,
-                        &updating_sound_bass_switch,
-                    );
+                    sound_state::update_sound_page_bass_enabled(&sound_widgets, enabled);
                     sound_widgets
                         .bass_switch
                         .set_sensitive(current_supports_bass_engine.get());
@@ -2736,20 +2544,12 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         .sound
                         .bass_engine_level = Some(level);
                     *current_bass_engine_level.borrow_mut() = Some(level);
-                    sound_state::update_sound_page_bass_level(
-                        &sound_widgets,
-                        level,
-                        &updating_sound_bass_slider,
-                    );
+                    sound_state::update_sound_page_bass_level(&sound_widgets, level);
                 }
                 UiUpdate::HiRes(enabled) => {
                     session_state_for_updates.borrow_mut().sound.hi_res_enabled = Some(enabled);
                     current_hi_res_enabled.set(Some(enabled));
-                    sound_state::update_sound_page_hi_res(
-                        &sound_widgets,
-                        enabled,
-                        &updating_sound_hires_switch,
-                    );
+                    sound_state::update_sound_page_hi_res(&sound_widgets, enabled);
                     sound_widgets
                         .hires_switch
                         .set_sensitive(current_supports_hi_res.get());
@@ -2763,11 +2563,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         .sound
                         .current_audio_codec = Some(codec);
                     current_audio_codec.set(Some(codec));
-                    sound_state::update_sound_page_audio_codec(
-                        &sound_widgets,
-                        codec,
-                        &updating_sound_codec,
-                    );
+                    sound_state::update_sound_page_audio_codec(&sound_widgets, codec);
                     sound_widgets
                         .codec_row
                         .set_sensitive(current_supports_audio_codec.get());
@@ -2825,7 +2621,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         .controls
                         .key_functions = functions.clone();
                     *current_key_functions.borrow_mut() = functions.clone();
-                    updating_gesture_combos.set(true);
                     controls_state::update_key_functions(
                         &controls_widgets,
                         &functions,
@@ -2835,7 +2630,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                     for (_, combo) in &controls_widgets.gesture_combos {
                         combo.set_sensitive(true);
                     }
-                    updating_gesture_combos.set(false);
                 }
                 UiUpdate::NoiseCycle(cycle) => {
                     session_state_for_updates.borrow_mut().controls.noise_cycle = Some(cycle);
@@ -2844,7 +2638,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         &controls_widgets,
                         cycle,
                         selected_ear.get(),
-                        &updating_noise_cycle,
                     );
                     controls_widgets.cycle_check_anc.set_sensitive(true);
                     controls_widgets
@@ -2871,25 +2664,13 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         .controls
                         .prompt_volume = Some(volume);
                     current_prompt_volume.set(Some(volume));
-                    controls_state::update_prompt_volume(
-                        &controls_widgets,
-                        volume,
-                        &updating_prompt_volume,
-                    );
+                    controls_state::update_prompt_volume(&controls_widgets, volume);
                 }
                 UiUpdate::HeadMotionType(motion_type) => {
                     session_state_for_updates.borrow_mut().controls.head_motion = Some(motion_type);
                     current_head_motion.set(Some(motion_type));
-                    controls_state::update_head_switch(
-                        &controls_widgets,
-                        motion_type > 0,
-                        &updating_head_motion,
-                    );
-                    controls_state::update_head_motion(
-                        &controls_widgets,
-                        motion_type,
-                        &updating_head_motion,
-                    );
+                    controls_state::update_head_switch(&controls_widgets, motion_type > 0);
+                    controls_state::update_head_motion(&controls_widgets, motion_type);
                 }
                 UiUpdate::DualDeviceConnectionEnabled(enabled) => {
                     session_state_for_updates
@@ -2897,11 +2678,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         .dual_device
                         .current_dual_device = Some(enabled);
                     current_dual_device.set(Some(enabled));
-                    controls_state::update_dual_device(
-                        &controls_widgets,
-                        enabled,
-                        &updating_dual_device,
-                    );
+                    controls_state::update_dual_device(&controls_widgets, enabled);
                 }
                 UiUpdate::InEarDetectionEnabled(enabled) => {
                     session_state_for_updates
@@ -2909,11 +2686,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         .controls
                         .in_ear_detection = Some(enabled);
                     current_in_ear.set(Some(enabled));
-                    controls_state::update_in_ear_detection(
-                        &controls_widgets,
-                        enabled,
-                        &updating_in_ear,
-                    );
+                    controls_state::update_in_ear_detection(&controls_widgets, enabled);
                 }
                 UiUpdate::SleepDetectionEnabled(enabled) => {
                     session_state_for_updates
@@ -2921,11 +2694,7 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         .controls
                         .sleep_detection = Some(enabled);
                     current_sleep.set(Some(enabled));
-                    controls_state::update_sleep_detection(
-                        &controls_widgets,
-                        enabled,
-                        &updating_sleep,
-                    );
+                    controls_state::update_sleep_detection(&controls_widgets, enabled);
                 }
                 UiUpdate::PreferredDevice(address) => {
                     session_state_for_updates
@@ -2937,7 +2706,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                         &controls_widgets,
                         address,
                         &cached_paired_devices.borrow(),
-                        &updating_preferred,
                     );
                 }
                 UiUpdate::Finished => {
@@ -3007,7 +2775,6 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                             current_mode: current_noise_mode,
                             modes: &noise_modes,
                         },
-                        &updating_noise_option_selector,
                     );
                     current_eq_preset.set(None);
                     current_spatial_mode.set(None);
@@ -3024,23 +2791,8 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
                     current_bass_engine_enabled.set(None);
                     *current_bass_engine_level.borrow_mut() = None;
                     current_hi_res_enabled.set(None);
-                    reset_sound_controls(
-                        &widgets,
-                        &HomeSoundUpdateFlags {
-                            updating_eq: &updating_eq_selector,
-                            updating_spatial: &updating_spatial_selector,
-                            updating_game_mode: &updating_game_mode_switch,
-                        },
-                    );
-                    sound_state::reset_sound_page(
-                        &sound_widgets,
-                        &updating_sound_eq,
-                        &updating_sound_spatial,
-                        &updating_sound_bass_switch,
-                        &updating_sound_bass_slider,
-                        &updating_sound_hires_switch,
-                        &updating_sound_codec,
-                    );
+                    reset_sound_controls(&widgets);
+                    sound_state::reset_sound_page(&sound_widgets);
                     if let Some(source_id) = bass_debounce_source.borrow_mut().take() {
                         source_id.remove();
                     }

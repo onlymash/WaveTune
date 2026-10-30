@@ -562,6 +562,10 @@ pub(crate) fn build_home_page() -> (GtkBox, HomeWidgets) {
             spatial_row,
             game_mode_section,
             game_mode_switch,
+            noise_option_flag: crate::ui::ReentrancyFlag::new(),
+            eq_flag: crate::ui::ReentrancyFlag::new(),
+            spatial_flag: crate::ui::ReentrancyFlag::new(),
+            game_mode_flag: crate::ui::ReentrancyFlag::new(),
         },
     )
 }

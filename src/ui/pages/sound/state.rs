@@ -15,8 +15,6 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::cell::Cell;
-
 use adw::prelude::*;
 
 use super::SoundWidgets;
@@ -35,17 +33,9 @@ pub(crate) struct SoundPageFeaturesViewState<'a> {
     pub presets: &'a [EqualizerPreset],
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct SoundPageUpdateFlags<'a> {
-    pub updating_eq: &'a Cell<bool>,
-    pub updating_spatial: &'a Cell<bool>,
-    pub updating_codec: &'a Cell<bool>,
-}
-
 pub(crate) fn update_sound_page_features(
     sound_widgets: &SoundWidgets,
     state: &SoundPageFeaturesViewState,
-    flags: &SoundPageUpdateFlags,
 ) {
     sound_widgets.eq_card.set_visible(state.supports_equalizer);
     sound_widgets
@@ -71,7 +61,7 @@ pub(crate) fn update_sound_page_features(
         .codec_row
         .set_sensitive(state.supports_audio_codec);
     if state.supports_audio_codec {
-        flags.updating_codec.set(true);
+        let _guard = sound_widgets.codec_flag.enter();
         let items: Vec<(u8, String)> = state
             .available_codecs
             .iter()
@@ -84,21 +74,21 @@ pub(crate) fn update_sound_page_features(
             })
             .collect();
         crate::ui::components::ComboRowExtManual::set_items(&sound_widgets.codec_row, &items);
-        flags.updating_codec.set(false);
     }
 
-    flags.updating_eq.set(true);
-    for (idx, radio, row) in &sound_widgets.preset_radios {
-        if let Some(matching) = state.presets.iter().find(|p| p.index == *idx) {
-            row.set_visible(true);
-            row.set_title(&crate::t!(matching.key));
-            radio.set_sensitive(state.supports_equalizer);
-        } else {
-            row.set_visible(false);
-            radio.set_sensitive(false);
+    {
+        let _guard = sound_widgets.eq_flag.enter();
+        for (idx, radio, row) in &sound_widgets.preset_radios {
+            if let Some(matching) = state.presets.iter().find(|p| p.index == *idx) {
+                row.set_visible(true);
+                row.set_title(&crate::t!(matching.key));
+                radio.set_sensitive(state.supports_equalizer);
+            } else {
+                row.set_visible(false);
+                radio.set_sensitive(false);
+            }
         }
     }
-    flags.updating_eq.set(false);
     let custom_count = sound_widgets.custom_equalizers.borrow().len();
     let can_add_custom =
         state.supports_equalizer && state.supports_custom_equalizer && custom_count < 3;
@@ -109,21 +99,24 @@ pub(crate) fn update_sound_page_features(
         sound_widgets.custom_editor.set_visible(false);
     }
 
-    flags.updating_spatial.set(true);
-    for (mode, radio, row) in &sound_widgets.spatial_radios {
-        match *mode {
-            0 | 1 => {
-                row.set_visible(true);
-                radio.set_sensitive(state.supports_spatial_audio);
+    {
+        let _guard = sound_widgets.spatial_flag.enter();
+        for (mode, radio, row) in &sound_widgets.spatial_radios {
+            match *mode {
+                0 | 1 => {
+                    row.set_visible(true);
+                    radio.set_sensitive(state.supports_spatial_audio);
+                }
+                2 => {
+                    row.set_visible(state.supports_head_tracking);
+                    radio.set_sensitive(
+                        state.supports_spatial_audio && state.supports_head_tracking,
+                    );
+                }
+                _ => {}
             }
-            2 => {
-                row.set_visible(state.supports_head_tracking);
-                radio.set_sensitive(state.supports_spatial_audio && state.supports_head_tracking);
-            }
-            _ => {}
         }
     }
-    flags.updating_spatial.set(false);
 
     sound_widgets
         .bass_switch
@@ -143,9 +136,8 @@ pub(crate) fn update_sound_page_features(
 pub(crate) fn update_sound_page_equalizer(
     sound_widgets: &SoundWidgets,
     selected_preset: Option<u8>,
-    updating_eq: &Cell<bool>,
 ) {
-    updating_eq.set(true);
+    let _guard = sound_widgets.eq_flag.enter();
     if let Some(selected) = selected_preset {
         for (idx, radio, _) in &sound_widgets.preset_radios {
             if *idx == selected {
@@ -158,14 +150,12 @@ pub(crate) fn update_sound_page_equalizer(
             }
         }
     }
-    updating_eq.set(false);
 }
 
 pub(crate) fn update_sound_page_custom_equalizers<FSelect, FEdit, FDelete>(
     sound_widgets: &SoundWidgets,
     custom_eqs: &[crate::protocol::CustomEqualizer],
     supports_custom_equalizer: bool,
-    updating_eq: &std::rc::Rc<Cell<bool>>,
     on_select: FSelect,
     on_edit: FEdit,
     on_delete: FDelete,
@@ -188,7 +178,7 @@ pub(crate) fn update_sound_page_custom_equalizers<FSelect, FEdit, FDelete>(
     let insert_pos = sound_widgets.add_custom_row.index();
     let mut new_rows = Vec::new();
 
-    updating_eq.set(true);
+    let _guard = sound_widgets.eq_flag.enter();
     for (i, entry) in custom_eqs.iter().enumerate() {
         let (row, radio) =
             crate::ui::components::radio_row(&entry.name, Some(&sound_widgets.first_radio));
@@ -233,9 +223,9 @@ pub(crate) fn update_sound_page_custom_equalizers<FSelect, FEdit, FDelete>(
         {
             let on_select = on_select.clone();
             let id = entry.id;
-            let updating_eq = std::rc::Rc::clone(updating_eq);
+            let eq_flag = sound_widgets.eq_flag.clone();
             radio.connect_toggled(move |r| {
-                if r.is_active() && !updating_eq.get() {
+                if r.is_active() && !eq_flag.is_updating() {
                     on_select(id);
                 }
             });
@@ -279,7 +269,7 @@ pub(crate) fn update_sound_page_custom_equalizers<FSelect, FEdit, FDelete>(
         sound_widgets.preset_list.insert(&row, pos);
         new_rows.push((entry.id, radio, row));
     }
-    updating_eq.set(false);
+    drop(_guard);
 
     sound_widgets.custom_preset_rows.replace(new_rows);
 
@@ -290,12 +280,8 @@ pub(crate) fn update_sound_page_custom_equalizers<FSelect, FEdit, FDelete>(
     sound_widgets.add_custom_row.set_sensitive(can_add);
 }
 
-pub(crate) fn update_sound_page_spatial(
-    sound_widgets: &SoundWidgets,
-    current_spatial: Option<u8>,
-    updating_spatial: &Cell<bool>,
-) {
-    updating_spatial.set(true);
+pub(crate) fn update_sound_page_spatial(sound_widgets: &SoundWidgets, current_spatial: Option<u8>) {
+    let _guard = sound_widgets.spatial_flag.enter();
     if let Some(selected) = current_spatial {
         for (mode, radio, _) in &sound_widgets.spatial_radios {
             if *mode == selected {
@@ -303,19 +289,13 @@ pub(crate) fn update_sound_page_spatial(
             }
         }
     }
-    updating_spatial.set(false);
 }
 
-pub(crate) fn update_sound_page_bass_enabled(
-    sound_widgets: &SoundWidgets,
-    enabled: bool,
-    updating_bass_switch: &Cell<bool>,
-) {
-    updating_bass_switch.set(true);
+pub(crate) fn update_sound_page_bass_enabled(sound_widgets: &SoundWidgets, enabled: bool) {
+    let _guard = sound_widgets.bass_switch_flag.enter();
     sound_widgets.bass_switch.set_state(enabled);
     sound_widgets.bass_switch.set_active(enabled);
     sound_widgets.bass_slider.set_sensitive(enabled);
-    updating_bass_switch.set(false);
 }
 
 pub(crate) fn format_bass_level(val: i8) -> String {
@@ -326,12 +306,8 @@ pub(crate) fn format_bass_level(val: i8) -> String {
     }
 }
 
-pub(crate) fn update_sound_page_bass_level(
-    sound_widgets: &SoundWidgets,
-    level: BassEngineLevel,
-    updating_bass_slider: &Cell<bool>,
-) {
-    updating_bass_slider.set(true);
+pub(crate) fn update_sound_page_bass_level(sound_widgets: &SoundWidgets, level: BassEngineLevel) {
+    let _guard = sound_widgets.bass_slider_flag.enter();
     let min = level.min as f64;
     let max = level.max as f64;
     sound_widgets.bass_slider.set_range(min, max);
@@ -346,57 +322,40 @@ pub(crate) fn update_sound_page_bass_level(
         v += 1.0;
     }
     sound_widgets.bass_slider.set_value(level.current as f64);
-    updating_bass_slider.set(false);
 }
 
-pub(crate) fn update_sound_page_hi_res(
-    sound_widgets: &SoundWidgets,
-    hi_res_enabled: bool,
-    updating_hires_switch: &Cell<bool>,
-) {
-    updating_hires_switch.set(true);
+pub(crate) fn update_sound_page_hi_res(sound_widgets: &SoundWidgets, hi_res_enabled: bool) {
+    let _guard = sound_widgets.hires_switch_flag.enter();
     sound_widgets.hires_switch.set_state(hi_res_enabled);
     sound_widgets.hires_switch.set_active(hi_res_enabled);
-    updating_hires_switch.set(false);
 }
 
-pub(crate) fn update_sound_page_audio_codec(
-    sound_widgets: &SoundWidgets,
-    codec: u8,
-    updating_flag: &Cell<bool>,
-) {
-    updating_flag.set(true);
+pub(crate) fn update_sound_page_audio_codec(sound_widgets: &SoundWidgets, codec: u8) {
+    let _guard = sound_widgets.codec_flag.enter();
     crate::ui::components::ComboRowExtManual::set_selected_id(
         &sound_widgets.codec_row,
         Some(codec),
     );
-    updating_flag.set(false);
 }
 
-pub(crate) fn reset_sound_page(
-    sound_widgets: &SoundWidgets,
-    updating_eq: &Cell<bool>,
-    updating_spatial: &Cell<bool>,
-    updating_bass_switch: &Cell<bool>,
-    updating_bass_slider: &Cell<bool>,
-    updating_hires_switch: &Cell<bool>,
-    updating_codec: &Cell<bool>,
-) {
+pub(crate) fn reset_sound_page(sound_widgets: &SoundWidgets) {
     sound_widgets.eq_card.set_visible(false);
     sound_widgets.spatial_card.set_visible(false);
     sound_widgets.enhancement_card.set_visible(false);
 
-    updating_codec.set(true);
-    sound_widgets.codec_row.set_sensitive(false);
-    sound_widgets.codec_row.set_visible(false);
-    crate::ui::components::ComboRowExtManual::set_selected_id(&sound_widgets.codec_row, None);
-    updating_codec.set(false);
-
-    updating_eq.set(true);
-    for (_, radio, _) in &sound_widgets.preset_radios {
-        radio.set_sensitive(false);
+    {
+        let _guard = sound_widgets.codec_flag.enter();
+        sound_widgets.codec_row.set_sensitive(false);
+        sound_widgets.codec_row.set_visible(false);
+        crate::ui::components::ComboRowExtManual::set_selected_id(&sound_widgets.codec_row, None);
     }
-    updating_eq.set(false);
+
+    {
+        let _guard = sound_widgets.eq_flag.enter();
+        for (_, radio, _) in &sound_widgets.preset_radios {
+            radio.set_sensitive(false);
+        }
+    }
     {
         let mut old_rows = sound_widgets.custom_preset_rows.borrow_mut();
         for (_, _, row) in old_rows.drain(..) {
@@ -409,26 +368,30 @@ pub(crate) fn reset_sound_page(
     sound_widgets.custom_list.set_visible(false);
     sound_widgets.custom_editor.set_visible(false);
 
-    updating_spatial.set(true);
-    for (_, radio, _) in &sound_widgets.spatial_radios {
-        radio.set_sensitive(false);
+    {
+        let _guard = sound_widgets.spatial_flag.enter();
+        for (_, radio, _) in &sound_widgets.spatial_radios {
+            radio.set_sensitive(false);
+        }
     }
-    updating_spatial.set(false);
 
-    updating_bass_switch.set(true);
-    sound_widgets.bass_switch.set_sensitive(false);
-    sound_widgets.bass_switch.set_state(false);
-    sound_widgets.bass_switch.set_active(false);
-    updating_bass_switch.set(false);
+    {
+        let _guard = sound_widgets.bass_switch_flag.enter();
+        sound_widgets.bass_switch.set_sensitive(false);
+        sound_widgets.bass_switch.set_state(false);
+        sound_widgets.bass_switch.set_active(false);
+    }
 
-    updating_bass_slider.set(true);
-    sound_widgets.bass_slider.set_sensitive(false);
-    sound_widgets.bass_slider.set_value(0.0);
-    updating_bass_slider.set(false);
+    {
+        let _guard = sound_widgets.bass_slider_flag.enter();
+        sound_widgets.bass_slider.set_sensitive(false);
+        sound_widgets.bass_slider.set_value(0.0);
+    }
 
-    updating_hires_switch.set(true);
-    sound_widgets.hires_switch.set_sensitive(false);
-    sound_widgets.hires_switch.set_state(false);
-    sound_widgets.hires_switch.set_active(false);
-    updating_hires_switch.set(false);
+    {
+        let _guard = sound_widgets.hires_switch_flag.enter();
+        sound_widgets.hires_switch.set_sensitive(false);
+        sound_widgets.hires_switch.set_state(false);
+        sound_widgets.hires_switch.set_active(false);
+    }
 }

@@ -60,7 +60,6 @@ fn noise_control_circular_buttons_and_combobox_row() {
 
     let (_, widgets) = crate::ui::pages::home::build_home_page();
     let widget_refs = crate::ui::home_state::widgets_ref(&widgets);
-    let updating_noise = std::cell::Cell::new(false);
 
     // Verify first row buttons have circular and noise-mode-button CSS classes and are top-aligned
     for control in &widget_refs.primary_noise_controls {
@@ -113,7 +112,6 @@ fn noise_control_circular_buttons_and_combobox_row() {
             current_mode: Some(0),
             modes,
         },
-        &updating_noise,
     );
     assert!(widget_refs.mode_group.is_visible());
     assert!(!widget_refs.noise_option_row.is_visible());
@@ -138,7 +136,6 @@ fn noise_control_circular_buttons_and_combobox_row() {
             current_mode: Some(7),
             modes,
         },
-        &updating_noise,
     );
     assert!(widget_refs.noise_option_row.is_visible());
     let anc_ctrl = widget_refs
@@ -167,7 +164,6 @@ fn noise_control_circular_buttons_and_combobox_row() {
             current_mode: None,
             modes: &[],
         },
-        &updating_noise,
     );
     assert!(!widget_refs.mode_group.is_visible());
     assert!(!widget_refs.noise_option_row.is_visible());
@@ -340,13 +336,6 @@ fn ui_components_layout_and_behavior() {
     assert!(sound_widgets.sound_columns.is_single_column());
 
     // Verify Sound page state updates and two-way interaction methods
-    let updating_eq = std::cell::Cell::new(false);
-    let updating_spatial = std::cell::Cell::new(false);
-    let updating_bass_switch = std::cell::Cell::new(false);
-    let updating_bass_slider = std::cell::Cell::new(false);
-    let updating_hires_switch = std::cell::Cell::new(false);
-    let updating_codec = std::cell::Cell::new(false);
-
     // Initial update with Dynaudio presets & all sound features enabled
     crate::ui::sound_state::update_sound_page_features(
         &sound_widgets,
@@ -360,11 +349,6 @@ fn ui_components_layout_and_behavior() {
             supports_audio_codec: false,
             available_codecs: &[],
             presets: crate::compatibility::DYNAUDIO_EQ_PRESETS,
-        },
-        &crate::ui::sound_state::SoundPageUpdateFlags {
-            updating_eq: &updating_eq,
-            updating_spatial: &updating_spatial,
-            updating_codec: &updating_codec,
         },
     );
     assert!(sound_widgets.eq_card.is_visible());
@@ -394,7 +378,7 @@ fn ui_components_layout_and_behavior() {
     }
 
     // Select EQ preset 7 (Dynaudio Hi-Res)
-    crate::ui::sound_state::update_sound_page_equalizer(&sound_widgets, Some(7), &updating_eq);
+    crate::ui::sound_state::update_sound_page_equalizer(&sound_widgets, Some(7));
     let radio_7 = sound_widgets
         .preset_radios
         .iter()
@@ -403,7 +387,7 @@ fn ui_components_layout_and_behavior() {
     assert!(radio_7.1.is_active());
 
     // Select Spatial Audio mode 2 (Head Tracking)
-    crate::ui::sound_state::update_sound_page_spatial(&sound_widgets, Some(2), &updating_spatial);
+    crate::ui::sound_state::update_sound_page_spatial(&sound_widgets, Some(2));
     let spatial_2 = sound_widgets
         .spatial_radios
         .iter()
@@ -412,19 +396,11 @@ fn ui_components_layout_and_behavior() {
     assert!(spatial_2.1.is_active());
 
     // Bass engine switch enabled / disabled
-    crate::ui::sound_state::update_sound_page_bass_enabled(
-        &sound_widgets,
-        true,
-        &updating_bass_switch,
-    );
+    crate::ui::sound_state::update_sound_page_bass_enabled(&sound_widgets, true);
     assert!(sound_widgets.bass_switch.is_active());
     assert!(sound_widgets.bass_slider.is_sensitive());
 
-    crate::ui::sound_state::update_sound_page_bass_enabled(
-        &sound_widgets,
-        false,
-        &updating_bass_switch,
-    );
+    crate::ui::sound_state::update_sound_page_bass_enabled(&sound_widgets, false);
     assert!(!sound_widgets.bass_switch.is_active());
     assert!(!sound_widgets.bass_slider.is_sensitive());
 
@@ -434,19 +410,15 @@ fn ui_components_layout_and_behavior() {
         max: 5,
         current: 2,
     };
-    crate::ui::sound_state::update_sound_page_bass_level(
-        &sound_widgets,
-        level,
-        &updating_bass_slider,
-    );
+    crate::ui::sound_state::update_sound_page_bass_level(&sound_widgets, level);
     assert_eq!(sound_widgets.bass_slider.value(), 2.0);
     assert_eq!(sound_widgets.bass_slider.adjustment().lower(), -5.0);
     assert_eq!(sound_widgets.bass_slider.adjustment().upper(), 5.0);
 
     // Hi-Res switch state update
-    crate::ui::sound_state::update_sound_page_hi_res(&sound_widgets, true, &updating_hires_switch);
+    crate::ui::sound_state::update_sound_page_hi_res(&sound_widgets, true);
     assert!(sound_widgets.hires_switch.is_active());
-    crate::ui::sound_state::update_sound_page_hi_res(&sound_widgets, false, &updating_hires_switch);
+    crate::ui::sound_state::update_sound_page_hi_res(&sound_widgets, false);
     assert!(!sound_widgets.hires_switch.is_active());
 
     // Standard presets filter without custom EQ (e.g. Enco X3)
@@ -462,11 +434,6 @@ fn ui_components_layout_and_behavior() {
             supports_audio_codec: false,
             available_codecs: &[],
             presets: crate::compatibility::STANDARD_EQ_PRESETS,
-        },
-        &crate::ui::sound_state::SoundPageUpdateFlags {
-            updating_eq: &updating_eq,
-            updating_spatial: &updating_spatial,
-            updating_codec: &updating_codec,
         },
     );
     assert!(sound_widgets.eq_card.is_visible());
@@ -499,15 +466,7 @@ fn ui_components_layout_and_behavior() {
     }
 
     // Reset sound page
-    crate::ui::sound_state::reset_sound_page(
-        &sound_widgets,
-        &updating_eq,
-        &updating_spatial,
-        &updating_bass_switch,
-        &updating_bass_slider,
-        &updating_hires_switch,
-        &updating_codec,
-    );
+    crate::ui::sound_state::reset_sound_page(&sound_widgets);
     assert!(!sound_widgets.eq_card.is_visible());
     assert!(!sound_widgets.spatial_card.is_visible());
     assert!(!sound_widgets.enhancement_card.is_visible());
@@ -533,15 +492,9 @@ fn ui_components_layout_and_behavior() {
             available_codecs: &[],
             presets: crate::compatibility::DYNAUDIO_EQ_PRESETS,
         },
-        &crate::ui::sound_state::SoundPageUpdateFlags {
-            updating_eq: &updating_eq,
-            updating_spatial: &updating_spatial,
-            updating_codec: &updating_codec,
-        },
     );
 
     // Custom Equalizers tests: dynamic row insertion, selection, menu, and max cap
-    let updating_eq_rc = std::rc::Rc::new(std::cell::Cell::new(false));
     let custom_eq_1 = crate::protocol::CustomEqualizer {
         id: 4,
         name: "自定义1".to_string(),
@@ -605,7 +558,6 @@ fn ui_components_layout_and_behavior() {
         &sound_widgets,
         &[custom_eq_1.clone()],
         true,
-        &updating_eq_rc,
         |_| {},
         |_, _| {},
         |_, _| {},
@@ -622,7 +574,6 @@ fn ui_components_layout_and_behavior() {
             custom_eq_3.clone(),
         ],
         true,
-        &updating_eq_rc,
         |_| {},
         |_, _| {},
         |_, _| {},
@@ -642,7 +593,6 @@ fn ui_components_layout_and_behavior() {
         &sound_widgets,
         &[custom_eq_1.clone(), custom_eq_2.clone()],
         true,
-        &updating_eq_rc,
         |_| {},
         |_, _| {},
         |_, _| {},
@@ -671,11 +621,6 @@ fn ui_components_layout_and_behavior() {
             available_codecs,
             presets: crate::compatibility::DYNAUDIO_EQ_PRESETS,
         },
-        &crate::ui::sound_state::SoundPageUpdateFlags {
-            updating_eq: &updating_eq,
-            updating_spatial: &updating_spatial,
-            updating_codec: &updating_codec,
-        },
     );
     assert!(sound_widgets.enhancement_card.is_visible());
     assert!(sound_widgets.codec_row.is_visible());
@@ -685,7 +630,6 @@ fn ui_components_layout_and_behavior() {
     crate::ui::sound_state::update_sound_page_audio_codec(
         &sound_widgets,
         crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8(),
-        &updating_codec,
     );
     assert_eq!(
         crate::ui::components::ComboRowExtManual::selected_id(&sound_widgets.codec_row),
@@ -693,15 +637,7 @@ fn ui_components_layout_and_behavior() {
     );
 
     // Reset sound page hides codec row and clears selection
-    crate::ui::sound_state::reset_sound_page(
-        &sound_widgets,
-        &updating_eq,
-        &updating_spatial,
-        &updating_bass_switch,
-        &updating_bass_slider,
-        &updating_hires_switch,
-        &updating_codec,
-    );
+    crate::ui::sound_state::reset_sound_page(&sound_widgets);
     assert!(!sound_widgets.codec_row.is_visible());
     assert!(!sound_widgets.codec_row.is_sensitive());
     assert_eq!(
@@ -791,7 +727,6 @@ fn ui_components_layout_and_behavior() {
     // Verify ComboRow includes custom equalizers and preserves selection
     {
         let widget_refs = crate::ui::home_state::widgets_ref(&widgets);
-        let updating_eq = std::cell::Cell::new(false);
         let standard_presets = [
             crate::compatibility::EqualizerPreset {
                 index: 0,
@@ -827,7 +762,6 @@ fn ui_components_layout_and_behavior() {
             &standard_presets,
             &custom_eqs,
             Some(11),
-            &updating_eq,
         );
 
         assert!(widgets.eq_row.is_visible());
@@ -998,7 +932,6 @@ fn ui_components_layout_and_behavior() {
 
     // Controls page switch state and active checks
     let (_, controls_widgets) = crate::ui::pages::controls::build_controls_page();
-    let updating_flag = std::cell::Cell::new(false);
 
     // Initial state: sensitive = false
     assert!(!controls_widgets.dual_switch.is_sensitive());
@@ -1007,26 +940,26 @@ fn ui_components_layout_and_behavior() {
     assert!(!controls_widgets.head_switch.is_sensitive());
 
     // Update dual device enabled -> true
-    crate::ui::controls_state::update_dual_device(&controls_widgets, true, &updating_flag);
+    crate::ui::controls_state::update_dual_device(&controls_widgets, true);
     assert!(controls_widgets.dual_switch.state());
     assert!(controls_widgets.dual_switch.is_active());
     assert!(controls_widgets.dual_switch.is_sensitive());
     assert!(controls_widgets.dual_row.is_sensitive());
 
     // Update in-ear detection enabled -> true
-    crate::ui::controls_state::update_in_ear_detection(&controls_widgets, true, &updating_flag);
+    crate::ui::controls_state::update_in_ear_detection(&controls_widgets, true);
     assert!(controls_widgets.in_ear_switch.state());
     assert!(controls_widgets.in_ear_switch.is_active());
     assert!(controls_widgets.in_ear_switch.is_sensitive());
 
     // Update sleep detection enabled -> true
-    crate::ui::controls_state::update_sleep_detection(&controls_widgets, true, &updating_flag);
+    crate::ui::controls_state::update_sleep_detection(&controls_widgets, true);
     assert!(controls_widgets.sleep_switch.state());
     assert!(controls_widgets.sleep_switch.is_active());
     assert!(controls_widgets.sleep_switch.is_sensitive());
 
     // Update head switch enabled -> true
-    crate::ui::controls_state::update_head_switch(&controls_widgets, true, &updating_flag);
+    crate::ui::controls_state::update_head_switch(&controls_widgets, true);
     assert!(controls_widgets.head_switch.state());
     assert!(controls_widgets.head_switch.is_active());
     assert!(controls_widgets.head_switch.is_sensitive());

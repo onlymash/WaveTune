@@ -21,6 +21,7 @@ use gtk::{Box as GtkBox, Label, Stack};
 pub(crate) mod components;
 pub(crate) mod dialogs;
 pub(crate) mod pages;
+pub(crate) mod reentrancy;
 pub(crate) mod scene3d;
 #[cfg(test)]
 mod tests;
@@ -31,6 +32,7 @@ pub(crate) use pages::controls::state as controls_state;
 pub(crate) use pages::home::state as home_state;
 pub(crate) use pages::sound::SoundWidgets;
 pub(crate) use pages::sound::state as sound_state;
+pub(crate) use reentrancy::ReentrancyFlag;
 
 #[derive(Clone)]
 pub(crate) struct PrimaryNoiseControl {
@@ -73,6 +75,10 @@ pub(crate) struct HomeWidgets {
     pub(crate) spatial_row: adw::ComboRow,
     pub(crate) game_mode_section: adw::ActionRow,
     pub(crate) game_mode_switch: gtk::Switch,
+    pub(crate) noise_option_flag: ReentrancyFlag,
+    pub(crate) eq_flag: ReentrancyFlag,
+    pub(crate) spatial_flag: ReentrancyFlag,
+    pub(crate) game_mode_flag: ReentrancyFlag,
 }
 
 pub(crate) struct DeviceWidgets {

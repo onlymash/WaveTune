@@ -72,6 +72,14 @@ pub(crate) struct ControlsWidgets {
     pub(crate) fit_btn: Button,
     pub(crate) fit_spinner: Spinner,
     pub(crate) fit_result_label: Label,
+    pub(crate) gesture_combos_flag: crate::ui::ReentrancyFlag,
+    pub(crate) noise_cycle_flag: crate::ui::ReentrancyFlag,
+    pub(crate) prompt_volume_flag: crate::ui::ReentrancyFlag,
+    pub(crate) head_motion_flag: crate::ui::ReentrancyFlag,
+    pub(crate) dual_device_flag: crate::ui::ReentrancyFlag,
+    pub(crate) in_ear_flag: crate::ui::ReentrancyFlag,
+    pub(crate) sleep_flag: crate::ui::ReentrancyFlag,
+    pub(crate) preferred_flag: crate::ui::ReentrancyFlag,
 }
 
 pub(crate) fn build_controls_page() -> (GtkBox, ControlsWidgets) {
@@ -321,6 +329,14 @@ pub(crate) fn build_controls_page() -> (GtkBox, ControlsWidgets) {
         fit_btn,
         fit_spinner,
         fit_result_label,
+        gesture_combos_flag: crate::ui::ReentrancyFlag::new(),
+        noise_cycle_flag: crate::ui::ReentrancyFlag::new(),
+        prompt_volume_flag: crate::ui::ReentrancyFlag::new(),
+        head_motion_flag: crate::ui::ReentrancyFlag::new(),
+        dual_device_flag: crate::ui::ReentrancyFlag::new(),
+        in_ear_flag: crate::ui::ReentrancyFlag::new(),
+        sleep_flag: crate::ui::ReentrancyFlag::new(),
+        preferred_flag: crate::ui::ReentrancyFlag::new(),
     };
 
     (page, widgets)
