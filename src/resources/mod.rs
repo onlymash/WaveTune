@@ -172,6 +172,80 @@ pub fn set_run_in_background(enabled: bool) -> io::Result<()> {
     write_run_in_background_to(&config_file_path(), enabled)
 }
 
+pub(crate) fn device_config_group(product_id: u32, mac: Option<&str>) -> String {
+    if let Some(mac) = mac {
+        let trimmed = mac.trim();
+        if !trimmed.is_empty() {
+            if let Some(hash) = gtk::glib::compute_checksum_for_string(
+                gtk::glib::ChecksumType::Sha256,
+                trimmed.to_ascii_uppercase().as_str(),
+            ) {
+                return format!("Device_{:06X}_{}", product_id, &hash[..12]);
+            }
+        }
+    }
+    format!("Product_{:06X}", product_id)
+}
+
+pub(crate) fn read_equalizer_preset_from(
+    path: &Path,
+    product_id: u32,
+    mac: Option<&str>,
+) -> Option<u8> {
+    if !path.exists() {
+        return None;
+    }
+    let keyfile = gtk::glib::KeyFile::new();
+    if keyfile
+        .load_from_file(path, gtk::glib::KeyFileFlags::NONE)
+        .is_ok()
+    {
+        // 1. Try device-specific hashed group first
+        if mac.is_some() {
+            let specific_group = device_config_group(product_id, mac);
+            if let Ok(preset) = keyfile.integer(&specific_group, "equalizer_preset") {
+                if (0..=255).contains(&preset) {
+                    return Some(preset as u8);
+                }
+            }
+        }
+        // 2. Fall back to generic product group
+        let generic_group = device_config_group(product_id, None);
+        if let Ok(preset) = keyfile.integer(&generic_group, "equalizer_preset") {
+            if (0..=255).contains(&preset) {
+                return Some(preset as u8);
+            }
+        }
+    }
+    None
+}
+
+pub(crate) fn write_equalizer_preset_to(
+    path: &Path,
+    product_id: u32,
+    mac: Option<&str>,
+    preset: u8,
+) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let keyfile = gtk::glib::KeyFile::new();
+    let _ = keyfile.load_from_file(path, gtk::glib::KeyFileFlags::NONE);
+    let group = device_config_group(product_id, mac);
+    keyfile.set_integer(&group, "equalizer_preset", preset as i32);
+    keyfile
+        .save_to_file(path)
+        .map_err(|err| io::Error::other(err.to_string()))
+}
+
+pub fn get_saved_equalizer_preset(product_id: u32, mac: Option<&str>) -> Option<u8> {
+    read_equalizer_preset_from(&config_file_path(), product_id, mac)
+}
+
+pub fn save_equalizer_preset(product_id: u32, mac: Option<&str>, preset: u8) -> io::Result<()> {
+    write_equalizer_preset_to(&config_file_path(), product_id, mac, preset)
+}
+
 const AUTOSTART_DESKTOP_ENTRY: &str = "\
 [Desktop Entry]
 Type=Application
@@ -874,6 +948,70 @@ mod tests {
                 &cache_icons,
             ),
             ""
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn equalizer_preset_persistence_round_trip() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "wavetune_eq_pref_test_{}_{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let settings_path = temp_dir.join("wavetune").join("settings.ini");
+
+        // Returns None when file doesn't exist
+        assert_eq!(
+            read_equalizer_preset_from(&settings_path, 0x004535, None),
+            None
+        );
+
+        let mac_a = "11:22:33:44:55:66";
+        let mac_b = "AA:BB:CC:DD:EE:FF";
+
+        // Save preset 2 (Bass Boost) for device A
+        write_equalizer_preset_to(&settings_path, 0x004535, Some(mac_a), 2)
+            .expect("should write preset");
+        assert_eq!(
+            read_equalizer_preset_from(&settings_path, 0x004535, Some(mac_a)),
+            Some(2)
+        );
+
+        // MAC case-insensitivity check (e.g. lowercase vs uppercase)
+        assert_eq!(
+            read_equalizer_preset_from(&settings_path, 0x004535, Some("11:22:33:44:55:66")),
+            Some(2)
+        );
+
+        // Device B on the same model returns None (uniqueness per device)
+        assert_eq!(
+            read_equalizer_preset_from(&settings_path, 0x004535, Some(mac_b)),
+            None
+        );
+
+        // Save preset 5 (Dynamic) for device B
+        write_equalizer_preset_to(&settings_path, 0x004535, Some(mac_b), 5)
+            .expect("should write preset");
+        assert_eq!(
+            read_equalizer_preset_from(&settings_path, 0x004535, Some(mac_b)),
+            Some(5)
+        );
+        // Device A remains 2
+        assert_eq!(
+            read_equalizer_preset_from(&settings_path, 0x004535, Some(mac_a)),
+            Some(2)
+        );
+
+        // Fallback: save generic product preset and query with None
+        write_equalizer_preset_to(&settings_path, 0x004535, None, 1).expect("should write preset");
+        assert_eq!(
+            read_equalizer_preset_from(&settings_path, 0x004535, None),
+            Some(1)
         );
 
         let _ = fs::remove_dir_all(&temp_dir);

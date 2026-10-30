@@ -285,6 +285,7 @@ fn handle_unsolicited(packet: &EarFunPacket, updates: Option<&Sender<UiUpdate>>)
 pub fn initialize_earfun_session<T: Read + Write>(
     stream: &mut T,
     device_name: &str,
+    device_address: Option<&str>,
     discovered_product_id: Option<u32>,
     updates: Option<&Sender<UiUpdate>>,
 ) -> Result<(EarFunDeviceSnapshot, EarFunFrameDecoder), String> {
@@ -600,7 +601,11 @@ pub fn initialize_earfun_session<T: Read + Write>(
         supports_game_mode,
         game_mode_enabled,
         supports_equalizer,
-        equalizer_preset: Some(0),
+        equalizer_preset: if supports_equalizer {
+            Some(crate::resources::get_saved_equalizer_preset(pid, device_address).unwrap_or(0))
+        } else {
+            None
+        },
         detected_features,
         probe_errors,
     };
@@ -765,7 +770,7 @@ pub(crate) fn apply_equalizer_preset<T: Read + Write>(
     decoder: &mut EarFunFrameDecoder,
     product_id: u32,
     preset_index: u8,
-    updates: &Sender<UiUpdate>,
+    updates: Option<&Sender<UiUpdate>>,
 ) -> Result<(), String> {
     let mut joined_frames = Vec::new();
 
@@ -837,7 +842,7 @@ pub(crate) fn apply_equalizer_preset<T: Read + Write>(
         .map_err(|error| crate::t!("protocol-query-send-failed", error))?;
 
     // Drain incoming ACK frames from socket buffer
-    drain_stream(stream, decoder, Some(updates), Duration::from_millis(150));
+    drain_stream(stream, decoder, updates, Duration::from_millis(150));
 
     Ok(())
 }
@@ -849,8 +854,14 @@ fn monitor_device(
 ) -> Result<(), String> {
     let mut stream = open_earfun_rfcomm(&device)
         .map_err(|error| crate::t!("channel-unable-to-open-rfcomm", error))?;
-    let (snapshot, mut decoder) =
-        initialize_earfun_session(&mut stream, &device.name, device.product_id, Some(updates))?;
+    let mac_str = device.address.to_string();
+    let (snapshot, mut decoder) = initialize_earfun_session(
+        &mut stream,
+        &device.name,
+        Some(&mac_str),
+        device.product_id,
+        Some(updates),
+    )?;
 
     let _ = updates.send(UiUpdate::Connected {
         device: device.clone(),
@@ -884,6 +895,15 @@ fn monitor_device(
     });
 
     if let Some(preset) = snapshot.equalizer_preset {
+        if preset != 0 {
+            let _ = apply_equalizer_preset(
+                &mut stream,
+                &mut decoder,
+                snapshot.product_id,
+                preset,
+                Some(updates),
+            );
+        }
         let _ = updates.send(UiUpdate::Equalizer(preset));
     }
     if let Some(enabled) = snapshot.game_mode_enabled {
@@ -992,9 +1012,14 @@ fn monitor_device(
                     &mut decoder,
                     snapshot.product_id,
                     preset_index,
-                    updates,
+                    Some(updates),
                 ) {
                     Ok(()) => {
+                        let _ = crate::resources::save_equalizer_preset(
+                            snapshot.product_id,
+                            Some(&mac_str),
+                            preset_index,
+                        );
                         let _ = updates.send(UiUpdate::Equalizer(preset_index));
                     }
                     Err(error) => {
@@ -1091,8 +1116,14 @@ fn monitor_device(
 pub fn probe_earfun(device: &DeviceChoice) -> Result<(), String> {
     let mut stream = open_earfun_rfcomm(device)
         .map_err(|error| crate::t!("channel-unable-to-open-rfcomm", error))?;
-    let (snapshot, _) =
-        initialize_earfun_session(&mut stream, &device.name, device.product_id, None)?;
+    let mac_str = device.address.to_string();
+    let (snapshot, _) = initialize_earfun_session(
+        &mut stream,
+        &device.name,
+        Some(&mac_str),
+        device.product_id,
+        None,
+    )?;
     print_earfun_snapshot(&snapshot);
     Ok(())
 }
@@ -1155,5 +1186,17 @@ fn print_earfun_snapshot(snapshot: &EarFunDeviceSnapshot) {
             "In-Ear Detection: {}",
             if in_ear { "Enabled" } else { "Disabled" }
         );
+    }
+
+    if snapshot.supports_equalizer {
+        if let Some(preset) = snapshot.equalizer_preset {
+            let presets = crate::compatibility::equalizer_presets_for_product(snapshot.product_id);
+            let preset_name = crate::compatibility::equalizer_preset_key(preset, presets)
+                .map(|key| crate::t!(key))
+                .unwrap_or_else(|| preset.to_string());
+            println!("{}", crate::t!("probe-headset-eq", preset_name));
+        } else {
+            println!("{}", crate::t!("equalizer-not-returned"));
+        }
     }
 }

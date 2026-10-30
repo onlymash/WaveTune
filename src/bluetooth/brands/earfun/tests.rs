@@ -126,8 +126,9 @@ mod tests {
             send_mock_response(&mut device, req.command, vec![0x00, 1]); // Enabled
         });
 
-        let (snapshot, _) = initialize_earfun_session(&mut client, "EarFun Air Pro 4", None, None)
-            .expect("session initialization should succeed");
+        let (snapshot, _) =
+            initialize_earfun_session(&mut client, "EarFun Air Pro 4", None, None, None)
+                .expect("session initialization should succeed");
 
         assert_eq!(snapshot.model, "EarFun Air Pro 4");
         assert_eq!(snapshot.firmware.left.as_deref(), Some("0.4.1"));
@@ -287,8 +288,9 @@ mod tests {
 
         // Test that custom device name does NOT affect identification:
         // product ID is derived from firmware code TW201
-        let (snapshot, _) = initialize_earfun_session(&mut client, "Custom Air S Name", None, None)
-            .expect("Air S session initialization should succeed");
+        let (snapshot, _) =
+            initialize_earfun_session(&mut client, "Custom Air S Name", None, None, None)
+                .expect("Air S session initialization should succeed");
 
         assert_eq!(snapshot.model, "EarFun Air S");
         assert_eq!(snapshot.product_id, EARFUN_AIR_S_PRODUCT_ID);
@@ -362,7 +364,7 @@ mod tests {
         // Test that custom device name does NOT affect identification:
         // product ID is derived from firmware code TW400
         let (snapshot, _) =
-            initialize_earfun_session(&mut client, "My Renamed Headset", None, None)
+            initialize_earfun_session(&mut client, "My Renamed Headset", None, None, None)
                 .expect("Free Pro 3 session initialization should succeed");
 
         assert_eq!(snapshot.model, "EarFun Free Pro 3");
@@ -410,8 +412,9 @@ mod tests {
         });
 
         // Unknown model with no discovery product_id should be treated as read-only unknown device
-        let (snapshot, _) = initialize_earfun_session(&mut client, "Generic EarFun", None, None)
-            .expect("Unknown model session initialization should succeed in read-only mode");
+        let (snapshot, _) =
+            initialize_earfun_session(&mut client, "Generic EarFun", None, None, None)
+                .expect("Unknown model session initialization should succeed in read-only mode");
 
         assert_eq!(snapshot.model, crate::t!("device-unknown-model"));
         assert!(!snapshot.is_known_model);
