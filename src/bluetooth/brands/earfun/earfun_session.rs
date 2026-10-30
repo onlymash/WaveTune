@@ -17,6 +17,7 @@
 
 use std::{
     io::{Read, Write},
+    os::fd::AsRawFd,
     sync::mpsc::{Receiver, Sender, TryRecvError},
     thread,
     time::{Duration, Instant},
@@ -30,9 +31,13 @@ use crate::protocol::brands::earfun::{
     EarFunCommands, EarFunFrameDecoder, EarFunPacket, encode_earfun_eq_band,
     parse_earfun_ambient_mode, parse_earfun_anc_sub_mode, parse_earfun_battery_component,
     parse_earfun_dual_device, parse_earfun_firmware_version, parse_earfun_game_mode,
-    parse_earfun_in_ear_detection, parse_earfun_transparency_sub_mode,
+    parse_earfun_in_ear_detection, parse_earfun_paired_device_entry,
+    parse_earfun_transparency_sub_mode,
 };
-use crate::protocol::{BatteryPart, BatteryState, FirmwareVersions, WearPart, WearState};
+use crate::protocol::{
+    BatteryPart, BatteryState, FirmwareVersions, PairedDevice, PairedDeviceAction, WearPart,
+    WearState,
+};
 
 pub const EARFUN_AIR_PRO_4_PRODUCT_ID: u32 = 0x004535;
 pub const EARFUN_FREE_PRO_3_PRODUCT_ID: u32 = 0x004534;
@@ -84,6 +89,9 @@ pub struct EarFunDeviceSnapshot {
     pub transp_sub: u8,
     pub supports_dual_device: bool,
     pub dual_device_enabled: Option<bool>,
+    pub supports_paired_devices: bool,
+    pub paired_devices: Result<Vec<PairedDevice>, String>,
+    pub paired_device_controls_enabled: Result<bool, String>,
     pub supports_game_mode: bool,
     pub game_mode_enabled: Option<bool>,
     pub supports_equalizer: bool,
@@ -282,7 +290,94 @@ fn handle_unsolicited(packet: &EarFunPacket, updates: Option<&Sender<UiUpdate>>)
     }
 }
 
-pub fn initialize_earfun_session<T: Read + Write>(
+#[repr(C)]
+struct SockAddrRc {
+    family: libc::sa_family_t,
+    address: [u8; 6],
+    channel: u8,
+}
+
+pub(crate) fn get_local_rfcomm_lap<T: AsRawFd>(stream: &T) -> Option<[u8; 3]> {
+    let mut addr = SockAddrRc {
+        family: 0,
+        address: [0; 6],
+        channel: 0,
+    };
+    let mut len = std::mem::size_of::<SockAddrRc>() as libc::socklen_t;
+    let res = unsafe {
+        libc::getsockname(
+            stream.as_raw_fd(),
+            &mut addr as *mut SockAddrRc as *mut libc::sockaddr,
+            &mut len,
+        )
+    };
+    if res == 0 && addr.family == libc::AF_BLUETOOTH as libc::sa_family_t {
+        Some([addr.address[2], addr.address[1], addr.address[0]])
+    } else {
+        None
+    }
+}
+
+pub(crate) fn read_earfun_paired_devices<T: Read + Write + AsRawFd>(
+    stream: &mut T,
+    decoder: &mut EarFunFrameDecoder,
+    updates: Option<&Sender<UiUpdate>>,
+) -> Result<Vec<PairedDevice>, String> {
+    let local_lap = get_local_rfcomm_lap(stream);
+    send_command(stream, EarFunCommands::GET_CONNECTED_DEVICES, vec![])?;
+
+    let deadline = Instant::now() + Duration::from_millis(1500);
+    let mut slots_received = std::collections::BTreeMap::new();
+
+    while Instant::now() < deadline {
+        let mut bytes = [0u8; 1024];
+        let n = match stream.read(&mut bytes) {
+            Ok(0) => return Err(crate::t!("channel-headset-closed")),
+            Ok(n) => n,
+            Err(e) if is_socket_timeout(&e) => {
+                if !slots_received.is_empty() {
+                    break;
+                }
+                continue;
+            }
+            Err(e) => return Err(crate::t!("protocol-response-read-failed", e)),
+        };
+
+        let packets = decoder.push(&bytes[..n]);
+        for packet in packets {
+            if packet.command == EarFunCommands::GET_CONNECTED_DEVICES
+                || packet.command == (EarFunCommands::GET_CONNECTED_DEVICES | 0x8000)
+            {
+                if packet.payload.len() >= 27 {
+                    let slot = packet.payload[1];
+                    slots_received.insert(slot, packet.payload);
+                }
+            } else {
+                handle_unsolicited(&packet, updates);
+            }
+        }
+
+        if slots_received.len() >= 10 {
+            break;
+        }
+    }
+
+    if slots_received.is_empty() {
+        return Err(crate::t!("dual-device-read-list-failed", "timeout"));
+    }
+
+    let mut devices = Vec::new();
+    for (_, payload) in slots_received {
+        if let Ok(Some(dev)) = parse_earfun_paired_device_entry(&payload, local_lap) {
+            devices.push(dev);
+        }
+    }
+    devices.sort_by_key(|d| (!d.connected, !d.is_current_host));
+
+    Ok(devices)
+}
+
+pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
     stream: &mut T,
     device_name: &str,
     device_address: Option<&str>,
@@ -391,6 +486,9 @@ pub fn initialize_earfun_session<T: Read + Write>(
             transp_sub: 0,
             supports_dual_device: false,
             dual_device_enabled: None,
+            supports_paired_devices: false,
+            paired_devices: Err(crate::t!("dual-device-not-supported")),
+            paired_device_controls_enabled: Err(crate::t!("dual-device-not-supported")),
             supports_game_mode: false,
             game_mode_enabled: None,
             supports_equalizer: false,
@@ -541,7 +639,7 @@ pub fn initialize_earfun_session<T: Read + Write>(
     };
 
     // 6. Dual device (multipoint)
-    let dual_device_enabled = if supports_dual_device {
+    let (dual_device_enabled, paired_devices) = if supports_dual_device {
         let enabled = request(
             stream,
             &mut decoder,
@@ -554,9 +652,23 @@ pub fn initialize_earfun_session<T: Read + Write>(
         if enabled.is_some() {
             detected_features.push("dual-device".to_string());
         }
-        enabled
+
+        let devs = read_earfun_paired_devices(stream, &mut decoder, updates).map_err(|e| {
+            probe_errors.push(e.clone());
+            e
+        });
+
+        (enabled, devs)
     } else {
-        None
+        (None, Err(crate::t!("dual-device-not-supported")))
+    };
+
+    let paired_device_controls_enabled = if !supports_dual_device {
+        Err(crate::t!("dual-device-not-supported"))
+    } else if dual_device_enabled == Some(false) {
+        Err(crate::t!("dual-device-not-enabled"))
+    } else {
+        Ok(true)
     };
 
     // When connected via RFCOMM, earbuds are active and in-ear
@@ -598,6 +710,9 @@ pub fn initialize_earfun_session<T: Read + Write>(
         transp_sub,
         supports_dual_device,
         dual_device_enabled,
+        supports_paired_devices: supports_dual_device,
+        paired_devices,
+        paired_device_controls_enabled,
         supports_game_mode,
         game_mode_enabled,
         supports_equalizer,
@@ -932,6 +1047,11 @@ fn monitor_device(
         let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(enabled));
     }
 
+    let _ = updates.send(UiUpdate::PairedDeviceControlsEnabled(
+        snapshot.paired_device_controls_enabled.clone(),
+    ));
+    let _ = updates.send(UiUpdate::PairedDevices(snapshot.paired_devices.clone()));
+
     let _ = updates.send(UiUpdate::Status(crate::t!("channel-connected")));
 
     let mut current_anc_sub = snapshot.anc_sub;
@@ -997,12 +1117,88 @@ fn monitor_device(
                 match set_dual_device(&mut stream, &mut decoder, enabled, updates) {
                     Ok(actual) => {
                         let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(actual));
+                        let controls_enabled = if actual {
+                            Ok(true)
+                        } else {
+                            Err(crate::t!("dual-device-not-enabled"))
+                        };
+                        let _ =
+                            updates.send(UiUpdate::PairedDeviceControlsEnabled(controls_enabled));
                     }
                     Err(error) => {
                         let _ = updates.send(UiUpdate::SettingError {
                             domain: SettingDomain::Controls,
                             message: error,
                         });
+                    }
+                }
+            }
+            Ok(WorkerCommand::SetPairedDevice { address, action }) => {
+                let slot = address.command_bytes()[2];
+                match action {
+                    PairedDeviceAction::Connect => {
+                        let _ =
+                            updates.send(UiUpdate::Status(crate::t!("dual-device-waiting-update")));
+                        if let Err(_e) =
+                            send_command(&mut stream, EarFunCommands::CONNECT_DEVICE, vec![slot])
+                        {
+                            let _ = updates.send(UiUpdate::Status(crate::t!(
+                                "dual-device-send-connect-failed"
+                            )));
+                            let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+                            continue;
+                        }
+                        thread::sleep(Duration::from_millis(300));
+                        match read_earfun_paired_devices(&mut stream, &mut decoder, Some(updates)) {
+                            Ok(devs) => {
+                                let _ = updates.send(UiUpdate::PairedDevices(Ok(devs)));
+                                let _ = updates.send(UiUpdate::Status(crate::t!(
+                                    "dual-device-status-confirmed"
+                                )));
+                            }
+                            Err(e) => {
+                                let _ = updates.send(UiUpdate::Status(crate::t!(
+                                    "dual-device-readback-list-failed",
+                                    e
+                                )));
+                            }
+                        }
+                        let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+                    }
+                    PairedDeviceAction::Disconnect => {
+                        let _ =
+                            updates.send(UiUpdate::Status(crate::t!("dual-device-waiting-update")));
+                        if let Err(_e) =
+                            send_command(&mut stream, EarFunCommands::DISCONNECT_DEVICE, vec![slot])
+                        {
+                            let _ = updates.send(UiUpdate::Status(crate::t!(
+                                "dual-device-send-disconnect-failed"
+                            )));
+                            let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+                            continue;
+                        }
+                        thread::sleep(Duration::from_millis(300));
+                        match read_earfun_paired_devices(&mut stream, &mut decoder, Some(updates)) {
+                            Ok(devs) => {
+                                let _ = updates.send(UiUpdate::PairedDevices(Ok(devs)));
+                                let _ = updates.send(UiUpdate::Status(crate::t!(
+                                    "dual-device-status-confirmed"
+                                )));
+                            }
+                            Err(e) => {
+                                let _ = updates.send(UiUpdate::Status(crate::t!(
+                                    "dual-device-readback-list-failed",
+                                    e
+                                )));
+                            }
+                        }
+                        let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+                    }
+                    PairedDeviceAction::Remove => {
+                        let _ = updates.send(UiUpdate::Status(crate::t!(
+                            "dual-device-management-blocked"
+                        )));
+                        let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
                     }
                 }
             }
@@ -1173,19 +1369,28 @@ fn print_earfun_snapshot(snapshot: &EarFunDeviceSnapshot) {
     );
 
     if let Some(game) = snapshot.game_mode_enabled {
-        println!("Game Mode: {}", if game { "Enabled" } else { "Disabled" });
+        let state_str = if game {
+            crate::t!("common-on")
+        } else {
+            crate::t!("common-off")
+        };
+        println!("{}", crate::t!("probe-game-mode", state_str));
     }
     if let Some(dual) = snapshot.dual_device_enabled {
-        println!(
-            "Dual Device Connection: {}",
-            if dual { "Enabled" } else { "Disabled" }
-        );
+        let state_str = if dual {
+            crate::t!("common-on")
+        } else {
+            crate::t!("common-off")
+        };
+        println!("{}", crate::t!("probe-dual-device", state_str));
     }
     if let Some(in_ear) = snapshot.in_ear_detection_enabled {
-        println!(
-            "In-Ear Detection: {}",
-            if in_ear { "Enabled" } else { "Disabled" }
-        );
+        let state_str = if in_ear {
+            crate::t!("common-on")
+        } else {
+            crate::t!("common-off")
+        };
+        println!("{}", crate::t!("probe-in-ear-detection", state_str));
     }
 
     if snapshot.supports_equalizer {
@@ -1197,6 +1402,28 @@ fn print_earfun_snapshot(snapshot: &EarFunDeviceSnapshot) {
             println!("{}", crate::t!("probe-headset-eq", preset_name));
         } else {
             println!("{}", crate::t!("equalizer-not-returned"));
+        }
+    }
+
+    if snapshot.supports_paired_devices {
+        match &snapshot.paired_devices {
+            Ok(devices) => {
+                println!("{}", crate::t!("probe-paired-devices", devices.len()));
+                for dev in devices {
+                    let host_tag = if dev.is_current_host {
+                        format!(" ({})", crate::t!("dual-device-this-host"))
+                    } else {
+                        String::new()
+                    };
+                    let status_str = if dev.connected {
+                        crate::t!("common-connected")
+                    } else {
+                        crate::t!("common-disconnected")
+                    };
+                    println!("  - {}{host_tag} [{status_str}]", dev.name);
+                }
+            }
+            Err(e) => println!("{}", crate::t!("probe-paired-devices-failed", e)),
         }
     }
 }

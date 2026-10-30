@@ -67,6 +67,30 @@ mod tests {
             .expect("mock write error");
     }
 
+    fn send_mock_032c(
+        device: &mut UnixStream,
+        slot: u8,
+        name: &[u8],
+        lap: [u8; 3],
+        connected: bool,
+    ) {
+        let mut payload = vec![0x00, slot];
+        let mut name_buf = [0u8; 21];
+        let len = name.len().min(21);
+        name_buf[..len].copy_from_slice(&name[..len]);
+        payload.extend_from_slice(&name_buf);
+        payload.extend_from_slice(&lap);
+        payload.push(if connected { 1 } else { 0 });
+        let pkt = EarFunPacket {
+            version: 0x03,
+            flags: 0x00,
+            vendor_id: 0x000A,
+            command: EarFunCommands::GET_CONNECTED_DEVICES,
+            payload,
+        };
+        device.write_all(&pkt.encode()).unwrap();
+    }
+
     #[test]
     fn test_earfun_session_initialization() {
         let (mut client, mut device) = UnixStream::pair().unwrap();
@@ -124,6 +148,15 @@ mod tests {
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::GET_CONNECT_TWO_DEVICES);
             send_mock_response(&mut device, req.command, vec![0x00, 1]); // Enabled
+
+            // 10. Paired devices 0x032C (slots 0..10)
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_CONNECTED_DEVICES);
+            send_mock_032c(&mut device, 0, b"PC-Work", [0x01, 0x02, 0x03], true);
+            send_mock_032c(&mut device, 1, b"Phone", [0x04, 0x05, 0x06], false);
+            for slot in 2..10 {
+                send_mock_032c(&mut device, slot, b"", [0, 0, slot], false);
+            }
         });
 
         let (snapshot, _) =
@@ -139,6 +172,15 @@ mod tests {
         assert_eq!(snapshot.game_mode_enabled, Some(true));
         assert_eq!(snapshot.in_ear_detection_enabled, Some(true));
         assert_eq!(snapshot.dual_device_enabled, Some(true));
+        assert!(snapshot.supports_paired_devices);
+
+        let devs = snapshot.paired_devices.unwrap();
+        assert_eq!(devs.len(), 2);
+        assert_eq!(devs[0].name, "PC-Work");
+        assert!(devs[0].connected);
+        assert_eq!(devs[1].name, "Phone");
+        assert!(!devs[1].connected);
+        assert!(snapshot.paired_device_controls_enabled.is_ok());
 
         device_thread.join().unwrap();
     }
@@ -427,6 +469,39 @@ mod tests {
         assert!(!snapshot.supports_dual_device);
         assert!(!snapshot.supports_game_mode);
         assert!(!snapshot.supports_equalizer);
+
+        device_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_earfun_read_paired_devices() {
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+
+        let device_thread = thread::spawn(move || {
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_CONNECTED_DEVICES);
+            send_mock_032c(&mut device, 0, b"Arch-Desktop", [0x11, 0x22, 0x33], false);
+            send_mock_032c(&mut device, 1, b"Pixel-Phone", [0x44, 0x55, 0x66], true);
+            for slot in 2..10 {
+                send_mock_032c(&mut device, slot, b"", [0, 0, slot], false);
+            }
+        });
+
+        let mut decoder = EarFunFrameDecoder::default();
+        let devices = read_earfun_paired_devices(&mut client, &mut decoder, None).unwrap();
+        assert_eq!(devices.len(), 2);
+        assert_eq!(devices[0].name, "Pixel-Phone");
+        assert!(devices[0].connected);
+        assert_eq!(devices[0].device_type, 0);
+        assert_eq!(devices[1].name, "Arch-Desktop");
+        assert!(!devices[1].connected);
+        assert_eq!(devices[1].device_type, 0);
 
         device_thread.join().unwrap();
     }

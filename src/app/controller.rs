@@ -2092,8 +2092,9 @@ pub(crate) fn wire_bluetooth_controls(
                     sync_desktop_services(&quick_settings, &tray, &qs_state);
                 }
                 Ok(UiUpdate::PairedDevices(result)) => {
-                    paired_devices = result.clone();
-                    if let Ok(devs) = &result {
+                    let mut sorted_result = result.clone();
+                    if let Ok(devs) = &mut sorted_result {
+                        devs.sort_by_key(|d| (!d.connected, !d.is_current_host));
                         *cached_paired_devices.borrow_mut() = devs.clone();
                         controls_state::update_preferred_devices(
                             &controls_widgets,
@@ -2102,6 +2103,7 @@ pub(crate) fn wire_bluetooth_controls(
                             &updating_preferred,
                         );
                     }
+                    paired_devices = sorted_result.clone();
                     render_paired_devices(
                         &widgets.paired_devices,
                         paired_devices.clone(),
@@ -2850,7 +2852,8 @@ fn render_paired_devices(
                 .build();
             container.append(&empty_row);
         }
-        Ok(devices) => {
+        Ok(mut devices) => {
+            devices.sort_by_key(|d| (!d.connected, !d.is_current_host));
             for device in devices {
                 let row = adw::ActionRow::builder()
                     .title(if device.is_current_host {

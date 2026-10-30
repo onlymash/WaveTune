@@ -16,7 +16,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use super::earfun_packet::EarFunProtocolError;
-use crate::protocol::core::types::{BatteryPart, FirmwareVersions};
+use crate::protocol::core::types::{
+    BatteryPart, FirmwareVersions, PairedDevice, PairedDeviceAddress,
+};
 
 /// Parse a single battery level response (commands 0x0306, 0x0307, 0x0317).
 /// EarFun payload format: [0x00 (status), level (0..100)]
@@ -100,6 +102,45 @@ pub fn parse_earfun_dual_device(payload: &[u8]) -> Result<bool, EarFunProtocolEr
         return Err(EarFunProtocolError::InvalidPacketLength);
     }
     Ok(payload[1] == 1)
+}
+
+/// Parse a single paired device response entry (command 0x032C).
+/// Payload format (27 bytes):
+/// [0x00 (status), slot (0..9), name (21 bytes UTF-8 null-padded), lap (3 bytes), connected (0/1)]
+pub fn parse_earfun_paired_device_entry(
+    payload: &[u8],
+    local_lap: Option<[u8; 3]>,
+) -> Result<Option<PairedDevice>, EarFunProtocolError> {
+    if payload.len() < 27 || payload[0] != 0x00 {
+        return Err(EarFunProtocolError::InvalidPacketLength);
+    }
+    let slot = payload[1];
+    let name_len = payload.len() - 6;
+    let name_bytes = &payload[2..2 + name_len];
+    let trimmed = match name_bytes.iter().position(|&b| b == 0) {
+        Some(pos) => &name_bytes[..pos],
+        None => name_bytes,
+    };
+    let name_str = std::str::from_utf8(trimmed)
+        .map_err(|_| EarFunProtocolError::InvalidPacketLength)?
+        .trim();
+    if name_str.is_empty() {
+        return Ok(None);
+    }
+
+    let lap_idx = payload.len() - 4;
+    let lap = [payload[lap_idx], payload[lap_idx + 1], payload[lap_idx + 2]];
+    let connected = payload[payload.len() - 1] != 0;
+    let is_current_host = local_lap.is_some_and(|l| l == lap);
+    let address = PairedDeviceAddress::from_display_bytes([0, 0, slot, lap[0], lap[1], lap[2]]);
+
+    Ok(Some(PairedDevice {
+        name: name_str.to_string(),
+        connected,
+        is_current_host,
+        device_type: 0,
+        address,
+    }))
 }
 
 /// Encode 10-band equalizer band command (0x0E01).

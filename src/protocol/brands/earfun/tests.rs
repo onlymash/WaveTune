@@ -71,5 +71,41 @@ mod tests {
         // Real ANC submode capture
         let anc_sub = parse_earfun_anc_sub_mode(&[0x00, 0x04]).unwrap();
         assert_eq!(anc_sub, 4); // AI Environment Adaptive
+
+        // Real paired device capture from EarFun Air Pro 4 (slot 9: NUC12SNKi72)
+        let slot9_payload = [
+            0x00, 0x09, 0x4E, 0x55, 0x43, 0x31, 0x32, 0x53, 0x4E, 0x4B, 0x69, 0x37, 0x32, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x61, 0x33, 0x3D, 0x01,
+        ];
+        let dev = parse_earfun_paired_device_entry(&slot9_payload, Some([0x61, 0x33, 0x3D]))
+            .unwrap()
+            .expect("should parse valid device");
+        assert_eq!(dev.name, "NUC12SNKi72");
+        assert!(dev.connected);
+        assert!(dev.is_current_host);
+        assert_eq!(dev.device_type, 0);
+        assert_eq!(dev.address.command_bytes(), [0, 0, 9, 0x61, 0x33, 0x3D]);
+
+        // Slot 0 (arch-work, disconnected)
+        let slot0_payload = [
+            0x00, 0x00, 0x61, 0x72, 0x63, 0x68, 0x2D, 0x77, 0x6F, 0x72, 0x6B, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0xC6, 0x2C, 0x00,
+        ];
+        let dev0 = parse_earfun_paired_device_entry(&slot0_payload, Some([0x61, 0x33, 0x3D]))
+            .unwrap()
+            .expect("should parse valid device");
+        assert_eq!(dev0.name, "arch-work");
+        assert!(!dev0.connected);
+        assert!(!dev0.is_current_host);
+        assert_eq!(dev0.device_type, 0);
+
+        // Empty slot (slot 6: name is all zeros)
+        let slot6_payload = [
+            0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1D, 0xCC, 0x09, 0x00,
+        ];
+        let dev6 =
+            parse_earfun_paired_device_entry(&slot6_payload, Some([0x61, 0x33, 0x3D])).unwrap();
+        assert!(dev6.is_none());
     }
 }
