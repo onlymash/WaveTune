@@ -19,4 +19,5 @@ pub(crate) mod controller;
 pub(crate) mod dbus_service;
 mod device_manager;
 pub mod events;
+pub(crate) mod state;
 pub(crate) mod tray_service;

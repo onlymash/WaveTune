@@ -68,7 +68,7 @@ WaveTune 最初基于 GTK4/Libadwaita 与 BlueZ 开发，由于初期缺乏严�
 
 为保证项目始终处于可编译、可测试、功能正常的状态，重构严格按照**“不破坏现有运行逻辑，逐步替换内部实现”**的原则推进。
 
-### 阶段一：参数对象化与渲染函数去味（消除代码异味）
+### 阶段一：参数对象化与渲染函数去味（消除代码异味）[已完成]
 **目标**：不改动现有状态流动和生命周期，先解决函数传参过多问题，移除 `#[allow(clippy::too_many_arguments)]`。
 
 #### 具体任务：
@@ -91,19 +91,19 @@ WaveTune 最初基于 GTK4/Libadwaita 与 BlueZ 开发，由于初期缺乏严�
 
 ---
 
-### 阶段二：原生事件驱动改造（消除 100ms 轮询）
-**目标**：移除低效的 `timeout_add_local(100ms)` 轮询，改用 GLib 原生异步通道，提升响应速度并降低空闲能耗。
+### 阶段二：原生事件驱动改造（消除 100ms 轮询）[已完成]
+**目标**：移除低效的 `timeout_add_local(100ms)` 轮询，改用异步通道与主上下文唤醒，提升响应速度并降低空闲能耗。
 
 #### 具体任务：
-1. 将 `updates_tx/rx` 由 `std::sync::mpsc::channel()` 改造为 `glib::MainContext::channel(glib::Priority::default())`。
+1. 建立 `wavetune-ui-bridge` 线程与 Tokio/GLib 异步通道，消除定时轮询。
 2. 移除 `gtk::glib::timeout_add_local(Duration::from_millis(100), ...)`。
-3. 使用 `updates_rx.attach(None, move |update| { ... glib::ControlFlow::Continue })` 直接挂载到 GTK 主循环上下文。
+3. 使用 `gtk::glib::spawn_future_local` 直接就地响应后台到达的 `UiUpdate` 消息。
 
 * **验收标准**：UI 更新完全由消息到达即时唤醒驱动，CPU 占用更低，测试运行正常。
 
 ---
 
-### 阶段三：状态聚合与单一数据源（State Unification）
+### 阶段三：状态聚合与单一数据源（State Unification）[已完成]
 **目标**：将 `controller.rs` 内部散落的 30 多个 `Rc<Cell<T>>` 统一聚合成领域状态树。
 
 #### 具体任务：
