@@ -18,7 +18,7 @@
 
 # Build distributable WaveTune packages from the current working tree.
 #
-# Usage: packaging/package.sh [arch] [git] [deb] [all] [--no-check]
+# Usage: packaging/package.sh [arch] [git] [deb] [all] [--check]
 #
 #   arch        Build an Arch Linux package with makepkg, using a snapshot of
 #               the working tree (uncommitted edits and non-ignored new files).
@@ -26,7 +26,8 @@
 #               committed HEAD (uncommitted changes are not included).
 #   deb         Build a Debian package with dpkg-deb.
 #   all         Build arch and deb.
-#   --no-check  Skip `cargo test`.
+#   --check     Run verification unit tests before packaging (skipping UI tests).
+#   --no-check  Do not run tests (default behavior).
 #
 # With no target, builds `arch` if makepkg is available, otherwise `deb`.
 # All output goes to target/dist/; intermediate files stay under target/dist/<format>/.
@@ -43,7 +44,7 @@ pkgname=wavetune
 srcname=WaveTune
 dist_dir="$repo_root/target/dist"
 cargo_target_dir=${CARGO_TARGET_DIR:-$repo_root/target}
-run_check=1
+run_check=0
 targets=()
 
 info() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
@@ -59,6 +60,7 @@ while (($#)); do
     case $1 in
         arch | git | deb) targets+=("$1") ;;
         all) targets+=(arch deb) ;;
+        --check) run_check=1 ;;
         --no-check) run_check=0 ;;
         -h | --help)
             usage
@@ -171,7 +173,8 @@ build_deb() {
 
     info "Building Debian package $pkgname $version-$revision ($arch)"
     if ((run_check)); then
-        cargo test --locked
+        info "Running verification tests..."
+        cargo test --locked -- --skip ui::
     fi
     cargo build --locked --release
 

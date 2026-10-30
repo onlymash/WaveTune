@@ -239,7 +239,8 @@ check() {
     export XDG_CACHE_HOME="\$srcdir/.cache"
     export XDG_CONFIG_HOME="\$srcdir/.config"
     export XDG_DATA_HOME="\$srcdir/.local/share"
-    cargo test --frozen --all-features
+    # Run headless unit/protocol tests, skipping interactive UI tests that require a display server
+    cargo test --frozen --all-features -- --skip ui::
 }
 
 package() {

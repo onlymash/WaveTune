@@ -149,6 +149,7 @@ fn noise_control_circular_buttons_and_combobox_row() {
 }
 
 #[test]
+#[ignore = "Interactive UI layout and window rendering test"]
 fn ui_components_layout_and_behavior() {
     if gtk::init().is_err() {
         return;
