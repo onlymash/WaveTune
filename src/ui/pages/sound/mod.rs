@@ -47,6 +47,7 @@ pub(crate) struct SoundWidgets {
     pub(crate) enhancement_card: adw::PreferencesGroup,
     pub(crate) hires_switch_row: adw::ActionRow,
     pub(crate) hires_switch: Switch,
+    pub(crate) codec_row: adw::ComboRow,
     pub(crate) bass_switch_row: adw::ActionRow,
     pub(crate) bass_switch: Switch,
     pub(crate) bass_slider_row: adw::PreferencesRow,
@@ -177,6 +178,13 @@ pub(crate) fn build_sound_page() -> (GtkBox, SoundWidgets) {
     hires_switch.set_sensitive(false);
     hires_switch_row.set_sensitive(false);
 
+    let codec_row = crate::ui::components::combo_row(
+        &crate::t!("audio-codec-title"),
+        Some(&crate::t!("audio-codec-summary")),
+    );
+    codec_row.set_sensitive(false);
+    codec_row.set_visible(false);
+
     let (bass_switch_row, bass_switch) = switch_row(
         &crate::t!("bass-engine-title"),
         Some(&crate::t!("bass-engine-summary")),
@@ -202,6 +210,7 @@ pub(crate) fn build_sound_page() -> (GtkBox, SoundWidgets) {
         .css_classes(["boxed-list"])
         .build();
     enhancement_list.append(&hires_switch_row);
+    enhancement_list.append(&codec_row);
     enhancement_list.append(&bass_switch_row);
     enhancement_list.append(&bass_slider_row);
     enhancement_card.add(&enhancement_list);
@@ -262,6 +271,7 @@ pub(crate) fn build_sound_page() -> (GtkBox, SoundWidgets) {
             enhancement_card,
             hires_switch_row,
             hires_switch,
+            codec_row,
             bass_switch_row,
             bass_switch,
             bass_slider_row,

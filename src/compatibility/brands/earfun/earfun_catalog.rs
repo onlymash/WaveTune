@@ -18,11 +18,34 @@
 //! EarFun device catalog and profiles.
 
 use crate::compatibility::{DeviceProfile, NoiseMode, NoiseModeKind, features};
+use crate::protocol::brands::earfun::EarFunAudioCodec;
 
 #[allow(unused_imports)]
 pub use super::earfun_equalizer::{
     EARFUN_AIR_PRO_4_EQ_PRESETS, EARFUN_AIR_S_EQ_PRESETS, EARFUN_TEN_BAND_EQ_PRESETS,
 };
+
+pub static EARFUN_AIR_PRO_4_CODECS: &[EarFunAudioCodec] = &[
+    EarFunAudioCodec::StableConnection,
+    EarFunAudioCodec::AptX,
+    EarFunAudioCodec::AptXAdaptive,
+    EarFunAudioCodec::Ldac,
+    EarFunAudioCodec::AptXLossless,
+];
+
+pub static EARFUN_FREE_PRO_3_CODECS: &[EarFunAudioCodec] = &[
+    EarFunAudioCodec::StableConnection,
+    EarFunAudioCodec::AptX,
+    EarFunAudioCodec::AptXAdaptive,
+];
+
+pub fn supported_earfun_codecs(product_id: u32) -> &'static [EarFunAudioCodec] {
+    match product_id {
+        0x004535 => EARFUN_AIR_PRO_4_CODECS,
+        0x004534 => EARFUN_FREE_PRO_3_CODECS,
+        _ => &[],
+    }
+}
 
 /// 3 basic noise modes supported by EarFun Air S (Off, ANC, Transparency)
 pub static EARFUN_AIR_S_NOISE_MODES: &[NoiseMode] = &[
@@ -124,6 +147,7 @@ pub static EARFUN_DEVICE_PROFILES: &[DeviceProfile] = &[
             features::TOUCH_CUSTOMIZATION,
             features::FIND_DEVICE,
             features::PROMPT_VOLUME,
+            features::AUDIO_CODEC,
         ],
     },
     DeviceProfile {
@@ -140,6 +164,7 @@ pub static EARFUN_DEVICE_PROFILES: &[DeviceProfile] = &[
             features::TOUCH_CUSTOMIZATION,
             features::FIND_DEVICE,
             features::PROMPT_VOLUME,
+            features::AUDIO_CODEC,
         ],
     },
     DeviceProfile {

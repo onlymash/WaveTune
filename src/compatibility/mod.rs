@@ -45,6 +45,7 @@ pub mod features {
     pub const VOICE_COMMAND: &str = "voice-command";
     pub const HEAD_MOTION: &str = "head-motion";
     pub const HI_RES: &str = "hi-res";
+    pub const AUDIO_CODEC: &str = "audio-codec";
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -111,6 +112,7 @@ pub struct EqualizerPreset {
 #[allow(unused_imports)]
 pub use brands::earfun::{
     EARFUN_AIR_PRO_4_EQ_PRESETS, EARFUN_AIR_S_EQ_PRESETS, EARFUN_TEN_BAND_EQ_PRESETS,
+    supported_earfun_codecs,
 };
 #[allow(unused_imports)]
 pub use brands::oppo::{
@@ -125,6 +127,13 @@ pub fn equalizer_presets_for_product(product_id: u32) -> &'static [EqualizerPres
     } else {
         brands::oppo::STANDARD_EQ_PRESETS
     }
+}
+
+pub fn supported_codecs_for_product(product_id: u32) -> Vec<u8> {
+    brands::earfun::supported_earfun_codecs(product_id)
+        .iter()
+        .map(|c| c.as_u8())
+        .collect()
 }
 
 pub fn equalizer_preset_key(index: u8, presets: &[EqualizerPreset]) -> Option<&'static str> {
@@ -360,6 +369,11 @@ impl DeviceProfile {
     #[inline]
     pub fn supports_hi_res(&self) -> bool {
         self.has_feature(features::HI_RES)
+    }
+
+    #[inline]
+    pub fn supports_audio_codec(&self) -> bool {
+        self.has_feature(features::AUDIO_CODEC)
     }
 
     pub fn supports_controls(&self) -> bool {

@@ -201,6 +201,8 @@ fn monitor_device(
         supports_game_mode: snapshot.supports_game_mode,
         supports_bass_engine: snapshot.supports_bass_engine,
         supports_hi_res: snapshot.supports_hi_res,
+        supports_audio_codec: false,
+        available_codecs: vec![],
         presets,
     });
     if snapshot.supports_custom_equalizer {
@@ -1062,6 +1064,7 @@ fn monitor_device(
                     }
                 }
             }
+            Ok(WorkerCommand::SetAudioCodec(_)) => {}
             Err(TryRecvError::Disconnected) => return Ok(()),
             Err(TryRecvError::Empty) => {}
         }

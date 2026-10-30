@@ -10,6 +10,7 @@ common-disconnected = 未连接
 common-connecting = 正在连接…
 common-disconnecting = 正在断开…
 common-cancel = 取消
+common-confirm = 确认
 common-delete = 删除
 common-switch = 切换
 common-switching = 正在切换…
@@ -433,6 +434,23 @@ hi-res-state-disabled = 已关闭高解析模式
 hi-res-switch-failed = 切换高解析模式失败：{ $param0 }
 feature-readback-invalid = { $param0 }回读格式错误：{ $param1 }
 feature-readback-mismatch = 耳机已确认设置，但回读{ $param0 }状态与请求的状态不一致；界面保留原状态
+
+# ==============================================================================
+# Audio Codec
+# ==============================================================================
+audio-codec-title = 音频编码
+audio-codec-summary = 选择蓝牙高保真音频编码（切换后耳机将自动重启生效）
+codec-stable-connection = SBC/AAC
+codec-aptx = aptX
+codec-aptx-adaptive = aptX Adaptive
+codec-ldac = LDAC
+codec-aptx-lossless = aptX Lossless
+
+dialog-reboot-required-title = 重启耳机确认
+dialog-codec-reboot-message = 应用此音频编码后，耳机将自动重启并重新连接，以重新协商蓝牙音频连接。是否继续？
+dialog-ldac-conflict-message = 启用 LDAC 高解析度编码将自动关闭“双设备连接”功能。设置应用后耳机将自动重启并重新连接。是否继续？
+dialog-dual-device-conflict-message = 开启双设备连接将自动关闭 LDAC 编码，并切换为自适应编码（aptX Adaptive）。设置应用后耳机将自动重启并重新连接。是否继续？
+device-rebooting = 耳机正在重启，等待重新连接…
 
 # ==============================================================================
 # Sound Quality & Audio Effects

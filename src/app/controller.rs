@@ -234,9 +234,14 @@ pub(crate) fn wire_bluetooth_controls(
     let current_supports_game_mode = Rc::new(Cell::new(false));
     let current_supports_bass_engine = Rc::new(Cell::new(false));
     let current_supports_hi_res = Rc::new(Cell::new(false));
+    let current_supports_audio_codec = Rc::new(Cell::new(false));
+    let current_available_codecs = Rc::new(RefCell::new(Vec::<u8>::new()));
+    let current_audio_codec = Rc::new(Cell::new(None::<u8>));
+    let updating_sound_codec = Rc::new(Cell::new(false));
     let current_bass_engine_enabled = Rc::new(Cell::new(None::<bool>));
     let current_bass_engine_level = Rc::new(RefCell::new(None::<crate::protocol::BassEngineLevel>));
     let current_hi_res_enabled = Rc::new(Cell::new(None::<bool>));
+    let current_dual_device = Rc::new(Cell::new(None::<bool>));
 
     {
         let worker_commands = Rc::clone(&worker_commands);
@@ -676,6 +681,89 @@ pub(crate) fn wire_bluetooth_controls(
             });
     }
 
+    {
+        let worker_commands = Rc::clone(&worker_commands);
+        let updates_tx = updates_tx.clone();
+        let updating_codec = Rc::clone(&updating_sound_codec);
+        let current_codec = Rc::clone(&current_audio_codec);
+        let current_dual = Rc::clone(&current_dual_device);
+
+        sound_widgets.codec_row.connect_selected_notify(move |row| {
+            if updating_codec.get() {
+                return;
+            }
+            let Some(target_codec) = crate::ui::components::ComboRowExtManual::selected_id(row)
+            else {
+                return;
+            };
+            if current_codec.get() == Some(target_codec) {
+                return;
+            }
+
+            let is_ldac =
+                target_codec == crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8();
+            let dual_is_on = current_dual.get().unwrap_or(false);
+
+            let (title, message) = if is_ldac && dual_is_on {
+                (
+                    crate::t!("dialog-reboot-required-title"),
+                    crate::t!("dialog-ldac-conflict-message"),
+                )
+            } else {
+                (
+                    crate::t!("dialog-reboot-required-title"),
+                    crate::t!("dialog-codec-reboot-message"),
+                )
+            };
+
+            let row_for_dialog = row.clone();
+            let row_for_action = row.clone();
+            let current_codec_confirm = Rc::clone(&current_codec);
+            let worker_commands = Rc::clone(&worker_commands);
+            let updates_tx = updates_tx.clone();
+
+            let row_revert = row.clone();
+            let updating_codec_cancel = Rc::clone(&updating_codec);
+            let current_codec_cancel = Rc::clone(&current_codec);
+
+            let dialog = adw::AlertDialog::builder()
+                .heading(&title)
+                .body(&message)
+                .build();
+            dialog.add_response("cancel", &crate::t!("common-cancel"));
+            dialog.add_response("confirm", &crate::t!("common-confirm"));
+            dialog.set_response_appearance("confirm", adw::ResponseAppearance::Suggested);
+
+            dialog.choose(
+                Some(&row_for_dialog),
+                None::<&gtk::gio::Cancellable>,
+                move |response| {
+                    if response == "confirm" {
+                        row_for_action.set_sensitive(false);
+                        current_codec_confirm.set(Some(target_codec));
+                        let cmd_res = worker_commands
+                            .borrow()
+                            .as_ref()
+                            .map(|s| s.send(WorkerCommand::SetAudioCodec(target_codec)));
+                        if let Some(Err(e)) = cmd_res {
+                            let _ = updates_tx.send(UiUpdate::SettingError {
+                                domain: SettingDomain::AudioCodec,
+                                message: e.to_string(),
+                            });
+                        }
+                    } else {
+                        updating_codec_cancel.set(true);
+                        crate::ui::components::ComboRowExtManual::set_selected_id(
+                            &row_revert,
+                            current_codec_cancel.get(),
+                        );
+                        updating_codec_cancel.set(false);
+                    }
+                },
+            );
+        });
+    }
+
     let selected_ear = Rc::new(Cell::new(EarSide::Left));
     let current_key_functions = Rc::new(RefCell::new(Vec::<KeyFunction>::new()));
     let current_gesture_rows = Rc::new(RefCell::new(Vec::<GestureRow>::new()));
@@ -684,7 +772,6 @@ pub(crate) fn wire_bluetooth_controls(
     let fit_test_running = Rc::new(Cell::new(false));
     let current_prompt_volume = Rc::new(Cell::new(None::<u8>));
     let current_head_motion = Rc::new(Cell::new(None::<u8>));
-    let current_dual_device = Rc::new(Cell::new(None::<bool>));
     let current_in_ear = Rc::new(Cell::new(None::<bool>));
     let current_sleep = Rc::new(Cell::new(None::<bool>));
     let current_preferred_device = Rc::new(RefCell::new(None::<PairedDeviceAddress>));
@@ -1201,6 +1288,7 @@ pub(crate) fn wire_bluetooth_controls(
         let updating_dual = Rc::clone(&updating_dual_device);
         let controls_widgets_clone = controls_widgets.clone();
         let current_dual = Rc::clone(&current_dual_device);
+        let current_codec = Rc::clone(&current_audio_codec);
 
         controls_widgets
             .dual_switch
@@ -1208,6 +1296,45 @@ pub(crate) fn wire_bluetooth_controls(
                 if updating_dual.get() {
                     return gtk::glib::Propagation::Proceed;
                 }
+
+                // If user enables dual device while LDAC is active on EarFun:
+                let is_ldac = current_codec.get()
+                    == Some(crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8());
+                if state && is_ldac {
+                    let switch_for_dialog = switch.clone();
+                    let switch_for_action = switch.clone();
+                    let updating_dual_confirm = Rc::clone(&updating_dual);
+                    let worker_commands = Rc::clone(&worker_commands);
+                    let dialog = adw::AlertDialog::builder()
+                        .heading(&crate::t!("dialog-reboot-required-title"))
+                        .body(&crate::t!("dialog-dual-device-conflict-message"))
+                        .build();
+                    dialog.add_response("cancel", &crate::t!("common-cancel"));
+                    dialog.add_response("confirm", &crate::t!("common-confirm"));
+                    dialog.set_response_appearance("confirm", adw::ResponseAppearance::Suggested);
+
+                    dialog.choose(
+                        Some(&switch_for_dialog),
+                        None::<&gtk::gio::Cancellable>,
+                        move |response| {
+                            if response == "confirm" {
+                                switch_for_action.set_sensitive(false);
+                                let _ = worker_commands
+                                    .borrow()
+                                    .as_ref()
+                                    .map(|s| s.send(WorkerCommand::SetDualDeviceConnection(true)));
+                            } else {
+                                updating_dual_confirm.set(true);
+                                switch_for_action.set_state(false);
+                                switch_for_action.set_active(false);
+                                updating_dual_confirm.set(false);
+                            }
+                        },
+                    );
+
+                    return gtk::glib::Propagation::Stop;
+                }
+
                 switch.set_sensitive(false);
                 let command_result = worker_commands
                     .borrow()
@@ -1642,6 +1769,18 @@ pub(crate) fn wire_bluetooth_controls(
                                 .hires_switch_row
                                 .set_sensitive(current_supports_hi_res.get());
                         }
+                        SettingDomain::AudioCodec => {
+                            if let Some(codec) = current_audio_codec.get() {
+                                sound_state::update_sound_page_audio_codec(
+                                    &sound_widgets,
+                                    codec,
+                                    &updating_sound_codec,
+                                );
+                            }
+                            sound_widgets
+                                .codec_row
+                                .set_sensitive(current_supports_audio_codec.get());
+                        }
                         SettingDomain::Controls => {}
                     }
 
@@ -1821,6 +1960,9 @@ pub(crate) fn wire_bluetooth_controls(
                     current_supports_game_mode.set(false);
                     current_supports_bass_engine.set(false);
                     current_supports_hi_res.set(false);
+                    current_supports_audio_codec.set(false);
+                    current_available_codecs.borrow_mut().clear();
+                    current_audio_codec.set(None);
                     current_bass_engine_enabled.set(None);
                     *current_bass_engine_level.borrow_mut() = None;
                     current_hi_res_enabled.set(None);
@@ -1837,6 +1979,7 @@ pub(crate) fn wire_bluetooth_controls(
                         &updating_sound_bass_switch,
                         &updating_sound_bass_slider,
                         &updating_sound_hires_switch,
+                        &updating_sound_codec,
                     );
                     widgets.device_name.set_text(&device.name);
                     widgets
@@ -1922,6 +2065,9 @@ pub(crate) fn wire_bluetooth_controls(
                     let supports_head_track = profile.is_some_and(|p| p.supports_head_tracking());
                     let supports_bass = profile.is_some_and(|p| p.supports_bass_engine());
                     let supports_hires = profile.is_some_and(|p| p.supports_hi_res());
+                    let supports_codec = profile.is_some_and(|p| p.supports_audio_codec());
+                    let available_codecs =
+                        crate::compatibility::supported_codecs_for_product(product_id).to_vec();
 
                     current_supports_eq.set(supports_eq);
                     current_supports_custom_eq.set(supports_custom_eq);
@@ -1929,6 +2075,8 @@ pub(crate) fn wire_bluetooth_controls(
                     current_supports_game_mode.set(supports_game);
                     current_supports_bass_engine.set(supports_bass);
                     current_supports_hi_res.set(supports_hires);
+                    current_supports_audio_codec.set(supports_codec);
+                    *current_available_codecs.borrow_mut() = available_codecs.clone();
                     let presets =
                         crate::compatibility::equalizer_presets_for_product(product_id).to_vec();
                     *current_eq_presets.borrow_mut() = presets.clone();
@@ -1953,9 +2101,12 @@ pub(crate) fn wire_bluetooth_controls(
                         supports_head_track,
                         supports_bass,
                         supports_hires,
+                        supports_codec,
+                        &available_codecs,
                         &presets,
                         &updating_sound_eq,
                         &updating_sound_spatial,
+                        &updating_sound_codec,
                     );
                     device_widgets
                         .product_id
@@ -2222,6 +2373,8 @@ pub(crate) fn wire_bluetooth_controls(
                     supports_game_mode,
                     supports_bass_engine,
                     supports_hi_res,
+                    supports_audio_codec,
+                    available_codecs,
                     presets,
                 }) => {
                     current_supports_eq.set(supports_equalizer);
@@ -2230,6 +2383,8 @@ pub(crate) fn wire_bluetooth_controls(
                     current_supports_game_mode.set(supports_game_mode);
                     current_supports_bass_engine.set(supports_bass_engine);
                     current_supports_hi_res.set(supports_hi_res);
+                    current_supports_audio_codec.set(supports_audio_codec);
+                    *current_available_codecs.borrow_mut() = available_codecs.clone();
                     *current_eq_presets.borrow_mut() = presets.clone();
                     update_sound_features(
                         &widgets,
@@ -2251,9 +2406,12 @@ pub(crate) fn wire_bluetooth_controls(
                         supports_head_tracking,
                         supports_bass_engine,
                         supports_hi_res,
+                        supports_audio_codec,
+                        &available_codecs,
                         &presets,
                         &updating_sound_eq,
                         &updating_sound_spatial,
+                        &updating_sound_codec,
                     );
                 }
                 Ok(UiUpdate::Equalizer(preset)) => {
@@ -2437,6 +2595,25 @@ pub(crate) fn wire_bluetooth_controls(
                     sound_widgets
                         .hires_switch_row
                         .set_sensitive(current_supports_hi_res.get());
+                }
+                Ok(UiUpdate::AudioCodec(codec)) => {
+                    current_audio_codec.set(Some(codec));
+                    sound_state::update_sound_page_audio_codec(
+                        &sound_widgets,
+                        codec,
+                        &updating_sound_codec,
+                    );
+                    sound_widgets
+                        .codec_row
+                        .set_sensitive(current_supports_audio_codec.get());
+                }
+                Ok(UiUpdate::DeviceRebooting) => {
+                    device_widgets
+                        .connection
+                        .set_text(&crate::t!("device-rebooting"));
+                    widgets
+                        .connection_tag
+                        .set_text(&crate::t!("device-rebooting"));
                 }
                 Ok(UiUpdate::ControlsFeatures {
                     supports_touch_customization,
@@ -2630,6 +2807,9 @@ pub(crate) fn wire_bluetooth_controls(
                     current_supports_game_mode.set(false);
                     current_supports_bass_engine.set(false);
                     current_supports_hi_res.set(false);
+                    current_supports_audio_codec.set(false);
+                    current_available_codecs.borrow_mut().clear();
+                    current_audio_codec.set(None);
                     current_bass_engine_enabled.set(None);
                     *current_bass_engine_level.borrow_mut() = None;
                     current_hi_res_enabled.set(None);
@@ -2646,6 +2826,7 @@ pub(crate) fn wire_bluetooth_controls(
                         &updating_sound_bass_switch,
                         &updating_sound_bass_slider,
                         &updating_sound_hires_switch,
+                        &updating_sound_codec,
                     );
                     if let Some(source_id) = bass_debounce_source.borrow_mut().take() {
                         source_id.remove();

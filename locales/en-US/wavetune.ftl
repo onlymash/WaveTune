@@ -10,6 +10,7 @@ common-disconnected = Disconnected
 common-connecting = Connecting…
 common-disconnecting = Disconnecting…
 common-cancel = Cancel
+common-confirm = Confirm
 common-delete = Delete
 common-switch = Switch
 common-switching = Switching…
@@ -433,6 +434,23 @@ hi-res-state-disabled = Hi-Res Mode disabled
 hi-res-switch-failed = Failed to switch Hi-Res Mode: { $param0 }
 feature-readback-invalid = Invalid { $param0 } readback response: { $param1 }
 feature-readback-mismatch = Headset confirmed setting, but readback { $param0 } state did not match requested state; UI keeps previous state
+
+# ==============================================================================
+# Audio Codec
+# ==============================================================================
+audio-codec-title = Audio Codec
+audio-codec-summary = Select Bluetooth audio codec profile (earbuds will restart to apply)
+codec-stable-connection = SBC/AAC
+codec-aptx = aptX
+codec-aptx-adaptive = aptX Adaptive
+codec-ldac = LDAC
+codec-aptx-lossless = aptX Lossless
+
+dialog-reboot-required-title = Earbuds Restart Confirmation
+dialog-codec-reboot-message = After applying this audio codec, the earbuds will restart and reconnect to renegotiate Bluetooth audio. Do you want to continue?
+dialog-ldac-conflict-message = Enabling LDAC high-resolution audio will automatically disable Dual Device Connection. The earbuds will restart and reconnect to apply this change. Do you want to continue?
+dialog-dual-device-conflict-message = Enabling Dual Device Connection will disable LDAC and switch to aptX Adaptive. The earbuds will restart and reconnect to apply this change. Do you want to continue?
+device-rebooting = Earbuds are restarting, waiting to reconnect…
 
 # ==============================================================================
 # Sound Quality & Audio Effects

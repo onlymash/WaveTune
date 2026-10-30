@@ -104,6 +104,24 @@ pub fn parse_earfun_dual_device(payload: &[u8]) -> Result<bool, EarFunProtocolEr
     Ok(payload[1] == 1)
 }
 
+/// Parse audio codec query response (command 0x032F).
+/// Format: [0x00 (status), codec_index (0, 1, 3, 8, 19)]
+pub fn parse_earfun_audio_codec(payload: &[u8]) -> Result<u8, EarFunProtocolError> {
+    if payload.len() < 2 || payload[0] != 0x00 {
+        return Err(EarFunProtocolError::InvalidPacketLength);
+    }
+    Ok(payload[1])
+}
+
+/// Parse audio mode query or unsolicited notification (command 0x034D).
+/// Format: [0x00 (status), mode]
+pub fn parse_earfun_audio_mode(payload: &[u8]) -> Result<u8, EarFunProtocolError> {
+    if payload.len() < 2 || payload[0] != 0x00 {
+        return Err(EarFunProtocolError::InvalidPacketLength);
+    }
+    Ok(payload[1])
+}
+
 /// Parse a single paired device response entry (command 0x032C).
 /// Payload format (27 bytes):
 /// [0x00 (status), slot (0..9), name (21 bytes UTF-8 null-padded), lap (3 bytes), connected (0/1)]

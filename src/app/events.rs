@@ -33,6 +33,7 @@ pub enum SettingDomain {
     GameMode,
     BassEngine,
     HiRes,
+    AudioCodec,
     Controls,
 }
 
@@ -77,6 +78,8 @@ pub enum UiUpdate {
     BassEngineEnabled(bool),
     BassEngineLevel(BassEngineLevel),
     HiRes(bool),
+    AudioCodec(u8),
+    DeviceRebooting,
     SoundFeatures {
         supports_equalizer: bool,
         supports_custom_equalizer: bool,
@@ -85,6 +88,8 @@ pub enum UiUpdate {
         supports_game_mode: bool,
         supports_bass_engine: bool,
         supports_hi_res: bool,
+        supports_audio_codec: bool,
+        available_codecs: Vec<u8>,
         presets: Vec<EqualizerPreset>,
     },
     KeyFunctions(Vec<KeyFunction>),
@@ -140,6 +145,7 @@ pub enum WorkerCommand {
     SetBassEngineLevel(i8),
     #[allow(dead_code)]
     SetHiRes(bool),
+    SetAudioCodec(u8),
     SetGesture {
         side: EarSide,
         button: u8,

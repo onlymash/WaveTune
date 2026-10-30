@@ -28,10 +28,10 @@ use crate::bluetooth::transport::{RfcommServiceQuery, is_socket_timeout, open_rf
 use crate::bluetooth::{DeviceChoice, UiUpdate, WorkerCommand};
 use crate::compatibility::{self, NoiseMode};
 use crate::protocol::brands::earfun::{
-    EarFunCommands, EarFunFrameDecoder, EarFunPacket, encode_earfun_eq_band,
-    parse_earfun_ambient_mode, parse_earfun_anc_sub_mode, parse_earfun_battery_component,
-    parse_earfun_dual_device, parse_earfun_firmware_version, parse_earfun_game_mode,
-    parse_earfun_in_ear_detection, parse_earfun_paired_device_entry,
+    EarFunAudioCodec, EarFunCommands, EarFunFrameDecoder, EarFunPacket, encode_earfun_eq_band,
+    parse_earfun_ambient_mode, parse_earfun_anc_sub_mode, parse_earfun_audio_codec,
+    parse_earfun_battery_component, parse_earfun_dual_device, parse_earfun_firmware_version,
+    parse_earfun_game_mode, parse_earfun_in_ear_detection, parse_earfun_paired_device_entry,
     parse_earfun_transparency_sub_mode,
 };
 use crate::protocol::{
@@ -96,6 +96,9 @@ pub struct EarFunDeviceSnapshot {
     pub game_mode_enabled: Option<bool>,
     pub supports_equalizer: bool,
     pub equalizer_preset: Option<u8>,
+    pub supports_audio_codec: bool,
+    pub audio_codec: Option<u8>,
+    pub available_codecs: Vec<u8>,
     pub detected_features: Vec<String>,
     pub probe_errors: Vec<String>,
 }
@@ -493,6 +496,9 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
             game_mode_enabled: None,
             supports_equalizer: false,
             equalizer_preset: None,
+            supports_audio_codec: false,
+            audio_codec: None,
+            available_codecs: vec![],
             detected_features,
             probe_errors,
         };
@@ -508,6 +514,11 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
     let supports_dual_device = profile.supports_dual_device();
     let supports_game_mode = profile.supports_game_mode();
     let supports_equalizer = profile.supports_equalizer();
+    let supports_audio_codec = profile.supports_audio_codec();
+    let available_codecs: Vec<u8> = compatibility::supported_earfun_codecs(pid)
+        .iter()
+        .map(|c| c.as_u8())
+        .collect();
 
     // 2. Battery levels
     let left_bat = request(
@@ -671,6 +682,25 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
         Ok(true)
     };
 
+    // 7. Active audio codec (0x032F)
+    let audio_codec = if supports_audio_codec {
+        let codec = request(
+            stream,
+            &mut decoder,
+            EarFunCommands::GET_AUDIO_CODEC,
+            vec![],
+            updates,
+        )
+        .ok()
+        .and_then(|pkt| parse_earfun_audio_codec(&pkt.payload).ok());
+        if codec.is_some() {
+            detected_features.push("audio-codec".to_string());
+        }
+        codec
+    } else {
+        None
+    };
+
     // When connected via RFCOMM, earbuds are active and in-ear
     let wear = if supports_wear_detection {
         WearState {
@@ -721,6 +751,9 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
         } else {
             None
         },
+        supports_audio_codec,
+        audio_codec,
+        available_codecs,
         detected_features,
         probe_errors,
     };
@@ -868,16 +901,66 @@ pub(crate) fn set_in_ear_detection<T: Read + Write>(
 pub(crate) fn set_dual_device<T: Read + Write>(
     stream: &mut T,
     decoder: &mut EarFunFrameDecoder,
+    product_id: u32,
     enabled: bool,
+    current_codec: Option<u8>,
     updates: &Sender<UiUpdate>,
 ) -> Result<bool, String> {
+    // If enabling dual device on EarFun Air Pro 4 and current codec is LDAC (8),
+    // automatically fall back to aptX Adaptive (3) before enabling dual device!
+    if product_id == EARFUN_AIR_PRO_4_PRODUCT_ID
+        && enabled
+        && current_codec == Some(EarFunAudioCodec::Ldac.as_u8())
+    {
+        let fallback = EarFunAudioCodec::AptXAdaptive.as_u8();
+        let _ = send_command(stream, EarFunCommands::SET_AUDIO_CODEC, vec![fallback]);
+        let _ = updates.send(UiUpdate::AudioCodec(fallback));
+        thread::sleep(Duration::from_millis(50));
+    }
+
     send_command(
         stream,
         EarFunCommands::SET_CONNECT_TWO_DEVICES,
         vec![enabled as u8],
     )?;
+
+    // Send reboot command for dual-device setting to take effect
+    let _ = updates.send(UiUpdate::DeviceRebooting);
+    let _ = updates.send(UiUpdate::Status(crate::t!("device-rebooting")));
+    thread::sleep(Duration::from_millis(50));
+    let _ = send_command(stream, EarFunCommands::REBOOT, vec![]);
     drain_stream(stream, decoder, Some(updates), Duration::from_millis(50));
     Ok(enabled)
+}
+
+pub(crate) fn set_audio_codec<T: Read + Write>(
+    stream: &mut T,
+    decoder: &mut EarFunFrameDecoder,
+    product_id: u32,
+    target_codec: u8,
+    dual_device_enabled: Option<bool>,
+    updates: &Sender<UiUpdate>,
+) -> Result<u8, String> {
+    // If setting LDAC on EarFun Air Pro 4 and dual device is currently ON,
+    // turn OFF dual device first!
+    if product_id == EARFUN_AIR_PRO_4_PRODUCT_ID
+        && target_codec == EarFunAudioCodec::Ldac.as_u8()
+        && dual_device_enabled.unwrap_or(false)
+    {
+        let _ = send_command(stream, EarFunCommands::SET_CONNECT_TWO_DEVICES, vec![0x00]);
+        let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(false));
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    send_command(stream, EarFunCommands::SET_AUDIO_CODEC, vec![target_codec])?;
+
+    // Changing audio codec requires rebooting the earbuds
+    let _ = updates.send(UiUpdate::DeviceRebooting);
+    let _ = updates.send(UiUpdate::Status(crate::t!("device-rebooting")));
+    thread::sleep(Duration::from_millis(50));
+    let _ = send_command(stream, EarFunCommands::REBOOT, vec![]);
+    drain_stream(stream, decoder, Some(updates), Duration::from_millis(50));
+    Ok(target_codec)
 }
 
 pub(crate) fn apply_equalizer_preset<T: Read + Write>(
@@ -1006,8 +1089,14 @@ fn monitor_device(
         supports_game_mode: snapshot.supports_game_mode,
         supports_bass_engine: false,
         supports_hi_res: false,
+        supports_audio_codec: snapshot.supports_audio_codec,
+        available_codecs: snapshot.available_codecs.clone(),
         presets,
     });
+
+    if let Some(codec) = snapshot.audio_codec {
+        let _ = updates.send(UiUpdate::AudioCodec(codec));
+    }
 
     if let Some(preset) = snapshot.equalizer_preset {
         if preset != 0 {
@@ -1056,6 +1145,8 @@ fn monitor_device(
 
     let mut current_anc_sub = snapshot.anc_sub;
     let mut current_transp_sub = snapshot.transp_sub;
+    let current_audio_codec = snapshot.audio_codec;
+    let current_dual_device = snapshot.dual_device_enabled;
     let has_submodes = snapshot.noise_modes.iter().any(|m| m.parent.is_some());
     let mut last_poll = Instant::now();
 
@@ -1114,7 +1205,14 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetDualDeviceConnection(enabled)) => {
-                match set_dual_device(&mut stream, &mut decoder, enabled, updates) {
+                match set_dual_device(
+                    &mut stream,
+                    &mut decoder,
+                    snapshot.product_id,
+                    enabled,
+                    current_audio_codec,
+                    updates,
+                ) {
                     Ok(actual) => {
                         let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(actual));
                         let controls_enabled = if actual {
@@ -1124,10 +1222,34 @@ fn monitor_device(
                         };
                         let _ =
                             updates.send(UiUpdate::PairedDeviceControlsEnabled(controls_enabled));
+                        thread::sleep(Duration::from_millis(200));
+                        break;
                     }
                     Err(error) => {
                         let _ = updates.send(UiUpdate::SettingError {
                             domain: SettingDomain::Controls,
+                            message: error,
+                        });
+                    }
+                }
+            }
+            Ok(WorkerCommand::SetAudioCodec(codec)) => {
+                match set_audio_codec(
+                    &mut stream,
+                    &mut decoder,
+                    snapshot.product_id,
+                    codec,
+                    current_dual_device,
+                    updates,
+                ) {
+                    Ok(actual) => {
+                        let _ = updates.send(UiUpdate::AudioCodec(actual));
+                        thread::sleep(Duration::from_millis(200));
+                        break;
+                    }
+                    Err(error) => {
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::AudioCodec,
                             message: error,
                         });
                     }
@@ -1379,6 +1501,15 @@ fn print_earfun_snapshot(snapshot: &EarFunDeviceSnapshot) {
     }
     if let Some(in_ear) = snapshot.in_ear_detection_enabled {
         println!("In-Ear Detection: {}", if in_ear { "On" } else { "Off" });
+    }
+
+    if snapshot.supports_audio_codec {
+        if let Some(codec) = snapshot.audio_codec {
+            let codec_name = EarFunAudioCodec::from_u8(codec)
+                .map(|c| crate::t!(c.key()))
+                .unwrap_or_else(|| codec.to_string());
+            println!("Audio Codec: {codec_name}");
+        }
     }
 
     if snapshot.supports_equalizer {

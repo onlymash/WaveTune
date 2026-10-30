@@ -26,7 +26,9 @@ mod tests {
     };
 
     use crate::bluetooth::brands::earfun::earfun_session::*;
-    use crate::protocol::brands::earfun::{EarFunCommands, EarFunFrameDecoder, EarFunPacket};
+    use crate::protocol::brands::earfun::{
+        EarFunAudioCodec, EarFunCommands, EarFunFrameDecoder, EarFunPacket,
+    };
 
     fn read_mock_request(stream: &mut UnixStream) -> EarFunPacket {
         thread_local! {
@@ -157,6 +159,11 @@ mod tests {
             for slot in 2..10 {
                 send_mock_032c(&mut device, slot, b"", [0, 0, slot], false);
             }
+
+            // 11. Audio codec 0x032F
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_AUDIO_CODEC);
+            send_mock_response(&mut device, req.command, vec![0x00, 19]); // aptX Lossless
         });
 
         let (snapshot, _) =
@@ -173,6 +180,8 @@ mod tests {
         assert_eq!(snapshot.in_ear_detection_enabled, Some(true));
         assert_eq!(snapshot.dual_device_enabled, Some(true));
         assert!(snapshot.supports_paired_devices);
+        assert!(snapshot.supports_audio_codec);
+        assert_eq!(snapshot.audio_codec, Some(19));
 
         let devs = snapshot.paired_devices.unwrap();
         assert_eq!(devs.len(), 2);
@@ -401,6 +410,18 @@ mod tests {
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::GET_CONNECT_TWO_DEVICES);
             send_mock_response(&mut device, req.command, vec![0x00, 1]); // Enabled
+
+            // 9. Paired devices 0x032C (slots 0..10)
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_CONNECTED_DEVICES);
+            for slot in 0..10 {
+                send_mock_032c(&mut device, slot, b"", [0, 0, slot], false);
+            }
+
+            // 10. Audio codec 0x032F
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_AUDIO_CODEC);
+            send_mock_response(&mut device, req.command, vec![0x00, 3]); // aptX Adaptive
         });
 
         // Test that custom device name does NOT affect identification:
@@ -417,6 +438,8 @@ mod tests {
         assert!(!snapshot.supports_wear_detection);
         assert!(!snapshot.game_mode_enabled.unwrap());
         assert!(snapshot.dual_device_enabled.unwrap());
+        assert!(snapshot.supports_audio_codec);
+        assert_eq!(snapshot.audio_codec, Some(3));
 
         device_thread.join().unwrap();
     }
@@ -502,6 +525,114 @@ mod tests {
         assert_eq!(devices[1].name, "Arch-Desktop");
         assert!(!devices[1].connected);
         assert_eq!(devices[1].device_type, 0);
+
+        device_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_earfun_set_audio_codec_ldac_conflict_and_reboot() {
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+
+        let device_thread = thread::spawn(move || {
+            // 1. Air Pro 4 receives disable dual device 0x0327 [0] because LDAC was requested and dual device was ON
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_CONNECT_TWO_DEVICES);
+            assert_eq!(req.payload, vec![0x00]);
+
+            // 2. Headset receives set codec LDAC 0x032E [0x08]
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_AUDIO_CODEC);
+            assert_eq!(req.payload, vec![0x08]);
+
+            // 3. Headset receives reboot command 0x0308
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::REBOOT);
+            assert!(req.payload.is_empty());
+        });
+
+        let (tx, rx) = mpsc::channel();
+        let mut decoder = EarFunFrameDecoder::default();
+        let actual = set_audio_codec(
+            &mut client,
+            &mut decoder,
+            EARFUN_AIR_PRO_4_PRODUCT_ID,
+            EarFunAudioCodec::Ldac.as_u8(),
+            Some(true), // dual device was ON
+            &tx,
+        )
+        .expect("set audio codec should succeed");
+
+        assert_eq!(actual, EarFunAudioCodec::Ldac.as_u8());
+
+        // Verify updates sent: DualDeviceConnectionEnabled(false) and DeviceRebooting
+        let updates: Vec<crate::bluetooth::UiUpdate> = rx.try_iter().collect();
+        assert!(updates.iter().any(|u| matches!(
+            u,
+            crate::bluetooth::UiUpdate::DualDeviceConnectionEnabled(false)
+        )));
+        assert!(
+            updates
+                .iter()
+                .any(|u| matches!(u, crate::bluetooth::UiUpdate::DeviceRebooting))
+        );
+
+        device_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_earfun_set_dual_device_ldac_conflict_and_reboot() {
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+
+        let device_thread = thread::spawn(move || {
+            // 1. Because LDAC was active, enabling dual device causes fallback to aptX Adaptive (0x03)
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_AUDIO_CODEC);
+            assert_eq!(req.payload, vec![EarFunAudioCodec::AptXAdaptive.as_u8()]);
+
+            // 2. Dual device is enabled 0x0327 [0x01]
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_CONNECT_TWO_DEVICES);
+            assert_eq!(req.payload, vec![0x01]);
+
+            // 3. Headset receives reboot command 0x0308
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::REBOOT);
+            assert!(req.payload.is_empty());
+        });
+
+        let (tx, rx) = mpsc::channel();
+        let mut decoder = EarFunFrameDecoder::default();
+        let actual = set_dual_device(
+            &mut client,
+            &mut decoder,
+            EARFUN_AIR_PRO_4_PRODUCT_ID,
+            true,
+            Some(EarFunAudioCodec::Ldac.as_u8()), // current codec is LDAC
+            &tx,
+        )
+        .expect("set dual device should succeed");
+
+        assert!(actual);
+
+        let updates: Vec<crate::bluetooth::UiUpdate> = rx.try_iter().collect();
+        assert!(updates.iter().any(|u| matches!(u, crate::bluetooth::UiUpdate::AudioCodec(c) if *c == EarFunAudioCodec::AptXAdaptive.as_u8())));
+        assert!(
+            updates
+                .iter()
+                .any(|u| matches!(u, crate::bluetooth::UiUpdate::DeviceRebooting))
+        );
 
         device_thread.join().unwrap();
     }

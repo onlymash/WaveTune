@@ -95,3 +95,46 @@ impl EarFunCommands {
     pub const GET_PLAY_STATE: u16 = 0x0350;
     pub const SET_CONTROL_PLAY: u16 = 0x0351;
 }
+
+/// EarFun audio codec selection values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum EarFunAudioCodec {
+    /// Stable Connection (SBC / AAC)
+    StableConnection = 0,
+    /// Qualcomm aptX
+    AptX = 1,
+    /// Qualcomm aptX Adaptive
+    AptXAdaptive = 3,
+    /// Sony LDAC (High-Resolution 990kbps @ 24-bit/96kHz)
+    Ldac = 8,
+    /// Qualcomm aptX Adaptive Lossless (Snapdragon Sound)
+    AptXLossless = 19,
+}
+
+impl EarFunAudioCodec {
+    pub const fn from_u8(val: u8) -> Option<Self> {
+        match val {
+            0 => Some(Self::StableConnection),
+            1 => Some(Self::AptX),
+            3 => Some(Self::AptXAdaptive),
+            8 => Some(Self::Ldac),
+            19 => Some(Self::AptXLossless),
+            _ => None,
+        }
+    }
+
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::StableConnection => "codec-stable-connection",
+            Self::AptX => "codec-aptx",
+            Self::AptXAdaptive => "codec-aptx-adaptive",
+            Self::Ldac => "codec-ldac",
+            Self::AptXLossless => "codec-aptx-lossless",
+        }
+    }
+}

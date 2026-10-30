@@ -339,6 +339,7 @@ fn ui_components_layout_and_behavior() {
     let updating_bass_switch = std::cell::Cell::new(false);
     let updating_bass_slider = std::cell::Cell::new(false);
     let updating_hires_switch = std::cell::Cell::new(false);
+    let updating_codec = std::cell::Cell::new(false);
 
     // Initial update with Dynaudio presets & all sound features enabled
     crate::ui::sound_state::update_sound_page_features(
@@ -349,9 +350,12 @@ fn ui_components_layout_and_behavior() {
         true,
         true,
         true,
+        false,
+        &[],
         crate::compatibility::DYNAUDIO_EQ_PRESETS,
         &updating_eq,
         &updating_spatial,
+        &updating_codec,
     );
     assert!(sound_widgets.eq_card.is_visible());
     assert!(sound_widgets.spatial_card.is_visible());
@@ -444,9 +448,12 @@ fn ui_components_layout_and_behavior() {
         false, // head tracking unsupported
         false, // bass engine unsupported
         false, // hi-res unsupported
+        false, // supports_audio_codec
+        &[],
         crate::compatibility::STANDARD_EQ_PRESETS,
         &updating_eq,
         &updating_spatial,
+        &updating_codec,
     );
     assert!(sound_widgets.eq_card.is_visible());
     assert!(sound_widgets.spatial_card.is_visible());
@@ -485,6 +492,7 @@ fn ui_components_layout_and_behavior() {
         &updating_bass_switch,
         &updating_bass_slider,
         &updating_hires_switch,
+        &updating_codec,
     );
     assert!(!sound_widgets.eq_card.is_visible());
     assert!(!sound_widgets.spatial_card.is_visible());
@@ -506,9 +514,12 @@ fn ui_components_layout_and_behavior() {
         true,
         true,
         true,
+        false,
+        &[],
         crate::compatibility::DYNAUDIO_EQ_PRESETS,
         &updating_eq,
         &updating_spatial,
+        &updating_codec,
     );
 
     // Custom Equalizers tests: dynamic row insertion, selection, menu, and max cap
@@ -620,6 +631,60 @@ fn ui_components_layout_and_behavior() {
     );
     assert_eq!(sound_widgets.custom_preset_rows.borrow().len(), 2);
     assert!(sound_widgets.add_custom_row.is_visible());
+
+    // Audio codec row tests
+    let available_codecs = &[
+        crate::protocol::brands::earfun::EarFunAudioCodec::StableConnection.as_u8(),
+        crate::protocol::brands::earfun::EarFunAudioCodec::AptX.as_u8(),
+        crate::protocol::brands::earfun::EarFunAudioCodec::AptXAdaptive.as_u8(),
+        crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8(),
+    ];
+    crate::ui::sound_state::update_sound_page_features(
+        &sound_widgets,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true, // supports_audio_codec
+        available_codecs,
+        crate::compatibility::DYNAUDIO_EQ_PRESETS,
+        &updating_eq,
+        &updating_spatial,
+        &updating_codec,
+    );
+    assert!(sound_widgets.enhancement_card.is_visible());
+    assert!(sound_widgets.codec_row.is_visible());
+    assert!(sound_widgets.codec_row.is_sensitive());
+
+    // Update active codec to LDAC
+    crate::ui::sound_state::update_sound_page_audio_codec(
+        &sound_widgets,
+        crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8(),
+        &updating_codec,
+    );
+    assert_eq!(
+        crate::ui::components::ComboRowExtManual::selected_id(&sound_widgets.codec_row),
+        Some(crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8())
+    );
+
+    // Reset sound page hides codec row and clears selection
+    crate::ui::sound_state::reset_sound_page(
+        &sound_widgets,
+        &updating_eq,
+        &updating_spatial,
+        &updating_bass_switch,
+        &updating_bass_slider,
+        &updating_hires_switch,
+        &updating_codec,
+    );
+    assert!(!sound_widgets.codec_row.is_visible());
+    assert!(!sound_widgets.codec_row.is_sensitive());
+    assert_eq!(
+        crate::ui::components::ComboRowExtManual::selected_id(&sound_widgets.codec_row),
+        None
+    );
 
     // Switch to single-column (Vertical)
     widgets.home_columns.set_single_column(true);

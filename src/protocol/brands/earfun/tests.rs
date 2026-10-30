@@ -107,5 +107,57 @@ mod tests {
         let dev6 =
             parse_earfun_paired_device_entry(&slot6_payload, Some([0x61, 0x33, 0x3D])).unwrap();
         assert!(dev6.is_none());
+
+        // Real codec query capture (0x13 = aptX Lossless)
+        let codec = parse_earfun_audio_codec(&[0x00, 0x13]).unwrap();
+        assert_eq!(codec, 19);
+        assert_eq!(
+            EarFunAudioCodec::from_u8(codec),
+            Some(EarFunAudioCodec::AptXLossless)
+        );
+
+        // Codec LDAC (0x08)
+        let ldac_codec = parse_earfun_audio_codec(&[0x00, 0x08]).unwrap();
+        assert_eq!(ldac_codec, 8);
+        assert_eq!(
+            EarFunAudioCodec::from_u8(ldac_codec),
+            Some(EarFunAudioCodec::Ldac)
+        );
+
+        // Real audio mode query (0x03)
+        let audio_mode = parse_earfun_audio_mode(&[0x00, 0x03]).unwrap();
+        assert_eq!(audio_mode, 3);
+
+        // Real codec query capture (0x13 = aptX Lossless)
+        let codec = parse_earfun_audio_codec(&[0x00, 0x13]).unwrap();
+        assert_eq!(codec, 19);
+        assert_eq!(EarFunAudioCodec::from_u8(codec), Some(EarFunAudioCodec::AptXLossless));
+
+        // Codec LDAC (0x08)
+        let ldac_codec = parse_earfun_audio_codec(&[0x00, 0x08]).unwrap();
+        assert_eq!(ldac_codec, 8);
+        assert_eq!(EarFunAudioCodec::from_u8(ldac_codec), Some(EarFunAudioCodec::Ldac));
+
+        // Real audio mode query (0x03)
+        let audio_mode = parse_earfun_audio_mode(&[0x00, 0x03]).unwrap();
+        assert_eq!(audio_mode, 3);
+    }
+
+    #[test]
+    fn test_earfun_audio_codec_and_reboot_encode() {
+        let set_codec_pkt = EarFunPacket::new(
+            EarFunCommands::SET_AUDIO_CODEC,
+            vec![EarFunAudioCodec::Ldac.as_u8()],
+        );
+        assert_eq!(
+            set_codec_pkt.encode(),
+            vec![0xFF, 0x04, 0x00, 0x01, 0x00, 0x0A, 0x03, 0x2E, 0x08]
+        );
+
+        let reboot_pkt = EarFunPacket::new(EarFunCommands::REBOOT, vec![]);
+        assert_eq!(
+            reboot_pkt.encode(),
+            vec![0xFF, 0x04, 0x00, 0x00, 0x00, 0x0A, 0x03, 0x08]
+        );
     }
 }

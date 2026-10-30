@@ -182,8 +182,16 @@ When Master Mode is `2` (Transparency):
 ### 4.5 Dual Device Connection (Multipoint)
 - **Query**: `0x0326` $\to$ Response `0x8326 [00, 00|01]`
 - **Set**: `0x0327 [00|01]`
-  - Note: Setting dual-device mode usually requires a reboot packet `0x0308` to take effect.
-- Values: `0` = Disabled, `1` = Enabled.
+- **Values**: `0` = Disabled, `1` = Enabled.
+- **Packet Structure**:
+  - Request Query: `FF 04 00 00 00 0A 03 26`
+  - Response Query: `FF 03 00 02 00 0A 83 26 00 <00|01>`
+  - Request Set: `FF 04 00 01 00 0A 03 27 <00|01>`
+  - Response ACK: `FF 03 00 01 00 0A 83 27 00`
+- **Reboot Requirement**:
+  Setting dual-device mode requires the earbuds to reboot (`0x0308`, `COMMAND_REBOOT`) for the Qualcomm Bluetooth stack to re-initialize its ACL scheduling and multipoint manager. In Gadgetbridge, `SET_CONNECT_TWO_DEVICES` explicitly joins `0x0327` and `0x0308`.
+- **Hardware Constraint on EarFun Air Pro 4**:
+  Dual Device Connection and **LDAC** codec are **strictly mutually exclusive**. Enabling Dual Device Connection while LDAC is active automatically disables LDAC and switches to a standard/adaptive codec (aptX Adaptive or Stable Connection) before restarting the headset. See [Section 4.8](#48-reboot-command-and-ldac--multipoint-mutual-exclusivity) for details.
 
 ---
 
@@ -218,19 +226,6 @@ EarFun headsets support hardware equalization using Qualcomm GAIA V3 non-standar
    - In WaveTune, the selected preset is persisted in `~/.config/wavetune/settings.ini` under an anonymous device key derived from the SHA-256 hash of the device MAC (`[Device_{PID}_{SHA256(MAC)[..12]}]`). This guarantees uniqueness across multiple headsets of the same model without persisting or exposing raw Bluetooth addresses.
    - On session establishment, WaveTune checks if a non-default preset was previously active and automatically synchronizes the 10-band DSP parameters to the earbud, ensuring consistent audio reproduction even after headset power cycles.
 
-#### Write-Only Characteristics & Architecture Differences
-1. **No Hardware Preset Concept**:
-   - Unlike OPPO/OnePlus headsets which feature a firmware-level preset manager queried via `0x010F` (`CMD_GET_EQUALIZER`), EarFun headsets operate at the raw Qualcomm Kymera DSP PEQ (Parametric Equalizer) filter layer.
-   - The headset firmware does not know what "Classic" or "Bass Boost" is; it only receives and stores raw DSP filter coefficients.
-2. **Query Attempt (`0x0E02`) Rejected**:
-   - Live probing with `0x0E02` (`REQUEST_RESPONSE_EQUALIZER_CONFIG`) across multiple payload variants (empty, band ID `0xA1`, `0x00`, `0x01`) consistently triggers the GAIA error frame:
-     `FF 03 00 01 00 1D 0F 82 01` (`0x0F82` is `0x0E02 | 0x0180` error flag, payload `0x01` = `STATUS_NOT_SUPPORTED`).
-   - The headset does not provide a mechanism to read back active PEQ coefficients from the DSP registers.
-3. **Client-Side State Tracking & Persistence**:
-   - Both the official EarFun companion app and Gadgetbridge maintain preset definitions and active preset states entirely within client-side local storage (`SharedPreferences` in Android).
-   - In WaveTune, the selected preset is persisted in `~/.config/wavetune/settings.ini` under an anonymous device key derived from the SHA-256 hash of the device MAC (`[Device_{PID}_{SHA256(MAC)[..12]}]`). This guarantees uniqueness across multiple headsets of the same model without persisting or exposing raw Bluetooth addresses.
-   - On session establishment, WaveTune checks if a non-default preset was previously active and automatically synchronizes the 10-band DSP parameters to the earbud, ensuring consistent audio reproduction even after headset power cycles.
-
 #### 10-Band Models (EarFun Air Pro 4 & Free Pro 3):
 | Band | Band ID | Frequency (Hz) | Q-Factor |
 |---|---|---|---|
@@ -251,26 +246,162 @@ However, the GAIA protocol expects all 10 bands to be sent. Bands 7–10 are dum
 
 ---
 
-### 4.7 Audio Codec Selection
-- **Query**: `0x032F` $\to$ Response `0x832F [00, codec]`
-- **Set**: `0x032E [codec]`
-- **Codec Values**:
-  - `0`: Stable Connection (SBC/AAC)
-  - `1`: aptX
-  - `3`: aptX Adaptive
-  - `8`: LDAC
-  - `19` (`0x13`): aptX Lossless
+### 4.7 Audio Codec Selection & Audio Modes
+
+EarFun exposes audio codec selection and audio mode configuration via GAIA V1/V2 legacy commands (`Vendor ID = 0x000A`).
+
+#### 4.7.1 Audio Codec Query and Configuration
+- **Query Command**: `0x032F` (`REQUEST_RESPONSE_AUDIO_CODEC`)
+  - Request: `FF 04 00 00 00 0A 03 2F` (no payload)
+  - Response: `FF 03 00 02 00 0A 83 2F 00 <codec>`
+  - First payload byte is Status Code `0x00` (Success); second byte is current active codec index.
+- **Set Command**: `0x032E` (`SET_AUDIO_CODEC`)
+  - Request: `FF 04 00 01 00 0A 03 2E <codec>`
+  - Response ACK: `FF 03 00 01 00 0A 83 2E 00`
+- **Reboot Dependency**:
+  Setting `0x032E` modifies the Bluetooth firmware audio endpoint configuration. **The headset requires a reboot (`0x0308`) immediately after applying the new codec** to allow the Qualcomm SoC to re-initialize its DSP pipeline and re-negotiate A2DP capabilities with the host (Linux BlueZ / PipeWire).
+
+#### 4.7.2 Codec Values and Model Support Matrix
+
+| Codec Index (Dec / Hex) | Name / Profile | Description | EarFun Air Pro 4 (`0x004535`) | EarFun Free Pro 3 (`0x004534`) | EarFun Air S (`0x004C45`) |
+|---|---|---|:---:|:---:|:---:|
+| `0` (`0x00`) | **Stable Connection** | Standard SBC / AAC connection prioritizing link stability and battery life | Supported | Supported | A2DP Auto Only |
+| `1` (`0x01`) | **aptX** | Standard Qualcomm aptX low-latency audio | Supported | Supported | A2DP Auto Only |
+| `3` (`0x03`) | **aptX Adaptive** | Dynamic bitrate adjustment (279–420 kbps) based on RF quality | Supported | Supported | Unsupported |
+| `8` (`0x08`) | **LDAC** | Sony High-Resolution audio (up to 990 kbps @ 24-bit/96 kHz) | Supported | Unsupported | Unsupported |
+| `19` (`0x13`) | **aptX Adaptive Lossless** | Qualcomm Snapdragon Sound CD-quality lossless (16-bit/44.1 kHz to 24-bit/96 kHz) | Supported | Unsupported | Unsupported |
+
+*Model Differences*:
+- **EarFun Air Pro 4 (QCC3091)**: Full codec menu (Stable, aptX, aptX Adaptive, aptX Lossless, LDAC).
+- **EarFun Free Pro 3 (QCC5171/QCC3072)**: Only offers Stable Connection, aptX, and aptX Adaptive.
+- **EarFun Air S (QCC3046)**: Does not expose `0x032E`/`0x032F` software switching in companion app or Gadgetbridge; codecs are negotiated automatically by the host operating system's Bluetooth A2DP stack.
+
+#### 4.7.3 Related Audio Mode Commands
+- **Runtime Audio Mode Status (`0x034D`)**:
+  - Query / Unsolicited Notification: `0x034D` (`REQUEST_RESPONSE_AUDIO_MODE`)
+  - Response: `0x834D [00, mode]`
+  - Values observed:
+    - `0x03`: Active when any aptX mode (aptX / aptX Adaptive / aptX Lossless) is engaged.
+    - `0x02`: Active when Stable Connection (SBC/AAC) or LDAC is engaged.
+    - `0x00`: Idle / default state.
+  - Automatically sent by the headset to the host when an audio connection changes or when a second device connects.
+- **Advanced Audio Mode (`0x034B` Set / `0x034C` Query)**:
+  - Query: `0x034C` $\to$ Response `0x834C [00, mode]`
+  - Set: `0x034B [mode]`
+  - Modes:
+    - `0`: Google Fast Pair mode
+    - `1`: LE Audio (Bluetooth Low Energy Audio / LC3 broadcast and unicast)
+  - Also triggers an earbud reboot upon switching.
 
 ---
 
-### 4.8 Voice Prompt Volume
+### 4.8 Reboot Command and LDAC / Multipoint Mutual Exclusivity
+
+#### 4.8.1 Reboot Command (`0x0308`)
+- **Command ID**: `0x0308` (`COMMAND_REBOOT`)
+- **Request Frame**: `FF 04 00 00 00 0A 03 08` (Length 0, no payload)
+- **Behavior**:
+  - Immediately triggers a software reboot of both earbuds.
+  - The RFCOMM socket connection is closed abruptly from the remote side (`EOF` / Connection reset by peer).
+  - Both earbuds power cycle, reconnect to each other (TWS link), and re-establish the Bluetooth Classic link to the host computer.
+  - BlueZ receives a device disconnect event, followed shortly by a reconnect event.
+
+#### 4.8.2 EarFun Air Pro 4 Mutual Exclusivity (LDAC vs Dual Device Connection)
+
+On the **EarFun Air Pro 4**, the **LDAC** codec and **Dual Device Connection (Multipoint)** are **strictly mutually exclusive**:
+
+##### Technical Root Cause
+The Qualcomm QCC3091 SoC contains a single Kalimba DSP core and a finite amount of internal RAM for audio decoding buffers.
+- **LDAC Decoder**: Running Sony LDAC at 990 kbps (24-bit / 96 kHz) consumes significant Kalimba DSP instruction cycles and RF air-time bandwidth.
+- **Multipoint / Dual Device**: Maintaining two simultaneous Bluetooth Classic ACL links requires frequent time-sliced frequency hopping, A2DP stream arbitration, and background paging/sniff cycles for the secondary device.
+- Because the DSP memory and RF scheduling headroom cannot sustain both high-bitrate LDAC decoding and concurrent dual ACL links without severe audio dropouts and packet loss, the firmware enforces mutual exclusion.
+
+##### Official Companion App Behavior & State Machine
+The official EarFun app and Gadgetbridge handle this mutual exclusion and reboot requirement through confirmation workflows:
+
+```mermaid
+stateDiagram-v2
+    [*] --> StandardOrMultipoint: Default (aptX / SBC / Multipoint ON)
+
+    state StandardOrMultipoint {
+        DualDevice_ON: Dual Device Connection = ON
+        Codec_NonLDAC: Codec = aptX Adaptive / Lossless / Stable
+    }
+
+    state LDAC_Mode {
+        DualDevice_OFF: Dual Device Connection = OFF
+        Codec_LDAC: Codec = LDAC (0x08)
+    }
+
+    StandardOrMultipoint --> Prompt_Enable_LDAC: User selects LDAC
+    Prompt_Enable_LDAC --> StandardOrMultipoint: User Cancels
+    Prompt_Enable_LDAC --> Applying_LDAC: User Confirms (Disable Multipoint + Set LDAC + Reboot)
+
+    state Applying_LDAC {
+        Disable_Multipoint: 0x0327 [0x00]
+        Set_LDAC: 0x032E [0x08]
+        Send_Reboot: 0x0308 []
+        Disable_Multipoint --> Set_LDAC
+        Set_LDAC --> Send_Reboot
+    }
+
+    Applying_LDAC --> Reconnecting: Socket Drops / Earbuds Reboot
+    Reconnecting --> LDAC_Mode: BlueZ Reconnected & PipeWire renegotiates LDAC
+
+    LDAC_Mode --> Prompt_Enable_Multipoint: User turns ON Dual Device
+    Prompt_Enable_Multipoint --> LDAC_Mode: User Cancels
+    Prompt_Enable_Multipoint --> Applying_Multipoint: User Confirms (Switch Codec to Adaptive + Enable Multipoint + Reboot)
+
+    state Applying_Multipoint {
+        Set_Adaptive: 0x032E [0x03] or [0x00]
+        Enable_Multipoint: 0x0327 [0x01]
+        Send_Reboot2: 0x0308 []
+        Set_Adaptive --> Enable_Multipoint
+        Enable_Multipoint --> Send_Reboot2
+    }
+
+    Applying_Multipoint --> Reconnecting: Socket Drops / Earbuds Reboot
+    Reconnecting --> StandardOrMultipoint: BlueZ Reconnected & Multipoint Active
+```
+
+##### Confirmation Dialogs & Message Wording (Official App & Gadgetbridge Alignment)
+1. **Switching to LDAC (when Dual Device is enabled)**:
+   - **Dialog Title**: `切换音频编码 (Switch Audio Codec)`
+   - **Warning Text**: *"启用 LDAC 高清音频编码将自动关闭“双设备连接”功能。设置应用后耳机将自动重启并重新连接。是否继续？"*
+     *(Enabling LDAC high-resolution audio will automatically disable Dual Device Connection. The earbuds will restart and reconnect to apply this change. Do you want to continue?)*
+   - **Action Sequence**:
+     1. Send `SET_CONNECT_TWO_DEVICES` `0x0327 [0x00]`.
+     2. Send `SET_AUDIO_CODEC` `0x032E [0x08]`.
+     3. Send `COMMAND_REBOOT` `0x0308 []`.
+     4. Notify UI of pending reboot; monitor expects socket disconnect without raising an unexpected error.
+2. **Enabling Dual Device Connection (when LDAC is active)**:
+   - **Dialog Title**: `开启双设备连接 (Enable Dual Device Connection)`
+   - **Warning Text**: *"开启双设备连接将自动关闭 LDAC 编码，并切换为稳定/自适应编码（如 aptX Adaptive）。设置应用后耳机将自动重启。是否继续？"*
+     *(Enabling Dual Device Connection will disable LDAC and switch to a standard/adaptive codec. The earbuds will restart to apply this change. Do you want to continue?)*
+   - **Action Sequence**:
+     1. Send `SET_AUDIO_CODEC` `0x032E [0x03]` (aptX Adaptive, or `0x00` Stable Connection).
+     2. Send `SET_CONNECT_TWO_DEVICES` `0x0327 [0x01]`.
+     3. Send `COMMAND_REBOOT` `0x0308 []`.
+     4. Notify UI of pending reboot.
+3. **Switching between non-LDAC codecs (e.g., aptX $\to$ aptX Lossless)**:
+   - **Dialog Title**: `切换音频编码 (Switch Audio Codec)`
+   - **Warning Text**: *"应用此音频编码设置后，耳机将自动重启以重新协商蓝牙音频连接。是否继续？"*
+     *(After applying this audio codec setting, the earbuds will restart to renegotiate Bluetooth audio. Do you want to continue?)*
+   - **Action Sequence**:
+     1. Send `SET_AUDIO_CODEC` `0x032E [codec]`.
+     2. Send `COMMAND_REBOOT` `0x0308 []`.
+     3. Wait for earbud reboot and automatic BlueZ reconnection.
+
+---
+
+### 4.9 Voice Prompt Volume
 - **Query**: `0x0339` $\to$ Response `0x8339 [00, vol]`
 - **Set**: `0x0338 [vol]`
 - **Scale**: `0` (Maximum) to `4` (Minimum / Mute).
 
 ---
 
-### 4.9 Touch Mode and Gestures
+### 4.10 Touch Mode and Gestures
 - **Touch Lock Mode**:
   - Query: `0x0335` $\to$ Response `0x8335 [00, mode]` (`0` = Touch Enabled, `1` = Touch Disabled)
   - Set: `0x0334 [mode]`

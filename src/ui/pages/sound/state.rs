@@ -30,9 +30,12 @@ pub(crate) fn update_sound_page_features(
     supports_head_tracking: bool,
     supports_bass_engine: bool,
     supports_hi_res: bool,
+    supports_audio_codec: bool,
+    available_codecs: &[u8],
     presets: &[EqualizerPreset],
     updating_eq: &Cell<bool>,
     updating_spatial: &Cell<bool>,
+    updating_codec: &Cell<bool>,
 ) {
     sound_widgets.eq_card.set_visible(supports_equalizer);
     sound_widgets
@@ -40,7 +43,7 @@ pub(crate) fn update_sound_page_features(
         .set_visible(supports_spatial_audio);
     sound_widgets
         .enhancement_card
-        .set_visible(supports_hi_res || supports_bass_engine);
+        .set_visible(supports_hi_res || supports_bass_engine || supports_audio_codec);
     sound_widgets.hires_switch_row.set_visible(supports_hi_res);
     sound_widgets
         .bass_switch_row
@@ -48,6 +51,24 @@ pub(crate) fn update_sound_page_features(
     sound_widgets
         .bass_slider_row
         .set_visible(supports_bass_engine);
+
+    sound_widgets.codec_row.set_visible(supports_audio_codec);
+    sound_widgets.codec_row.set_sensitive(supports_audio_codec);
+    if supports_audio_codec {
+        updating_codec.set(true);
+        let items: Vec<(u8, String)> = available_codecs
+            .iter()
+            .map(|&c| {
+                let name = match crate::protocol::brands::earfun::EarFunAudioCodec::from_u8(c) {
+                    Some(codec) => crate::t!(codec.key()),
+                    None => format!("Codec {c}"),
+                };
+                (c, name)
+            })
+            .collect();
+        crate::ui::components::ComboRowExtManual::set_items(&sound_widgets.codec_row, &items);
+        updating_codec.set(false);
+    }
 
     updating_eq.set(true);
     for (idx, radio, row) in &sound_widgets.preset_radios {
@@ -319,6 +340,19 @@ pub(crate) fn update_sound_page_hi_res(
     updating_hires_switch.set(false);
 }
 
+pub(crate) fn update_sound_page_audio_codec(
+    sound_widgets: &SoundWidgets,
+    codec: u8,
+    updating_flag: &Cell<bool>,
+) {
+    updating_flag.set(true);
+    crate::ui::components::ComboRowExtManual::set_selected_id(
+        &sound_widgets.codec_row,
+        Some(codec),
+    );
+    updating_flag.set(false);
+}
+
 pub(crate) fn reset_sound_page(
     sound_widgets: &SoundWidgets,
     updating_eq: &Cell<bool>,
@@ -326,10 +360,17 @@ pub(crate) fn reset_sound_page(
     updating_bass_switch: &Cell<bool>,
     updating_bass_slider: &Cell<bool>,
     updating_hires_switch: &Cell<bool>,
+    updating_codec: &Cell<bool>,
 ) {
     sound_widgets.eq_card.set_visible(false);
     sound_widgets.spatial_card.set_visible(false);
     sound_widgets.enhancement_card.set_visible(false);
+
+    updating_codec.set(true);
+    sound_widgets.codec_row.set_sensitive(false);
+    sound_widgets.codec_row.set_visible(false);
+    crate::ui::components::ComboRowExtManual::set_selected_id(&sound_widgets.codec_row, None);
+    updating_codec.set(false);
 
     updating_eq.set(true);
     for (_, radio, _) in &sound_widgets.preset_radios {
