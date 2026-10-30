@@ -218,6 +218,19 @@ EarFun headsets support hardware equalization using Qualcomm GAIA V3 non-standar
    - In WaveTune, the selected preset is persisted in `~/.config/wavetune/settings.ini` under an anonymous device key derived from the SHA-256 hash of the device MAC (`[Device_{PID}_{SHA256(MAC)[..12]}]`). This guarantees uniqueness across multiple headsets of the same model without persisting or exposing raw Bluetooth addresses.
    - On session establishment, WaveTune checks if a non-default preset was previously active and automatically synchronizes the 10-band DSP parameters to the earbud, ensuring consistent audio reproduction even after headset power cycles.
 
+#### Write-Only Characteristics & Architecture Differences
+1. **No Hardware Preset Concept**:
+   - Unlike OPPO/OnePlus headsets which feature a firmware-level preset manager queried via `0x010F` (`CMD_GET_EQUALIZER`), EarFun headsets operate at the raw Qualcomm Kymera DSP PEQ (Parametric Equalizer) filter layer.
+   - The headset firmware does not know what "Classic" or "Bass Boost" is; it only receives and stores raw DSP filter coefficients.
+2. **Query Attempt (`0x0E02`) Rejected**:
+   - Live probing with `0x0E02` (`REQUEST_RESPONSE_EQUALIZER_CONFIG`) across multiple payload variants (empty, band ID `0xA1`, `0x00`, `0x01`) consistently triggers the GAIA error frame:
+     `FF 03 00 01 00 1D 0F 82 01` (`0x0F82` is `0x0E02 | 0x0180` error flag, payload `0x01` = `STATUS_NOT_SUPPORTED`).
+   - The headset does not provide a mechanism to read back active PEQ coefficients from the DSP registers.
+3. **Client-Side State Tracking & Persistence**:
+   - Both the official EarFun companion app and Gadgetbridge maintain preset definitions and active preset states entirely within client-side local storage (`SharedPreferences` in Android).
+   - In WaveTune, the selected preset is persisted in `~/.config/wavetune/settings.ini` under an anonymous device key derived from the SHA-256 hash of the device MAC (`[Device_{PID}_{SHA256(MAC)[..12]}]`). This guarantees uniqueness across multiple headsets of the same model without persisting or exposing raw Bluetooth addresses.
+   - On session establishment, WaveTune checks if a non-default preset was previously active and automatically synchronizes the 10-band DSP parameters to the earbud, ensuring consistent audio reproduction even after headset power cycles.
+
 #### 10-Band Models (EarFun Air Pro 4 & Free Pro 3):
 | Band | Band ID | Frequency (Hz) | Q-Factor |
 |---|---|---|---|
