@@ -40,7 +40,7 @@ use crate::{
         update_spatial_audio, wear_part_name, widgets_ref,
     },
     ui::{
-        ConnectionStateWidgets, ControlsWidgets, DevicesWidgets, HomeWidgets, SoundWidgets,
+        ConnectionStateWidgets, ControlsWidgets, DeviceWidgets, HomeWidgets, SoundWidgets,
         components::ComboRowExtManual,
         controls_state,
         dialogs::{paired_device_icon_name, show_paired_device_dialog},
@@ -106,7 +106,7 @@ pub(crate) fn wire_bluetooth_controls(
     widgets: HomeWidgets,
     sound_widgets: SoundWidgets,
     controls_widgets: ControlsWidgets,
-    device_widgets: DevicesWidgets,
+    device_widgets: DeviceWidgets,
     connection_state: ConnectionStateWidgets,
     quick_settings: Option<Rc<QuickSettingsService>>,
     tray: Option<Rc<TrayService>>,

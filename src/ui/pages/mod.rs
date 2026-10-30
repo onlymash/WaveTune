@@ -16,6 +16,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 pub mod controls;
-pub mod devices;
+pub mod device;
 pub mod home;
 pub mod sound;

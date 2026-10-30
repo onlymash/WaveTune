@@ -29,7 +29,7 @@ common-current-state-syncing = Current state: Synchronizing
 nav-home = Home
 nav-sound = Sound
 nav-controls = Controls
-nav-devices = Devices
+nav-device = Device
 nav-main-menu = Main Menu
 nav-quit = Quit
 

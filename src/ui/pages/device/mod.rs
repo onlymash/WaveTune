@@ -19,11 +19,11 @@ use adw::prelude::*;
 use gtk::{Box as GtkBox, Orientation};
 
 use crate::ui::{
-    DevicesWidgets,
+    DeviceWidgets,
     components::{card, muted, page_container},
 };
 
-pub(crate) fn build_devices_page() -> (GtkBox, DevicesWidgets) {
+pub(crate) fn build_device_page() -> (GtkBox, DeviceWidgets) {
     let page = page_container();
 
     let device_group = adw::PreferencesGroup::builder()
@@ -66,7 +66,7 @@ pub(crate) fn build_devices_page() -> (GtkBox, DevicesWidgets) {
     page.append(&diag_group);
     (
         page,
-        DevicesWidgets {
+        DeviceWidgets {
             connection,
             name,
             product_id,

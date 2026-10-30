@@ -29,7 +29,7 @@ common-current-state-syncing = 当前状态：正在同步
 nav-home = 主页
 nav-sound = 音效
 nav-controls = 控制
-nav-devices = 设备
+nav-device = 设备
 nav-main-menu = 主菜单
 nav-quit = 退出
 

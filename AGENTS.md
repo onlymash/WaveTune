@@ -21,7 +21,7 @@ Before changing behavior, read:
 
 ## Current implementation status
 
-- GTK4 UI has home, sound, controls, and devices pages.
+- GTK4 UI has home, sound, controls, and device pages.
 - On startup, the UI discovers already-connected OnePlus/OPPO/realme headsets using BlueZ headset
   category and Bluetooth company identifiers, with the headset control UUID as an OPPO fallback;
   aliases are display-only, not a filter. Do not use BlueZ `Modalias` as a brand identifier because
@@ -115,7 +115,7 @@ control service; the device may accept only one control connection at a time.
 - `src/app/events.rs`: typed commands and events exchanged between GTK and background work.
 - `src/app/controller.rs`: coordinates device selection, connection lifecycle, and UI updates.
 - `src/app/device_manager.rs`: starts discovery and RFCOMM monitor workers.
-- `src/ui/`: GTK window composition, home/sound/controls/devices pages, shared components, and view-state
+- `src/ui/`: GTK window composition, home/sound/controls/device pages, shared components, and view-state
   updates. Keep protocol logic out of these modules.
 - `src/bluetooth/`: BlueZ discovery and candidate filtering (`discovery.rs`), generic RFCOMM transport
   (`transport.rs`), read-only `--probe` output (`probe.rs`), and brand-specific control sessions

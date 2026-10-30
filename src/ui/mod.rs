@@ -74,7 +74,7 @@ pub(crate) struct HomeWidgets {
     pub(crate) game_mode_switch: gtk::Switch,
 }
 
-pub(crate) struct DevicesWidgets {
+pub(crate) struct DeviceWidgets {
     pub(crate) connection: Label,
     pub(crate) name: Label,
     pub(crate) product_id: Label,
@@ -161,8 +161,8 @@ pub fn build(
     stack.add_titled(&sound_page, Some("sound"), &crate::t!("nav-sound"));
     let (controls_page, controls_widgets) = pages::controls::build_controls_page();
     stack.add_titled(&controls_page, Some("controls"), &crate::t!("nav-controls"));
-    let (devices_page, device_widgets) = pages::devices::build_devices_page();
-    stack.add_titled(&devices_page, Some("devices"), &crate::t!("nav-devices"));
+    let (device_page, device_widgets) = pages::device::build_device_page();
+    stack.add_titled(&device_page, Some("device"), &crate::t!("nav-device"));
 
     let sidebar = adw::Sidebar::new();
     let navigation_section = adw::SidebarSection::new();
@@ -170,7 +170,7 @@ pub fn build(
         (crate::t!("nav-home"), "view-grid-symbolic"),
         (crate::t!("nav-sound"), "audio-speakers-symbolic"),
         (crate::t!("nav-controls"), "applications-system-symbolic"),
-        (crate::t!("nav-devices"), "dialog-information-symbolic"),
+        (crate::t!("nav-device"), "dialog-information-symbolic"),
     ] {
         navigation_section.append(
             adw::SidebarItem::builder()
@@ -286,7 +286,7 @@ pub fn build(
         let page_name = match index {
             1 => "sound",
             2 => "controls",
-            3 => "devices",
+            3 => "device",
             _ => "home",
         };
         stack_for_navigation.set_visible_child_name(page_name);
@@ -299,7 +299,7 @@ pub fn build(
         let title = match stack.visible_child_name().as_deref() {
             Some("sound") => crate::t!("nav-sound"),
             Some("controls") => crate::t!("nav-controls"),
-            Some("devices") => crate::t!("nav-devices"),
+            Some("device") => crate::t!("nav-device"),
             _ => crate::t!("nav-home"),
         };
         content_page_for_updates.set_title(&title);
