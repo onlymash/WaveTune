@@ -404,17 +404,38 @@ stateDiagram-v2
 
 ### 4.10 Touch Mode and Gestures
 - **Touch Lock Mode**:
-  - Query: `0x0335` $\to$ Response `0x8335 [00, mode]` (`0` = Touch Enabled, `1` = Touch Disabled)
-  - Set: `0x0334 [mode]`
-- **Touch Gestures Setting**:
-  - Set: `0x030A [interaction_type, action, 0x00, 0x00]` for Left, `[0x00, 0x00, interaction_type, action]` for Right.
-  - Interaction Types:
+  - Supported Models: EarFun Air Pro 4, EarFun Free Pro 3 (EarFun Air S does not support touch lock).
+  - Query: `0x0335` $\to$ Response `0x8335 [00, mode]` (`0` = Touch Enabled, `1` = Touch Disabled / Locked).
+  - Set: `0x0334 [mode]` (`0` = Enabled, `1` = Disabled / Locked).
+
+- **Touch Gestures Query (`0x030B`)**:
+  - Query Command: `0x030B` with empty payload `[]`.
+  - Response Command: `0x830B`.
+  - Response Payload (17 bytes):
+    - Byte `0`: Status code (`0x00` or `0x01`).
+    - Followed by 8 big-endian 16-bit short integers (only the lower byte is used, upper byte is unused/padding):
+      - Offset `1..2`: Single Tap Left (`short & 0xFF`)
+      - Offset `3..4`: Single Tap Right (`short & 0xFF`)
+      - Offset `5..6`: Double Tap Left (`short & 0xFF`)
+      - Offset `7..8`: Double Tap Right (`short & 0xFF`)
+      - Offset `9..10`: Triple Tap Left (`short & 0xFF`)
+      - Offset `11..12`: Triple Tap Right (`short & 0xFF`)
+      - Offset `13..14`: Long Press Left (`short & 0xFF`)
+      - Offset `15..16`: Long Press Right (`short & 0xFF`)
+
+- **Touch Gestures Setting (`0x030A`)**:
+  - Request Command: `0x030A`.
+  - Payload (4 bytes):
+    - Left Earbud: `[interaction_type, action, 0x00, 0x00]`
+    - Right Earbud: `[0x00, 0x00, interaction_type, action]`
+  - Response: ACK frame `0x830A [00]` or status code.
+  - Interaction Types (`interaction_type`):
     - Single Tap: `0x01`
     - Double Tap: `0x02`
     - Triple Tap: `0x03`
-    - Long Press: `0x04`
-  - Action Codes:
-    - `16` (`0x10`): None
+    - Long Press: `0x11` *(Note: 0x11 / decimal 17 in EarFun GAIA V3 firmware, not 0x04)*
+  - Action Codes (`action`):
+    - `16` (`0x10`): None / Disabled
     - `1`: Play / Pause
     - `2`: Volume Up
     - `3`: Volume Down
@@ -422,7 +443,15 @@ stateDiagram-v2
     - `5`: Next Track
     - `6`: Voice Assistant
     - `7`: Game Mode Toggle
-    - `8`: Noise Control Toggle (All Modes)
+    - `8`: Noise Control Toggle (All Modes: ANC / Normal / Ambient)
+    - `9`: Noise Control Toggle (Normal / Wind Noise Cancelling) *(Air Pro 4 & Free Pro 3 only)*
+    - `10`: Noise Control Toggle (Normal / Ambient) *(Air Pro 4 & Free Pro 3 only)*
+    - `11`: Noise Control Toggle (Wind Noise Cancelling / Ambient) *(Air Pro 4 & Free Pro 3 only)*
+    - `13`: Redial *(Air Pro 4 & Free Pro 3 only)*
+
+- **Model Differences**:
+  - **EarFun Air Pro 4 & Free Pro 3**: Support Touch Lock Mode (`0x0334`/`0x0335`), full 13 action codes, and 4 gestures (Single, Double, Triple, Long Press) on both Left and Right earbuds.
+  - **EarFun Air S**: Does not support Touch Lock Mode; supports basic 9 action codes (`16`, `1`–`8`); does not support sub-mode noise cycle pairs (`9`–`11`) or Redial (`13`).
 
 ---
 
