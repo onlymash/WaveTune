@@ -20,6 +20,7 @@ use gtk::{Align, Box as GtkBox, Image, Label, Orientation};
 
 #[derive(Clone)]
 pub(crate) struct BatteryIndicator {
+    pub(crate) container: GtkBox,
     pub(crate) percentage: Label,
     pub(crate) charging: Label,
 }
@@ -72,8 +73,9 @@ pub(crate) fn battery_indicator(letter: Option<&str>) -> (GtkBox, BatteryIndicat
     item.append(&charging);
 
     (
-        item,
+        item.clone(),
         BatteryIndicator {
+            container: item,
             percentage,
             charging,
         },

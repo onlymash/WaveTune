@@ -150,22 +150,7 @@ impl DeviceComponent {
     }
 
     pub fn render_firmware(&self, versions: &FirmwareVersions) {
-        let fw_text =
-            if versions.left.is_some() || versions.right.is_some() || versions.case.is_some() {
-                let mut parts = Vec::new();
-                if let Some(ref left) = versions.left {
-                    parts.push(format!("L: {left}"));
-                }
-                if let Some(ref right) = versions.right {
-                    parts.push(format!("R: {right}"));
-                }
-                if let Some(ref case) = versions.case {
-                    parts.push(format!("Case: {case}"));
-                }
-                format!("{} ({})", crate::t!("device-firmware"), parts.join(" · "))
-            } else {
-                crate::t!("device-firmware-unknown")
-            };
+        let fw_text = format_firmware_versions(versions);
         self.device.firmware.set_text(&fw_text);
         self.hero.set_firmware(&fw_text);
     }
@@ -305,5 +290,43 @@ impl DeviceComponent {
                 self.paired.append_row(&error_row);
             }
         }
+    }
+}
+
+pub(crate) fn format_firmware_versions(versions: &FirmwareVersions) -> String {
+    fn clean(s: &Option<String>) -> Option<&str> {
+        s.as_deref().map(str::trim).filter(|v| !v.is_empty())
+    }
+    let left = clean(&versions.left);
+    let right = clean(&versions.right);
+    let case = clean(&versions.case);
+
+    match (left, right, case) {
+        // All three present
+        (Some(l), Some(r), Some(c)) => crate::t!("firmware-version-full", l, r, c),
+        // Left and right present, no case (reading case failed, or headphone/neckband reporting both)
+        (Some(l), Some(r), None) => {
+            if l == r {
+                crate::t!("firmware-version-single", l)
+            } else {
+                crate::t!("firmware-version-left-right", l, r)
+            }
+        }
+        // Only left (or only right), no case (headphone/neckband or single earbud)
+        (Some(l), None, None) => crate::t!("firmware-version-single", l),
+        (None, Some(r), None) => crate::t!("firmware-version-single", r),
+        // Only case present
+        (None, None, Some(c)) => crate::t!("firmware-version-case", c),
+        // One earbud + case
+        (Some(l), None, Some(c)) => {
+            let not_reported = crate::t!("common-not-reported");
+            crate::t!("firmware-version-full", l, &not_reported, c)
+        }
+        (None, Some(r), Some(c)) => {
+            let not_reported = crate::t!("common-not-reported");
+            crate::t!("firmware-version-full", &not_reported, r, c)
+        }
+        // None present
+        (None, None, None) => crate::t!("firmware-version-unknown"),
     }
 }

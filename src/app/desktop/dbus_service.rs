@@ -175,19 +175,51 @@ impl QuickSettingsSnapshot {
 fn format_battery_part(label: &str, part: Option<BatteryPart>, stale: bool) -> Option<String> {
     let part = part?;
     let charging_mark = if part.charging && !stale { "⚡" } else { "" };
-    Some(format!("{label} {}%{charging_mark}", part.percentage))
+    if label.is_empty() {
+        Some(format!("{}%{charging_mark}", part.percentage))
+    } else {
+        Some(format!("{label} {}%{charging_mark}", part.percentage))
+    }
 }
 
 fn format_battery_summary(battery: &BatteryState, case_stale: bool) -> String {
+    let is_headphone =
+        (battery.left.is_some() && battery.right.is_none() && battery.case.is_none())
+            || (battery.left.is_none() && battery.right.is_some() && battery.case.is_none());
+    if is_headphone {
+        let part = battery.left.or(battery.right);
+        return format_battery_part("", part, false).unwrap_or_default();
+    }
+
     let mut segments = Vec::with_capacity(3);
-    if let Some(left) = format_battery_part(&crate::t!("battery-left-ear"), battery.left, false) {
-        segments.push(left);
+    match (battery.left, battery.right) {
+        (Some(l), Some(r)) if l == r => {
+            if let Some(lr) = format_battery_part("L/R", Some(l), false) {
+                segments.push(lr);
+            }
+        }
+        (Some(l), Some(r)) => {
+            if let Some(left) = format_battery_part("L", Some(l), false) {
+                segments.push(left);
+            }
+            if let Some(right) = format_battery_part("R", Some(r), false) {
+                segments.push(right);
+            }
+        }
+        (Some(l), None) => {
+            if let Some(left) = format_battery_part("L", Some(l), false) {
+                segments.push(left);
+            }
+        }
+        (None, Some(r)) => {
+            if let Some(right) = format_battery_part("R", Some(r), false) {
+                segments.push(right);
+            }
+        }
+        (None, None) => {}
     }
-    if let Some(right) = format_battery_part(&crate::t!("battery-right-ear"), battery.right, false)
-    {
-        segments.push(right);
-    }
-    if let Some(case) = format_battery_part(&crate::t!("battery-case"), battery.case, case_stale) {
+
+    if let Some(case) = format_battery_part("C", battery.case, case_stale) {
         segments.push(case);
     }
     segments.join(" · ")
@@ -620,7 +652,7 @@ mod tests {
         assert_eq!(snap.primary_modes.len(), 4);
         assert_eq!(snap.sub_modes.len(), 4);
         assert_eq!(snap.battery, (80, false, 75, true, -1, false));
-        assert_eq!(snap.battery_summary, "左耳 80% · 右耳 75%⚡");
+        assert_eq!(snap.battery_summary, "L 80% · R 75%⚡");
 
         // Adaptive + Standard (index 13, group 11) combines group and submode label
         let adaptive_snap = build_snapshot(&DesktopSnapshotInput {
@@ -686,5 +718,63 @@ mod tests {
             resolve_toggle_target(Some(3), None, &supported, modes),
             Some(1)
         );
+    }
+
+    #[test]
+    fn test_format_battery_summary_compact() {
+        // TWS: Left and Right equal, with Case
+        let tws_equal = BatteryState {
+            left: Some(BatteryPart {
+                percentage: 80,
+                charging: false,
+            }),
+            right: Some(BatteryPart {
+                percentage: 80,
+                charging: false,
+            }),
+            case: Some(BatteryPart {
+                percentage: 100,
+                charging: true,
+            }),
+        };
+        assert_eq!(
+            format_battery_summary(&tws_equal, false),
+            "L/R 80% · C 100%⚡"
+        );
+
+        // TWS: Left and Right different, no Case
+        let tws_diff = BatteryState {
+            left: Some(BatteryPart {
+                percentage: 90,
+                charging: false,
+            }),
+            right: Some(BatteryPart {
+                percentage: 85,
+                charging: true,
+            }),
+            case: None,
+        };
+        assert_eq!(format_battery_summary(&tws_diff, false), "L 90% · R 85%⚡");
+
+        // Headphone: only single battery reported
+        let headphone = BatteryState {
+            left: Some(BatteryPart {
+                percentage: 70,
+                charging: false,
+            }),
+            right: None,
+            case: None,
+        };
+        assert_eq!(format_battery_summary(&headphone, false), "70%");
+
+        let headphone_charging = BatteryState {
+            left: Some(BatteryPart {
+                percentage: 70,
+                charging: true,
+            }),
+            right: None,
+            case: None,
+        };
+        assert_eq!(format_battery_summary(&headphone_charging, false), "70%⚡");
     }
 }

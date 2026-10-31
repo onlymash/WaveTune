@@ -17,6 +17,9 @@ common-switching = 正在切换…
 common-rename = 重命名
 common-options = { $param0 }选项
 common-status = 状态：{ $param0 }
+common-error-status = 状态：错误：{ $param0 }
+common-list-separator = 、
+common-clause-separator = ；
 common-not-reported = 未上报
 common-unconfirmed = 未确认
 common-missing = 缺失
@@ -77,6 +80,7 @@ channel-bluetooth-connection = 蓝牙连接
 channel-desc = 使用 Linux RFCOMM 私有控制通道与 BlueZ 协议栈通信。支持使用 --probe 命令行参数执行单次只读探测。
 channel-and-diagnostics = 通道与诊断
 channel-connecting-to = 正在连接 { $param0 } 控制通道…
+channel-connected = 控制通道已连接
 channel-connected-syncing = 控制通道已建立，正在同步耳机状态
 channel-disconnected = 控制通道已断开
 channel-error = 控制通道错误：{ $param0 }
@@ -86,6 +90,7 @@ channel-not-connected = 控制通道尚未连接
 channel-session-ended = 控制通道会话已结束
 channel-status-connected = 状态：控制通道已连接
 channel-status-disconnected = 状态：控制通道已断开
+channel-status-connecting = 状态：正在连接控制通道…
 channel-headset-closed = 耳机已主动关闭 RFCOMM 控制连接
 channel-unable-to-open-rfcomm = 无法打开耳机 RFCOMM 控制通道：{ $param0 }
 channel-elnk-rfcomm-not-found = 未找到 ELNK SPP 控制服务 RFCOMM 通道
@@ -126,6 +131,9 @@ device-refreshing-list = 正在刷新设备列表…
 device-start-discovery-failed = 无法启动设备发现：{ $param0 }
 device-stop-connection-failed = 无法停止当前设备连接：{ $param0 }
 device-read-failed = 读取设备失败：{ $param0 }
+device-status-connected = 状态：设备已连接
+device-status-connecting = 状态：正在连接设备…
+device-status-ready = 状态：设备就绪
 device-status-disconnected = 状态：设备已断开
 device-status-discovery-failed = 状态：设备发现失败：{ $param0 }
 device-status-no-connected = 状态：未发现已连接设备
@@ -159,6 +167,7 @@ event-subscribe-failed = 状态变化订阅失败：{ $param0 }
 # ==============================================================================
 # Battery
 # ==============================================================================
+battery-headset = 耳机
 battery-case = 充电盒
 battery-left-ear = 左耳
 battery-left-earbud = 左耳
@@ -176,6 +185,9 @@ battery-query-failed = 电量查询失败：{ $param0 }
 # Wear & Case Lid
 # ==============================================================================
 wear-detection = 佩戴检测
+wear-part-left = 左耳
+wear-part-right = 右耳
+wear-part-case = 充电盒
 wear-status = 佩戴状态：{ $param0 }
 wear-status-placeholder = 佩戴状态：—
 wear-status-not-supported = 佩戴状态：该型号不支持佩戴检测
@@ -205,14 +217,19 @@ wear-query-failed = 佩戴状态查询失败：{ $param0 }
 wear-detection-blocked = 该型号未开放佩戴检测控制，已阻止发送
 wear-detection-updated = 佩戴检测设置已更新
 wear-detection-update-failed = 设置佩戴检测失败：{ $param0 }
+wear-send-failed = 无法发送佩戴检测设置命令：{ $param0 }
 
 # ==============================================================================
 # Firmware
 # ==============================================================================
+device-firmware = 固件版本
+device-firmware-unknown = 固件版本：未知
 firmware-version-placeholder = 固件版本：—
 firmware-version-single = 固件版本：{ $param0 }
 firmware-version-left-right = 固件版本：左耳 { $param0 } · 右耳 { $param1 }
+firmware-version-case = 固件版本：充电盒 { $param0 }
 firmware-version-full = 固件版本：左耳 { $param0 } · 右耳 { $param1 } · 充电盒 { $param2 }
+firmware-version-unknown = 固件版本：未知
 firmware-version-read = 固件版本读取
 firmware-response-invalid = 固件版本响应格式错误：{ $param0 }
 firmware-query-failed = 固件版本查询失败：{ $param0 }
@@ -307,6 +324,10 @@ dual-device-this-host-cannot-remove = 不能通过此列表删除本机
 dual-device-toggle-blocked = 该型号未开放双设备连接控制，已阻止发送
 dual-device-toggle-updated = 双设备连接设置已更新
 dual-device-toggle-failed = 设置双设备连接失败：{ $param0 }
+dual-device-send-failed = 无法发送双设备连接设置命令：{ $param0 }
+dual-device-connected = 已连接
+dual-device-none-connected = 无连接设备
+dual-device-list-title = 已配对设备：
 
 # ==============================================================================
 # Equalizer
@@ -445,6 +466,7 @@ codec-aptx = aptX
 codec-aptx-adaptive = aptX Adaptive
 codec-ldac = LDAC
 codec-aptx-lossless = aptX Lossless
+audio-codec-send-failed = 无法发送音频编码设置命令：{ $param0 }
 
 dialog-reboot-required-title = 重启耳机确认
 dialog-codec-reboot-message = 应用此音频编码后，耳机将自动重启并重新连接，以重新协商蓝牙音频连接。是否继续？
@@ -563,6 +585,18 @@ controls-preferred-device-updated = 首选连接设备已更新
 controls-preferred-device-update-failed = 设置首选设备失败：{ $param0 }
 
 
+controls-find-warning-title = 查找耳机
+controls-find-warning-body = 耳机将以最大音量播放声音，请勿在佩戴状态下使用。
+controls-noise-cycle-min-warning = 必须至少选择两种模式用于循环切换
+controls-gesture-send-failed = 无法发送手势设置命令：{ $param0 }
+controls-noise-cycle-send-failed = 无法发送降噪切换模式命令：{ $param0 }
+controls-preferred-device-send-failed = 无法发送优先设备设置命令：{ $param0 }
+controls-prompt-volume-send-failed = 无法发送提示音量设置命令：{ $param0 }
+controls-fit-test-send-failed = 无法发送贴合度测试命令：{ $param0 }
+controls-head-motion-send-failed = 无法发送头部姿态设置命令：{ $param0 }
+controls-find-send-failed = 无法发送查找耳机命令：{ $param0 }
+sleep-detection-send-failed = 无法发送自动休眠设置命令：{ $param0 }
+
 # ==============================================================================
 # Probe Diagnostics
 # ==============================================================================
@@ -571,11 +605,16 @@ probe-model-profile = 型号兼容配置：{ $param0 }
 probe-product-id = 产品 ID：{ $param0 }
 probe-color-id = 颜色编号：{ $param0 }
 probe-firmware = 固件版本：左耳 { $param0 }，右耳 { $param1 }，充电盒 { $param2 }
+probe-firmware-left-right = 固件版本：左耳 { $param0 }，右耳 { $param1 }
+probe-firmware-single = 固件版本：{ $param0 }
 probe-noise-mode-index = 降噪模式索引：{ $param0 }
 probe-noise-mode-support = 降噪模式支持信息：{ $param0 }
 probe-headset-eq = 耳机均衡器预设：{ $param0 }
 probe-spatial-audio = 空间音频：{ $param0 }
 probe-game-mode = 游戏模式：{ $param0 }
+probe-audio-codec = 音频编码：{ $param0 }
+probe-dual-device = 双设备连接：{ $param0 }
+probe-dual-device-error = 查询配对设备失败：{ $param0 }
 probe-bass-engine = 动态低音：{ $param0 }（档位 { $param1 }，范围 { $param2 }..{ $param3 }）
 probe-bass-engine-simple = 动态低音：{ $param0 }
 probe-hi-res = 高解析模式：{ $param0 }

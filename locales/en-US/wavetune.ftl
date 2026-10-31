@@ -17,6 +17,9 @@ common-switching = Switching…
 common-rename = Rename
 common-options = { $param0 } Options
 common-status = Status: { $param0 }
+common-error-status = Status: Error: { $param0 }
+common-list-separator = , 
+common-clause-separator = ; 
 common-not-reported = Not reported
 common-unconfirmed = Unconfirmed
 common-missing = missing
@@ -77,6 +80,7 @@ channel-bluetooth-connection = Bluetooth Connection
 channel-desc = Communicates with BlueZ stack using Linux RFCOMM private control channel. Use --probe command line argument for a one-shot read-only probe.
 channel-and-diagnostics = Channels &amp; Diagnostics
 channel-connecting-to = Connecting to { $param0 } control channel…
+channel-connected = Control channel connected
 channel-connected-syncing = Control channel connected, syncing headset state
 channel-disconnected = Control channel disconnected
 channel-error = Control channel error: { $param0 }
@@ -86,6 +90,7 @@ channel-not-connected = Control channel not connected
 channel-session-ended = Control channel session ended
 channel-status-connected = Status: Control channel connected
 channel-status-disconnected = Status: Control channel disconnected
+channel-status-connecting = Status: Connecting control channel…
 channel-headset-closed = Headset closed RFCOMM control connection
 channel-unable-to-open-rfcomm = Unable to open headset RFCOMM control channel: { $param0 }
 channel-elnk-rfcomm-not-found = ELNK SPP control service RFCOMM channel not found
@@ -126,6 +131,9 @@ device-refreshing-list = Refreshing device list…
 device-start-discovery-failed = Failed to start device discovery: { $param0 }
 device-stop-connection-failed = Failed to stop current device connection: { $param0 }
 device-read-failed = Failed to read device: { $param0 }
+device-status-connected = Status: Device connected
+device-status-connecting = Status: Connecting device…
+device-status-ready = Status: Device ready
 device-status-disconnected = Status: Device disconnected
 device-status-discovery-failed = Status: Device discovery failed: { $param0 }
 device-status-no-connected = Status: No connected device found
@@ -159,6 +167,7 @@ event-subscribe-failed = Status notification subscription failed: { $param0 }
 # ==============================================================================
 # Battery
 # ==============================================================================
+battery-headset = Headset
 battery-case = Case
 battery-left-ear = Left Ear
 battery-left-earbud = Left earbud
@@ -176,6 +185,9 @@ battery-query-failed = Battery query failed: { $param0 }
 # Wear & Case Lid
 # ==============================================================================
 wear-detection = Wear Detection
+wear-part-left = Left
+wear-part-right = Right
+wear-part-case = Case
 wear-status = Wear Status: { $param0 }
 wear-status-placeholder = Wear Status: —
 wear-status-not-supported = Wear Status: This model does not support wear detection
@@ -205,17 +217,22 @@ wear-query-failed = Wear status query failed: { $param0 }
 wear-detection-blocked = Wear detection control is not enabled for this model; command blocked
 wear-detection-updated = Wear detection setting updated
 wear-detection-update-failed = Failed to update wear detection: { $param0 }
+wear-send-failed = Failed to send in-ear detection command: { $param0 }
 
 # ==============================================================================
 # Firmware
 # ==============================================================================
+device-firmware = Firmware Version
+device-firmware-unknown = Firmware Version: Unknown
 firmware-version-placeholder = Firmware Version: —
 firmware-version-single = Firmware Version: { $param0 }
 firmware-version-left-right = Firmware Version: Left { $param0 } · Right { $param1 }
+firmware-version-case = Firmware Version: Case { $param0 }
 firmware-version-full = Firmware Version: Left { $param0 } · Right { $param1 } · Case { $param2 }
+firmware-version-unknown = Firmware Version: Unknown
 firmware-version-read = Firmware version read
 firmware-response-invalid = Invalid firmware version response: { $param0 }
-firmware-query-failed = Firmware version query failed: { $param0 }
+firmware-query-failed = Firmware query failed: { $param0 }
 
 # ==============================================================================
 # Noise Mode
@@ -307,6 +324,10 @@ dual-device-this-host-cannot-remove = Cannot remove this device from here
 dual-device-toggle-blocked = Dual-device connection toggle is not enabled for this model; command blocked
 dual-device-toggle-updated = Dual-device connection setting updated
 dual-device-toggle-failed = Failed to update dual-device connection: { $param0 }
+dual-device-send-failed = Failed to send dual-device connection command: { $param0 }
+dual-device-connected = Connected
+dual-device-none-connected = None connected
+dual-device-list-title = Paired Devices:
 
 # ==============================================================================
 # Equalizer
@@ -445,6 +466,7 @@ codec-aptx = aptX
 codec-aptx-adaptive = aptX Adaptive
 codec-ldac = LDAC
 codec-aptx-lossless = aptX Lossless
+audio-codec-send-failed = Failed to send audio codec command: { $param0 }
 
 dialog-reboot-required-title = Earbuds Restart Confirmation
 dialog-codec-reboot-message = After applying this audio codec, the earbuds will restart and reconnect to renegotiate Bluetooth audio. Do you want to continue?
@@ -563,6 +585,18 @@ controls-preferred-device-updated = Preferred connection device updated
 controls-preferred-device-update-failed = Failed to update preferred device: { $param0 }
 
 
+controls-find-warning-title = Find Earphones
+controls-find-warning-body = Earphones will play a high-volume sound. Please remove them before continuing.
+controls-noise-cycle-min-warning = At least two modes must be selected for cycling
+controls-gesture-send-failed = Failed to send gesture command: { $param0 }
+controls-noise-cycle-send-failed = Failed to send noise cycle command: { $param0 }
+controls-preferred-device-send-failed = Failed to send preferred device command: { $param0 }
+controls-prompt-volume-send-failed = Failed to send prompt volume command: { $param0 }
+controls-fit-test-send-failed = Failed to send fit test command: { $param0 }
+controls-head-motion-send-failed = Failed to send head motion command: { $param0 }
+controls-find-send-failed = Failed to send find earphone command: { $param0 }
+sleep-detection-send-failed = Failed to send auto-sleep command: { $param0 }
+
 # ==============================================================================
 # Probe Diagnostics
 # ==============================================================================
@@ -571,11 +605,16 @@ probe-model-profile = Model Compatibility Profile: { $param0 }
 probe-product-id = Product ID: { $param0 }
 probe-color-id = Color ID: { $param0 }
 probe-firmware = Firmware: Left { $param0 }, Right { $param1 }, Case { $param2 }
+probe-firmware-left-right = Firmware: Left { $param0 }, Right { $param1 }
+probe-firmware-single = Firmware: { $param0 }
 probe-noise-mode-index = Noise mode index: { $param0 }
 probe-noise-mode-support = Noise mode support info: { $param0 }
 probe-headset-eq = Headset Equalizer Preset: { $param0 }
 probe-spatial-audio = Spatial Audio: { $param0 }
 probe-game-mode = Game Mode: { $param0 }
+probe-audio-codec = Audio Codec: { $param0 }
+probe-dual-device = Dual-Device Connection: { $param0 }
+probe-dual-device-error = Query paired devices failed: { $param0 }
 probe-bass-engine = BassWave: { $param0 } (level { $param1 }, range { $param2 }..{ $param3 })
 probe-bass-engine-simple = BassWave: { $param0 }
 probe-hi-res = High-Res Mode: { $param0 }

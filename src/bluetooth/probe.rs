@@ -68,31 +68,43 @@ pub(crate) fn print_snapshot(snapshot: &DeviceSnapshot) {
     } else {
         println!("{}", crate::t!("wear-status-not-supported"));
     }
-    let not_reported = crate::t!("common-not-reported");
-    println!(
-        "{}",
-        crate::t!(
-            "probe-firmware",
-            snapshot
-                .identity
-                .firmware
-                .left
-                .as_deref()
-                .unwrap_or(&not_reported),
-            snapshot
-                .identity
-                .firmware
-                .right
-                .as_deref()
-                .unwrap_or(&not_reported),
-            snapshot
-                .identity
-                .firmware
-                .case
-                .as_deref()
-                .unwrap_or(&not_reported),
-        )
-    );
+    fn clean(s: &Option<String>) -> Option<&str> {
+        s.as_deref().map(str::trim).filter(|v| !v.is_empty())
+    }
+    let left = clean(&snapshot.identity.firmware.left);
+    let right = clean(&snapshot.identity.firmware.right);
+    let case = clean(&snapshot.identity.firmware.case);
+
+    match (left, right, case) {
+        (Some(l), Some(r), Some(c)) => {
+            println!("{}", crate::t!("probe-firmware", l, r, c));
+        }
+        (Some(l), Some(r), None) => {
+            if l == r {
+                println!("{}", crate::t!("probe-firmware-single", l));
+            } else {
+                println!("{}", crate::t!("probe-firmware-left-right", l, r));
+            }
+        }
+        (Some(l), None, None) => {
+            println!("{}", crate::t!("probe-firmware-single", l));
+        }
+        (None, Some(r), None) => {
+            println!("{}", crate::t!("probe-firmware-single", r));
+        }
+        _ => {
+            let not_reported = crate::t!("common-not-reported");
+            println!(
+                "{}",
+                crate::t!(
+                    "probe-firmware",
+                    left.unwrap_or(&not_reported),
+                    right.unwrap_or(&not_reported),
+                    case.unwrap_or(&not_reported),
+                )
+            );
+        }
+    }
     if snapshot.identity.read_only {
         let unconfirmed = crate::t!("common-unconfirmed");
         println!(
@@ -257,6 +269,25 @@ pub(crate) fn print_snapshot(snapshot: &DeviceSnapshot) {
 }
 
 fn print_battery(state: &BatteryState) {
+    let is_headphone = (state.left.is_some() && state.right.is_none() && state.case.is_none())
+        || (state.left.is_none() && state.right.is_some() && state.case.is_none());
+
+    if is_headphone {
+        if let Some(part) = state.left.or(state.right) {
+            let charging_suffix = if part.charging {
+                format!(" ({})", crate::t!("battery-charging"))
+            } else {
+                String::new()
+            };
+            println!(
+                "{}: {}%{charging_suffix}",
+                crate::t!("battery-headset"),
+                part.percentage
+            );
+            return;
+        }
+    }
+
     for (name, part) in [
         (crate::t!("battery-left-ear"), state.left),
         (crate::t!("battery-right-ear"), state.right),

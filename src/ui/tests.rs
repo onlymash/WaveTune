@@ -1021,3 +1021,104 @@ fn test_format_bass_level() {
     assert_eq!(crate::ui::sound_state::format_bass_level(-1), "-1");
     assert_eq!(crate::ui::sound_state::format_bass_level(-5), "-5");
 }
+
+#[test]
+fn test_format_firmware_versions_adaptive() {
+    use crate::app::features::device::component::format_firmware_versions;
+    use crate::protocol::FirmwareVersions;
+
+    // Full TWS reporting Left, Right, Case
+    let full = FirmwareVersions {
+        left: Some("128".to_string()),
+        right: Some("128".to_string()),
+        case: Some("100".to_string()),
+    };
+    let full_text = format_firmware_versions(&full);
+    assert!(full_text.contains("128") && full_text.contains("100"));
+
+    // TWS where reading case failed (or case offline) with different earbud firmwares
+    let tws_no_case = FirmwareVersions {
+        left: Some("128".to_string()),
+        right: Some("129".to_string()),
+        case: None,
+    };
+    let tws_no_case_text = format_firmware_versions(&tws_no_case);
+    assert!(tws_no_case_text.contains("128") && tws_no_case_text.contains("129"));
+    assert!(!tws_no_case_text.contains("100"));
+
+    // Headphone / neckband: only single firmware (or identical left/right, no case)
+    let headphone_identical = FirmwareVersions {
+        left: Some("1.0.2".to_string()),
+        right: Some("1.0.2".to_string()),
+        case: None,
+    };
+    let hp_text1 = format_firmware_versions(&headphone_identical);
+    assert!(hp_text1.contains("1.0.2"));
+    // Should display single firmware format without repeating L and R
+    assert_eq!(hp_text1, crate::t!("firmware-version-single", "1.0.2"));
+
+    let headphone_single = FirmwareVersions {
+        left: Some("1.0.2".to_string()),
+        right: None,
+        case: None,
+    };
+    let hp_text2 = format_firmware_versions(&headphone_single);
+    assert_eq!(hp_text2, crate::t!("firmware-version-single", "1.0.2"));
+
+    // None present
+    let empty = FirmwareVersions::default();
+    assert_eq!(
+        format_firmware_versions(&empty),
+        crate::t!("firmware-version-unknown")
+    );
+}
+
+#[test]
+fn test_battery_banner_adaptive_headphone() {
+    if gtk::init().is_err() {
+        return;
+    }
+    use crate::protocol::{BatteryPart, BatteryState};
+    use crate::ui::pages::home::battery::build_battery_banner;
+    use gtk::prelude::*;
+
+    let (_box, banner) = build_battery_banner();
+
+    // TWS mode: Left + Right + Case
+    let tws_battery = BatteryState {
+        left: Some(BatteryPart {
+            percentage: 80,
+            charging: false,
+        }),
+        right: Some(BatteryPart {
+            percentage: 75,
+            charging: true,
+        }),
+        case: Some(BatteryPart {
+            percentage: 90,
+            charging: false,
+        }),
+    };
+    banner.render_battery(&tws_battery, false);
+    assert!(!banner.headphone().container.is_visible());
+    assert!(banner.left().container.is_visible());
+    assert!(banner.right().container.is_visible());
+    assert!(banner.case().container.is_visible());
+
+    // Headphone mode: only single battery (left has value, right and case are None)
+    let hp_battery = BatteryState {
+        left: Some(BatteryPart {
+            percentage: 85,
+            charging: true,
+        }),
+        right: None,
+        case: None,
+    };
+    banner.render_battery(&hp_battery, false);
+    assert!(banner.headphone().container.is_visible());
+    assert!(!banner.left().container.is_visible());
+    assert!(!banner.right().container.is_visible());
+    assert!(!banner.case().container.is_visible());
+    assert_eq!(banner.headphone().percentage.text(), "85%");
+    assert!(banner.headphone().charging.is_visible());
+}
