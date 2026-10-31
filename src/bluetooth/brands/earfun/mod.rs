@@ -43,7 +43,7 @@ pub use features::{
     },
     dual_device::{read_earfun_paired_devices, set_dual_device},
     noise::{earfun_mode_to_protocol_index, protocol_index_to_earfun_mode, set_noise_mode},
-    sound::{apply_equalizer_preset, set_audio_codec, set_game_mode},
+    sound::{apply_equalizer_preset, send_equalizer_bands, set_audio_codec, set_game_mode},
 };
 #[allow(unused_imports)]
 pub use init::{
@@ -81,8 +81,8 @@ pub mod earfun_session {
         earfun_mode_to_protocol_index, get_local_rfcomm_lap, initialize_earfun_session,
         initialize_earfun_session_with_lap, open_earfun_rfcomm,
         parse_earfun_product_id_from_firmware, probe_earfun, protocol_index_to_earfun_mode,
-        read_earfun_paired_devices, request, send_command, set_audio_codec, set_dual_device,
-        set_game_mode, set_in_ear_detection, set_noise_mode, set_touch_action, set_touch_lock,
-        spawn_earfun_monitor,
+        read_earfun_paired_devices, request, send_command, send_equalizer_bands, set_audio_codec,
+        set_dual_device, set_game_mode, set_in_ear_detection, set_noise_mode, set_touch_action,
+        set_touch_lock, spawn_earfun_monitor,
     };
 }

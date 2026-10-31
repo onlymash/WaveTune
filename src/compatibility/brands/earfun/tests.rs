@@ -15,7 +15,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use super::earfun_gestures::*;
+use super::{earfun_equalizer::*, earfun_gestures::*};
 use crate::compatibility::{
     gesture_function_label_key_for_product, gesture_rows_for_product as global_gesture_rows,
     profile_for_product_id,
@@ -161,4 +161,80 @@ fn test_global_gesture_dispatch_and_brand_isolation() {
         (oppo_rows[0].function_label_key)(13),
         "controls-function-switch-devices"
     );
+}
+
+#[test]
+fn test_earfun_equalizer_presets_and_gains() {
+    // Air S presets & gains
+    let airs_presets = equalizer_presets_for_product(EARFUN_AIR_S_PRODUCT_ID).unwrap();
+    assert_eq!(airs_presets.len(), 9);
+    assert_eq!(airs_presets[0].key, "equalizer-preset-classic");
+    assert_eq!(airs_presets[2].key, "equalizer-preset-bass-boost");
+
+    let airs_classic = preset_gains_for_product(EARFUN_AIR_S_PRODUCT_ID, 0).unwrap();
+    assert_eq!(airs_classic, &[0.0; 6]);
+    let airs_bass = preset_gains_for_product(EARFUN_AIR_S_PRODUCT_ID, 2).unwrap();
+    assert_eq!(airs_bass, &[8.0, 3.0, 2.0, 0.0, 0.0, 0.0]);
+
+    // Out of range preset index
+    assert!(preset_gains_for_product(EARFUN_AIR_S_PRODUCT_ID, 9).is_none());
+
+    // Air Pro 4 / Free Pro 3 10-band presets & gains
+    let pro4_presets = equalizer_presets_for_product(EARFUN_AIR_PRO_4_PRODUCT_ID).unwrap();
+    assert_eq!(pro4_presets.len(), 9);
+    assert_eq!(pro4_presets[8].key, "equalizer-preset-pure-vocal");
+
+    let pro4_flat = preset_gains_for_product(EARFUN_AIR_PRO_4_PRODUCT_ID, 0).unwrap();
+    assert_eq!(pro4_flat, &[0.0; 10]);
+    let pro4_bass = preset_gains_for_product(EARFUN_AIR_PRO_4_PRODUCT_ID, 2).unwrap();
+    assert_eq!(
+        pro4_bass,
+        &[8.0, 6.0, 4.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    );
+
+    // Unknown product
+    assert!(equalizer_presets_for_product(0x999999).is_none());
+    assert!(preset_gains_for_product(0x999999, 0).is_none());
+}
+
+#[test]
+fn test_earfun_build_equalizer_bands_and_dummy_padding() {
+    // Air S: 6 active bands + 4 dummy bands = 10 bands
+    let airs_bands = equalizer_bands_for_preset(EARFUN_AIR_S_PRODUCT_ID, 2).unwrap();
+    assert_eq!(airs_bands.len(), 10);
+
+    // Active bands 0..5
+    assert_eq!(airs_bands[0].band_id, 0xA1);
+    assert_eq!(airs_bands[0].frequency, 0x00BD);
+    assert_eq!(airs_bands[0].gain_db, 8.0);
+
+    assert_eq!(airs_bands[5].band_id, 0xA6);
+    assert_eq!(airs_bands[5].frequency, 0xAFC8);
+    assert_eq!(airs_bands[5].gain_db, 0.0);
+
+    // Dummy bands 6..9 (ID 0xA7..0xAA)
+    assert_eq!(airs_bands[6].band_id, 0xA7);
+    assert_eq!(airs_bands[6].gain_db, 4.5);
+    assert_eq!(airs_bands[7].band_id, 0xA8);
+    assert_eq!(airs_bands[7].gain_db, -4.5);
+    assert_eq!(airs_bands[8].band_id, 0xA9);
+    assert_eq!(airs_bands[8].gain_db, 1.5);
+    assert_eq!(airs_bands[9].band_id, 0xAA);
+    assert_eq!(airs_bands[9].gain_db, 3.5);
+
+    // Air Pro 4: 10 active bands
+    let pro4_bands = equalizer_bands_for_preset(EARFUN_AIR_PRO_4_PRODUCT_ID, 2).unwrap();
+    assert_eq!(pro4_bands.len(), 10);
+    assert_eq!(pro4_bands[0].band_id, 0xA1);
+    assert_eq!(pro4_bands[0].frequency, 0x005E);
+    assert_eq!(pro4_bands[0].q_factor, 0x0B33);
+    assert_eq!(pro4_bands[0].gain_db, 8.0);
+    assert_eq!(pro4_bands[9].band_id, 0xAA);
+    assert_eq!(pro4_bands[9].frequency, 0xBB80);
+    assert_eq!(pro4_bands[9].q_factor, 0x0B33);
+    assert_eq!(pro4_bands[9].gain_db, 0.0);
+
+    // Wrong number of bands returns None
+    assert!(build_equalizer_bands(EARFUN_AIR_S_PRODUCT_ID, &[0.0; 10]).is_none());
+    assert!(build_equalizer_bands(EARFUN_AIR_PRO_4_PRODUCT_ID, &[0.0; 6]).is_none());
 }

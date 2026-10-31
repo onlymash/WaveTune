@@ -840,4 +840,52 @@ mod tests {
 
         device_thread.join().unwrap();
     }
+
+    #[test]
+    fn test_earfun_apply_equalizer_preset() {
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+
+        let device_thread = thread::spawn(move || {
+            for i in 0..10 {
+                let req = read_mock_request(&mut device);
+                assert_eq!(req.command, EarFunCommands::SET_EQUALIZER_BAND);
+                assert_eq!(req.payload[0], 0xA1 + i as u8);
+                // Reply with ACK 0x0F81 [0x01]
+                let ack_pkt = EarFunPacket::new_v3(0x0F81, vec![0x01]);
+                device.write_all(&ack_pkt.encode()).unwrap();
+            }
+        });
+
+        let (tx, _rx) = mpsc::channel();
+        let mut decoder = EarFunFrameDecoder::default();
+        apply_equalizer_preset(
+            &mut client,
+            &mut decoder,
+            EARFUN_AIR_PRO_4_PRODUCT_ID,
+            2,
+            Some(&tx),
+        )
+        .expect("apply_equalizer_preset should succeed");
+
+        device_thread.join().unwrap();
+
+        // Unknown product or preset should fail without writing to device
+        assert!(apply_equalizer_preset(&mut client, &mut decoder, 0x999999, 0, Some(&tx)).is_err());
+        assert!(
+            apply_equalizer_preset(
+                &mut client,
+                &mut decoder,
+                EARFUN_AIR_PRO_4_PRODUCT_ID,
+                99,
+                Some(&tx)
+            )
+            .is_err()
+        );
+    }
 }

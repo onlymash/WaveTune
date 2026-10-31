@@ -24,8 +24,9 @@ use std::{
 
 use crate::app::events::UiUpdate;
 use crate::bluetooth::brands::earfun::transport::{
-    EARFUN_AIR_PRO_4_PRODUCT_ID, EARFUN_AIR_S_PRODUCT_ID, drain_stream, send_command,
+    EARFUN_AIR_PRO_4_PRODUCT_ID, drain_stream, send_command,
 };
+use crate::compatibility::brands::earfun::equalizer_bands_for_preset;
 use crate::protocol::brands::earfun::{
     EarFunAudioCodec, EarFunCommands, EarFunFrameDecoder, EarFunPacket, GaiaEqBand,
     encode_earfun_eq_band,
@@ -79,81 +80,23 @@ pub fn apply_equalizer_preset<T: Read + Write>(
     preset_index: u8,
     updates: Option<&Sender<UiUpdate>>,
 ) -> Result<(), String> {
-    let mut joined_frames = Vec::new();
+    let bands = equalizer_bands_for_preset(product_id, preset_index)
+        .ok_or_else(|| crate::t!("equalizer-blocked"))?;
+    send_equalizer_bands(stream, decoder, &bands, updates)
+}
 
-    if product_id == EARFUN_AIR_S_PRODUCT_ID {
-        // 6-band EQ for EarFun Air S (with 4 dummy bands)
-        let frequencies: [u16; 10] = [
-            0x00BD, 0x021C, 0x05DC, 0x0BB8, 0x5DC0, 0xAFC8, // 63, 180, 500, 1000, 8000, 15000
-            0x0063, 0x0258, 0x1770, 0xAFC8, // dummy 7..10
-        ];
-        let q_factors: [u16; 10] = [
-            0x0B33, 0x0999, 0x0999, 0x0999, 0x0999, 0x0999, 0x0800, 0x0999, 0x0E66, 0x0999,
-        ];
-        let dummy_gains = [4.5, -4.5, 1.5, 3.5];
+pub fn send_equalizer_bands<T: Read + Write>(
+    stream: &mut T,
+    decoder: &mut EarFunFrameDecoder,
+    bands: &[GaiaEqBand],
+    updates: Option<&Sender<UiUpdate>>,
+) -> Result<(), String> {
+    let mut joined_frames = Vec::with_capacity(bands.len() * 17);
 
-        let gains_6: [f64; 6] = match preset_index {
-            0 => [0.0; 6],                          // Classic
-            1 => [0.0, 0.0, 1.0, 1.0, 2.0, 3.0],    // Natural
-            2 => [8.0, 3.0, 2.0, 0.0, 0.0, 0.0],    // Bass Boost
-            3 => [0.0, 0.0, 0.0, 2.0, 3.0, 5.0],    // Treble Boost
-            4 => [-5.0, -2.0, 2.0, 3.0, 0.0, -3.0], // Soft
-            5 => [7.0, 3.0, 2.0, 3.0, 5.0, 7.0],    // Dynamic
-            6 => [2.0, 0.0, 3.0, 5.0, 3.0, 5.0],    // Clear
-            7 => [2.0, 1.0, 0.0, -1.0, -3.0, -5.0], // Relaxed
-            8 => [-2.0, 0.0, 4.0, 5.0, 2.0, -1.0],  // Vocal
-            _ => [0.0; 6],
-        };
-
-        for i in 0..10 {
-            let band_id = 0xA1 + i as u8;
-            let gain = if i < 6 {
-                gains_6[i]
-            } else {
-                dummy_gains[i - 6]
-            };
-            let band = GaiaEqBand {
-                band_id,
-                frequency: frequencies[i],
-                q_factor: q_factors[i],
-                gain_db: gain,
-            };
-            let payload = encode_earfun_eq_band(&band);
-            let pkt = EarFunPacket::new_v3(EarFunCommands::SET_EQUALIZER_BAND, payload);
-            joined_frames.extend_from_slice(&pkt.encode());
-        }
-    } else {
-        // 10 bands for Air Pro 4 & Free Pro 3
-        let frequencies: [u16; 10] = [
-            0x005E, 0x00BD, 0x0177, 0x02EE, 0x05DC, 0x0BB8, 0x1770, 0x2EE0, 0x5DC0, 0xBB80,
-        ];
-        let q_factor: u16 = 0x0B33;
-
-        let gains: [f64; 10] = match preset_index {
-            0 => [0.0; 10],                                                // Classic / Flat
-            1 => [0.0, 0.0, 1.0, 2.0, 2.0, -1.0, -1.0, -1.0, -2.0, 1.0],   // Natural
-            2 => [8.0, 6.0, 4.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],       // Bass Boost
-            3 => [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 2.0, 3.0, 4.0],       // Clear Treble
-            4 => [-5.0, -4.0, -2.0, 0.0, 2.0, 3.0, 0.0, -2.0, -3.0, -5.0], // Soft
-            5 => [6.0, 6.0, 4.0, 2.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],       // Dynamic
-            6 => [3.0, 2.0, 2.0, 2.0, 3.0, 5.0, 3.0, 3.0, 4.0, 5.0],       // Clear
-            7 => [2.0, 1.0, 0.0, 0.0, 0.0, -1.0, -2.0, -3.0, -4.0, -5.0],  // Relaxed
-            8 => [-3.0, -2.0, 0.0, 2.0, 3.0, 5.0, 3.0, 2.0, 0.0, -1.0],    // Pure Vocal
-            _ => [0.0; 10],
-        };
-
-        for i in 0..10 {
-            let band_id = 0xA1 + i as u8;
-            let band = GaiaEqBand {
-                band_id,
-                frequency: frequencies[i],
-                q_factor,
-                gain_db: gains[i],
-            };
-            let payload = encode_earfun_eq_band(&band);
-            let pkt = EarFunPacket::new_v3(EarFunCommands::SET_EQUALIZER_BAND, payload);
-            joined_frames.extend_from_slice(&pkt.encode());
-        }
+    for band in bands {
+        let payload = encode_earfun_eq_band(band);
+        let pkt = EarFunPacket::new_v3(EarFunCommands::SET_EQUALIZER_BAND, payload);
+        joined_frames.extend_from_slice(&pkt.encode());
     }
 
     stream
