@@ -24,14 +24,14 @@ use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
 use crate::bluetooth::brands::oppo::features::{OppoDualDeviceState, OppoFeatureContext};
 use crate::bluetooth::brands::oppo::transport::request;
 use crate::protocol::{
-    FrameDecoder, PairedDevice, PairedDeviceAction, PairedDeviceAddress,
-    encode_set_priority_device, parse_feature_flags_response, parse_paired_devices_response,
-    parse_priority_device_response,
+    OppoFrameDecoder, PairedDevice, PairedDeviceAction, PairedDeviceAddress,
+    encode_oppo_set_priority_device, parse_oppo_feature_flags_response,
+    parse_oppo_paired_devices_response, parse_oppo_priority_device_response,
 };
 
 pub fn set_paired_device<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     controls_enabled: &Result<bool, String>,
     paired_devices: &Result<Vec<PairedDevice>, String>,
     address: PairedDeviceAddress,
@@ -92,7 +92,7 @@ pub fn set_paired_device<T: Read + Write>(
 
 pub fn issue_paired_device_action<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     address: PairedDeviceAddress,
     action: PairedDeviceAction,
     updates: &Sender<UiUpdate>,
@@ -111,11 +111,11 @@ pub fn issue_paired_device_action<T: Read + Write>(
 
 pub fn read_paired_devices<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     updates: Option<&Sender<UiUpdate>>,
 ) -> Result<Vec<PairedDevice>, String> {
     let response = request(stream, decoder, 0x0112, 0, vec![], updates)?;
-    parse_paired_devices_response(&response.payload)
+    parse_oppo_paired_devices_response(&response.payload)
         .map_err(|error| crate::t!("dual-device-list-invalid", error))
 }
 
@@ -198,7 +198,7 @@ pub fn handle_dual_device_command<T: Read + Write>(
                         vec![1, 17],
                         Some(ctx.updates),
                     ) {
-                        if let Ok(actual) = parse_feature_flags_response(&res.payload, 17) {
+                        if let Ok(actual) = parse_oppo_feature_flags_response(&res.payload, 17) {
                             state.dual_device_enabled = Some(actual);
                             state.controls_enabled = Ok(actual);
                             let _ = ctx
@@ -233,7 +233,7 @@ pub fn handle_dual_device_command<T: Read + Write>(
                 });
                 return true;
             }
-            let payload = encode_set_priority_device(*addr);
+            let payload = encode_oppo_set_priority_device(*addr);
             match request(
                 ctx.stream,
                 ctx.decoder,
@@ -251,7 +251,7 @@ pub fn handle_dual_device_command<T: Read + Write>(
                         vec![2],
                         Some(ctx.updates),
                     ) {
-                        if let Ok(actual) = parse_priority_device_response(&res.payload) {
+                        if let Ok(actual) = parse_oppo_priority_device_response(&res.payload) {
                             state.preferred_device = actual;
                             let _ = ctx.updates.send(UiUpdate::PreferredDevice(actual));
                         }

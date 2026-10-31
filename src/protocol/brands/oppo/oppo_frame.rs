@@ -18,7 +18,6 @@
 use super::oppo_types::OppoProtocolError;
 
 pub const OPPO_FRAME_START: u8 = 0xaa;
-pub const FRAME_START: u8 = OPPO_FRAME_START;
 const MAX_FRAME_LEN: usize = 660;
 const MAX_MESSAGE_LEN: usize = 8192;
 const MAX_BUFFER_LEN: usize = 64 * 1024;
@@ -45,15 +44,11 @@ pub fn encode_oppo_frame(packet: &[u8]) -> Result<Vec<u8>, OppoProtocolError> {
     Ok(frame)
 }
 
-pub use encode_oppo_frame as encode_frame;
-
 #[derive(Debug, Default)]
 pub struct OppoFrameDecoder {
     buffer: Vec<u8>,
     fragmented_message: Option<(u8, Vec<u8>)>,
 }
-
-pub type FrameDecoder = OppoFrameDecoder;
 
 impl OppoFrameDecoder {
     pub fn new() -> Self {

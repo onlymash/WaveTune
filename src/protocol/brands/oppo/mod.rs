@@ -35,12 +35,10 @@ pub use oppo_capabilities::{
 pub use oppo_commands::OppoCommands;
 pub use oppo_controls::*;
 pub use oppo_device::*;
-pub use oppo_frame::{
-    FRAME_START, FrameDecoder, OPPO_FRAME_START, OppoFrameDecoder, encode_frame, encode_oppo_frame,
-};
+pub use oppo_frame::{OPPO_FRAME_START, OppoFrameDecoder, encode_oppo_frame};
 pub use oppo_noise::*;
 pub use oppo_sound::*;
-pub use oppo_types::{AppPacket, OppoAppPacket, OppoProtocolError, ProtocolError};
+pub use oppo_types::{OppoAppPacket, OppoProtocolError};
 pub use oppo_uuids::{
     ONEPLUS_COMPANY_ID, OPPO_COMPANY_ID, OPPO_CONTROL_SERVICE_CANDIDATES,
     OPPO_CONTROL_SERVICE_UUID, OPPO_PRIMARY_CONTROL_SERVICE_UUID,

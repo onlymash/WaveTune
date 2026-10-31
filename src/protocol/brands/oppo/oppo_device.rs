@@ -29,8 +29,6 @@ pub fn parse_oppo_color_response(payload: &[u8]) -> Result<u8, OppoProtocolError
     Ok(payload[1])
 }
 
-pub use parse_oppo_color_response as parse_color_response;
-
 pub fn parse_oppo_battery_response(payload: &[u8]) -> Result<BatteryState, OppoProtocolError> {
     if payload.first() != Some(&0) {
         return Err(OppoProtocolError::InvalidPacketLength);
@@ -38,16 +36,12 @@ pub fn parse_oppo_battery_response(payload: &[u8]) -> Result<BatteryState, OppoP
     parse_battery_components(&payload[1..])
 }
 
-pub use parse_oppo_battery_response as parse_battery_response;
-
 pub fn parse_oppo_battery_event(payload: &[u8]) -> Result<BatteryState, OppoProtocolError> {
     if payload.first() != Some(&1) {
         return Err(OppoProtocolError::InvalidPacketLength);
     }
     parse_battery_components(&payload[1..])
 }
-
-pub use parse_oppo_battery_event as parse_battery_event;
 
 fn parse_battery_components(payload: &[u8]) -> Result<BatteryState, OppoProtocolError> {
     let Some((&count, records)) = payload.split_first() else {
@@ -113,8 +107,6 @@ pub fn parse_oppo_firmware_response(payload: &[u8]) -> Result<FirmwareVersions, 
     Ok(versions)
 }
 
-pub use parse_oppo_firmware_response as parse_firmware_response;
-
 pub fn parse_oppo_paired_devices_response(
     payload: &[u8],
 ) -> Result<Vec<PairedDevice>, OppoProtocolError> {
@@ -124,8 +116,6 @@ pub fn parse_oppo_paired_devices_response(
     parse_paired_devices(&payload[1..])
 }
 
-pub use parse_oppo_paired_devices_response as parse_paired_devices_response;
-
 pub fn parse_oppo_paired_devices_event(
     payload: &[u8],
 ) -> Result<Vec<PairedDevice>, OppoProtocolError> {
@@ -134,8 +124,6 @@ pub fn parse_oppo_paired_devices_event(
     }
     parse_paired_devices(&payload[1..])
 }
-
-pub use parse_oppo_paired_devices_event as parse_paired_devices_event;
 
 fn parse_paired_devices(payload: &[u8]) -> Result<Vec<PairedDevice>, OppoProtocolError> {
     let Some(&count) = payload.first() else {
@@ -200,8 +188,6 @@ pub fn parse_oppo_priority_device_response(
     Ok(Some(PairedDeviceAddress::from_display_bytes(mac)))
 }
 
-pub use parse_oppo_priority_device_response as parse_priority_device_response;
-
 pub fn encode_oppo_set_priority_device(address: Option<PairedDeviceAddress>) -> Vec<u8> {
     if let Some(addr) = address {
         let mac = addr.command_bytes();
@@ -211,5 +197,3 @@ pub fn encode_oppo_set_priority_device(address: Option<PairedDeviceAddress>) -> 
         vec![0x04, 0x00]
     }
 }
-
-pub use encode_oppo_set_priority_device as encode_set_priority_device;

@@ -24,8 +24,8 @@ use super::session::{
 };
 use super::*;
 use crate::protocol::{
-    AppPacket, FrameDecoder, PairedDeviceAction, WearState, encode_frame, encode_noise_mode,
-    parse_paired_devices_response,
+    OppoAppPacket, OppoFrameDecoder, PairedDeviceAction, WearState, encode_oppo_frame,
+    encode_oppo_noise_mode, parse_oppo_paired_devices_response,
 };
 use std::sync::mpsc;
 use std::{
@@ -308,8 +308,11 @@ fn read_only_model_detects_and_displays_supported_queries() {
         send_mock_response(&mut device, &wear, vec![0, 2, 1, 3, 2, 1]);
     });
 
-    let (battery, firmware, wear, features, errors) =
-        super::session::probe_read_only_features(&mut client, &mut FrameDecoder::default(), None);
+    let (battery, firmware, wear, features, errors) = super::session::probe_read_only_features(
+        &mut client,
+        &mut OppoFrameDecoder::default(),
+        None,
+    );
     assert_eq!(battery.left.unwrap().percentage, 0x46);
     assert_eq!(battery.right.unwrap().percentage, 0x3c);
     assert!(firmware.left.is_none());
@@ -357,7 +360,7 @@ fn noise_write_waits_for_ack_and_matching_readback() {
         .noise_modes;
     let actual = set_noise_mode(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         &[4],
         modes,
         &mut worn_state(),
@@ -384,7 +387,7 @@ fn paired_device_write_waits_for_ack_and_matching_readback() {
             .unwrap();
 
         let listed_devices = paired_device_response(initially_connected);
-        let devices = parse_paired_devices_response(&listed_devices).unwrap();
+        let devices = parse_oppo_paired_devices_response(&listed_devices).unwrap();
         let address = devices[0].address;
         let device_thread = thread::spawn(move || {
             let command = read_mock_request(&mut device);
@@ -404,7 +407,7 @@ fn paired_device_write_waits_for_ack_and_matching_readback() {
         let (updates, _) = mpsc::channel();
         let result = set_paired_device(
             &mut client,
-            &mut FrameDecoder::default(),
+            &mut OppoFrameDecoder::default(),
             &Ok(true),
             &Ok(devices),
             address,
@@ -422,10 +425,10 @@ fn paired_device_write_waits_for_ack_and_matching_readback() {
 fn paired_device_write_is_blocked_when_dual_connection_is_disabled() {
     let (mut client, _device) = UnixStream::pair().unwrap();
     let listed_devices = paired_device_response(false);
-    let devices = parse_paired_devices_response(&listed_devices).unwrap();
+    let devices = parse_oppo_paired_devices_response(&listed_devices).unwrap();
     let result = set_paired_device(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         &Ok(false),
         &Ok(devices.clone()),
         devices[0].address,
@@ -444,7 +447,7 @@ fn paired_device_write_rejects_a_mismatched_readback() {
     device
         .set_read_timeout(Some(Duration::from_secs(1)))
         .unwrap();
-    let devices = parse_paired_devices_response(&paired_device_response(false)).unwrap();
+    let devices = parse_oppo_paired_devices_response(&paired_device_response(false)).unwrap();
     let address = devices[0].address;
     let device_thread = thread::spawn(move || {
         let command = read_mock_request(&mut device);
@@ -456,7 +459,7 @@ fn paired_device_write_rejects_a_mismatched_readback() {
 
     let result = set_paired_device(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         &Ok(true),
         &Ok(devices),
         address,
@@ -478,7 +481,7 @@ fn paired_device_remove_waits_for_ack_and_verifies_absence() {
         .unwrap();
 
     let listed_devices = paired_device_response(false);
-    let devices = parse_paired_devices_response(&listed_devices).unwrap();
+    let devices = parse_oppo_paired_devices_response(&listed_devices).unwrap();
     let address = devices[0].address;
     let device_thread = thread::spawn(move || {
         let command = read_mock_request(&mut device);
@@ -494,7 +497,7 @@ fn paired_device_remove_waits_for_ack_and_verifies_absence() {
     let (updates, _) = mpsc::channel();
     let result = set_paired_device(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         &Ok(true),
         &Ok(devices),
         address,
@@ -511,10 +514,10 @@ fn paired_device_remove_waits_for_ack_and_verifies_absence() {
 fn paired_device_remove_is_rejected_when_device_is_connected() {
     let (mut client, _device) = UnixStream::pair().unwrap();
     let listed_devices = paired_device_response(true);
-    let devices = parse_paired_devices_response(&listed_devices).unwrap();
+    let devices = parse_oppo_paired_devices_response(&listed_devices).unwrap();
     let result = set_paired_device(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         &Ok(true),
         &Ok(devices.clone()),
         devices[0].address,
@@ -529,10 +532,10 @@ fn paired_device_remove_never_deletes_the_current_host() {
     let (mut client, _device) = UnixStream::pair().unwrap();
     let mut listed_devices = paired_device_response(false);
     listed_devices[10] |= 0x01;
-    let devices = parse_paired_devices_response(&listed_devices).unwrap();
+    let devices = parse_oppo_paired_devices_response(&listed_devices).unwrap();
     let result = set_paired_device(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         &Ok(true),
         &Ok(devices.clone()),
         devices[0].address,
@@ -563,7 +566,7 @@ fn noise_write_uses_ack_and_readback_for_all_profile_modes() {
             .unwrap();
         let device_thread = thread::spawn(move || {
             let setting = read_mock_request(&mut device);
-            assert_eq!(setting.payload, encode_noise_mode(requested));
+            assert_eq!(setting.payload, encode_oppo_noise_mode(requested));
             send_mock_response(&mut device, &setting, vec![0]);
 
             let query = read_mock_request(&mut device);
@@ -578,7 +581,7 @@ fn noise_write_uses_ack_and_readback_for_all_profile_modes() {
         let (updates, _) = mpsc::channel();
         let result = set_noise_mode(
             &mut client,
-            &mut FrameDecoder::default(),
+            &mut OppoFrameDecoder::default(),
             &crate::compatibility::fallback_noise_mode_indices_for(modes),
             modes,
             &mut worn_state(),
@@ -616,7 +619,7 @@ fn noise_write_preserves_failure_on_device_rejection_or_bad_readback() {
             .noise_modes;
         let result = set_noise_mode(
             &mut client,
-            &mut FrameDecoder::default(),
+            &mut OppoFrameDecoder::default(),
             &[4],
             modes,
             &mut worn_state(),
@@ -638,7 +641,7 @@ fn noise_write_does_not_send_modes_missing_from_api_list() {
         .noise_modes;
     let result = set_noise_mode(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         &[6],
         modes,
         &mut worn_state(),
@@ -658,7 +661,7 @@ fn noise_write_does_not_send_when_no_earbud_is_worn() {
         .noise_modes;
     let result = set_noise_mode(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         &[4],
         modes,
         &mut WearState::default(),
@@ -694,7 +697,7 @@ fn noise_write_allows_unworn_when_wear_detection_is_not_supported() {
         .noise_modes;
     let result = set_noise_mode(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         &[4],
         modes,
         &mut WearState::default(),
@@ -728,7 +731,7 @@ fn equalizer_write_waits_for_ack_and_matching_readback() {
     });
 
     let (updates, _) = mpsc::channel();
-    let result = set_equalizer(&mut client, &mut FrameDecoder::default(), 2, &updates).unwrap();
+    let result = set_equalizer(&mut client, &mut OppoFrameDecoder::default(), 2, &updates).unwrap();
     assert_eq!(result, 2);
     device_thread.join().unwrap();
 }
@@ -755,7 +758,8 @@ fn spatial_audio_write_waits_for_ack_and_matching_readback() {
     });
 
     let (updates, _) = mpsc::channel();
-    let result = set_spatial_audio(&mut client, &mut FrameDecoder::default(), 1, &updates).unwrap();
+    let result =
+        set_spatial_audio(&mut client, &mut OppoFrameDecoder::default(), 1, &updates).unwrap();
     assert_eq!(result, 1);
     device_thread.join().unwrap();
 }
@@ -785,7 +789,7 @@ fn game_mode_write_waits_for_ack_and_matching_readback() {
     let (updates, _) = mpsc::channel();
     let result = set_game_mode(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         0x06,
         true,
         &updates,
@@ -833,13 +837,18 @@ fn bass_engine_toggle_and_level_write_waits_for_ack_and_matching_readback() {
     });
 
     let (updates, _) = mpsc::channel();
-    let toggle_result =
-        set_bass_engine_enabled(&mut client, &mut FrameDecoder::default(), true, &updates).unwrap();
+    let toggle_result = set_bass_engine_enabled(
+        &mut client,
+        &mut OppoFrameDecoder::default(),
+        true,
+        &updates,
+    )
+    .unwrap();
     assert!(toggle_result);
 
     let level_result = set_bass_engine_level(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         -5,
         5,
         2,
@@ -876,7 +885,13 @@ fn hi_res_write_waits_for_ack_and_matching_readback() {
     });
 
     let (updates, _) = mpsc::channel();
-    let result = set_hi_res(&mut client, &mut FrameDecoder::default(), true, &updates).unwrap();
+    let result = set_hi_res(
+        &mut client,
+        &mut OppoFrameDecoder::default(),
+        true,
+        &updates,
+    )
+    .unwrap();
     assert!(result);
     device_thread.join().unwrap();
 }
@@ -892,26 +907,26 @@ fn worn_state() -> WearState {
     }
 }
 
-fn read_mock_request(stream: &mut UnixStream) -> AppPacket {
-    let mut decoder = FrameDecoder::default();
+fn read_mock_request(stream: &mut UnixStream) -> OppoAppPacket {
+    let mut decoder = OppoFrameDecoder::default();
     let mut buffer = [0; 1024];
     loop {
         let length = stream.read(&mut buffer).unwrap();
         for frame in decoder.push(&buffer[..length]).unwrap() {
-            if let Ok(packet) = AppPacket::decode(&frame) {
+            if let Ok(packet) = OppoAppPacket::decode(&frame) {
                 return packet;
             }
         }
     }
 }
 
-fn send_mock_response(stream: &mut UnixStream, request: &AppPacket, payload: Vec<u8>) {
-    let response = AppPacket {
+fn send_mock_response(stream: &mut UnixStream, request: &OppoAppPacket, payload: Vec<u8>) {
+    let response = OppoAppPacket {
         command: request.command | 0x8000,
         sequence: request.sequence,
         payload,
     };
-    let frame = encode_frame(&response.encode().unwrap()).unwrap();
+    let frame = encode_oppo_frame(&response.encode().unwrap()).unwrap();
     stream.write_all(&frame).unwrap();
 }
 
@@ -1040,7 +1055,11 @@ fn probe_read_only_features_populates_detected_list() {
     });
 
     let (battery, firmware, wear, detected_features, probe_errors) =
-        super::session::probe_read_only_features(&mut client, &mut FrameDecoder::default(), None);
+        super::session::probe_read_only_features(
+            &mut client,
+            &mut OppoFrameDecoder::default(),
+            None,
+        );
 
     device_thread.join().unwrap();
 
@@ -1072,12 +1091,12 @@ fn device_originated_requests_are_answered_during_queries() {
         assert_eq!(initial_query.command, 0x0106);
 
         // Before answering the query, device sends unsolicited TimeRequest (0x0500)
-        let time_req = AppPacket {
+        let time_req = OppoAppPacket {
             command: 0x0500,
             sequence: 0x12,
             payload: vec![],
         };
-        let frame = encode_frame(&time_req.encode().unwrap()).unwrap();
+        let frame = encode_oppo_frame(&time_req.encode().unwrap()).unwrap();
         device.write_all(&frame).unwrap();
 
         // Host client must reply 0x8500 with unix timestamp
@@ -1088,12 +1107,12 @@ fn device_originated_requests_are_answered_during_queries() {
         assert_eq!(time_reply.payload[0], 0x00);
 
         // Device sends AppCapabilitiesRequest (0x051C)
-        let caps_req = AppPacket {
+        let caps_req = OppoAppPacket {
             command: 0x051C,
             sequence: 0x13,
             payload: vec![],
         };
-        let frame = encode_frame(&caps_req.encode().unwrap()).unwrap();
+        let frame = encode_oppo_frame(&caps_req.encode().unwrap()).unwrap();
         device.write_all(&frame).unwrap();
 
         // Host client must reply 0x851C [0, 0, 0]
@@ -1103,12 +1122,12 @@ fn device_originated_requests_are_answered_during_queries() {
         assert_eq!(caps_reply.payload, vec![0x00, 0x00, 0x00]);
 
         // Device sends PhoneSpatialRequest (0x051D)
-        let spatial_req = AppPacket {
+        let spatial_req = OppoAppPacket {
             command: 0x051D,
             sequence: 0x14,
             payload: vec![],
         };
-        let frame = encode_frame(&spatial_req.encode().unwrap()).unwrap();
+        let frame = encode_oppo_frame(&spatial_req.encode().unwrap()).unwrap();
         device.write_all(&frame).unwrap();
 
         let spatial_reply = read_mock_request(&mut device);
@@ -1117,12 +1136,12 @@ fn device_originated_requests_are_answered_during_queries() {
         assert_eq!(spatial_reply.payload, vec![0x01]);
 
         // Device sends ConnectionHistory event (0x0204 [0xF2])
-        let history_event = AppPacket {
+        let history_event = OppoAppPacket {
             command: 0x0204,
             sequence: 0x15,
             payload: vec![0xF2, 0x01, 0x02],
         };
-        let frame = encode_frame(&history_event.encode().unwrap()).unwrap();
+        let frame = encode_oppo_frame(&history_event.encode().unwrap()).unwrap();
         device.write_all(&frame).unwrap();
 
         let history_reply = read_mock_request(&mut device);
@@ -1131,12 +1150,12 @@ fn device_originated_requests_are_answered_during_queries() {
         assert_eq!(history_reply.payload, vec![0x00, 0xF2]);
 
         // Device sends Telemetry event (0x0204 [0xF4, ...])
-        let telemetry_event = AppPacket {
+        let telemetry_event = OppoAppPacket {
             command: 0x0204,
             sequence: 0x16,
             payload: [&[0xF4][..], br#"{"cmd":"device_heartbeat","status":"ok"}"#].concat(),
         };
-        let frame = encode_frame(&telemetry_event.encode().unwrap()).unwrap();
+        let frame = encode_oppo_frame(&telemetry_event.encode().unwrap()).unwrap();
         device.write_all(&frame).unwrap();
 
         let telemetry_reply = read_mock_request(&mut device);
@@ -1155,7 +1174,7 @@ fn device_originated_requests_are_answered_during_queries() {
     let (updates, _) = mpsc::channel();
     let res = super::brands::oppo::oppo_session::request(
         &mut client,
-        &mut FrameDecoder::default(),
+        &mut OppoFrameDecoder::default(),
         0x0106,
         0,
         vec![],
@@ -1196,8 +1215,13 @@ fn write_readback_settle_delay_retries_on_slow_firmware() {
     });
 
     let (updates, _) = mpsc::channel();
-    let res =
-        super::session::set_game_mode(&mut client, &mut FrameDecoder::default(), 6, true, &updates);
+    let res = super::session::set_game_mode(
+        &mut client,
+        &mut OppoFrameDecoder::default(),
+        6,
+        true,
+        &updates,
+    );
     assert_eq!(res, Ok(true));
     device_thread.join().unwrap();
 }

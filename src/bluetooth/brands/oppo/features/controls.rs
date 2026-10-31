@@ -21,10 +21,11 @@ use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
 use crate::bluetooth::brands::oppo::features::{OppoControlsState, OppoFeatureContext};
 use crate::bluetooth::brands::oppo::transport::request;
 use crate::protocol::{
-    EarSide, KeyFunction, NoiseCycleSetting, encode_find_earbuds, encode_fit_test,
-    encode_set_head_motion_type, encode_set_key_function, encode_set_noise_cycle,
-    encode_set_prompt_volume, parse_feature_flags_response, parse_head_motion_type_response,
-    parse_noise_cycle_response, parse_prompt_volume_response, parse_touch_controls_response,
+    EarSide, KeyFunction, NoiseCycleSetting, encode_oppo_find_earbuds, encode_oppo_fit_test,
+    encode_oppo_set_head_motion_type, encode_oppo_set_key_function, encode_oppo_set_noise_cycle,
+    encode_oppo_set_prompt_volume, parse_oppo_feature_flags_response,
+    parse_oppo_head_motion_type_response, parse_oppo_noise_cycle_response,
+    parse_oppo_prompt_volume_response, parse_oppo_touch_controls_response,
 };
 
 pub fn handle_controls_command<T: Read + Write>(
@@ -55,7 +56,7 @@ pub fn handle_controls_command<T: Read + Write>(
                 action: *action,
                 function: *function,
             };
-            let payload = encode_set_key_function(&key_function);
+            let payload = encode_oppo_set_key_function(&key_function);
             match request(
                 ctx.stream,
                 ctx.decoder,
@@ -74,7 +75,7 @@ pub fn handle_controls_command<T: Read + Write>(
                         vec![2, 3, 1],
                         Some(ctx.updates),
                     ) {
-                        if let Ok(list) = parse_touch_controls_response(&res.payload) {
+                        if let Ok(list) = parse_oppo_touch_controls_response(&res.payload) {
                             if !list.is_empty() {
                                 state.key_functions = list.clone();
                                 let _ = ctx.updates.send(UiUpdate::KeyFunctions(list));
@@ -137,7 +138,7 @@ pub fn handle_controls_command<T: Read + Write>(
                 mask: *mask,
                 is_shared: *is_shared,
             };
-            let payload = encode_set_noise_cycle(&setting);
+            let payload = encode_oppo_set_noise_cycle(&setting);
             match request(
                 ctx.stream,
                 ctx.decoder,
@@ -162,7 +163,7 @@ pub fn handle_controls_command<T: Read + Write>(
                         vec![2, cycle_type],
                         Some(ctx.updates),
                     ) {
-                        if let Ok((_, new_mask)) = parse_noise_cycle_response(&res.payload) {
+                        if let Ok((_, new_mask)) = parse_oppo_noise_cycle_response(&res.payload) {
                             if *is_shared {
                                 state.noise_cycle.left_mask = new_mask;
                                 state.noise_cycle.right_mask = new_mask;
@@ -196,7 +197,7 @@ pub fn handle_controls_command<T: Read + Write>(
                 });
                 return true;
             }
-            let payload = encode_find_earbuds(*ring);
+            let payload = encode_oppo_find_earbuds(*ring);
             match request(
                 ctx.stream,
                 ctx.decoder,
@@ -242,7 +243,7 @@ pub fn handle_controls_command<T: Read + Write>(
                 });
                 return true;
             }
-            let payload = encode_fit_test(true);
+            let payload = encode_oppo_fit_test(true);
             match request(
                 ctx.stream,
                 ctx.decoder,
@@ -275,7 +276,7 @@ pub fn handle_controls_command<T: Read + Write>(
                 });
                 return true;
             }
-            let payload = encode_set_prompt_volume(*volume);
+            let payload = encode_oppo_set_prompt_volume(*volume);
             match request(
                 ctx.stream,
                 ctx.decoder,
@@ -293,7 +294,7 @@ pub fn handle_controls_command<T: Read + Write>(
                         vec![],
                         Some(ctx.updates),
                     ) {
-                        if let Ok(actual) = parse_prompt_volume_response(&res.payload) {
+                        if let Ok(actual) = parse_oppo_prompt_volume_response(&res.payload) {
                             state.prompt_volume = Some(actual);
                             let _ = ctx.updates.send(UiUpdate::PromptVolume(actual));
                         }
@@ -322,7 +323,7 @@ pub fn handle_controls_command<T: Read + Write>(
                 });
                 return true;
             }
-            let payload = encode_set_head_motion_type(*motion_type);
+            let payload = encode_oppo_set_head_motion_type(*motion_type);
             match request(
                 ctx.stream,
                 ctx.decoder,
@@ -340,7 +341,7 @@ pub fn handle_controls_command<T: Read + Write>(
                         vec![],
                         Some(ctx.updates),
                     ) {
-                        if let Ok(actual) = parse_head_motion_type_response(&res.payload) {
+                        if let Ok(actual) = parse_oppo_head_motion_type_response(&res.payload) {
                             state.head_motion = Some(actual);
                             let _ = ctx.updates.send(UiUpdate::HeadMotionType(actual));
                         }
@@ -387,7 +388,7 @@ pub fn handle_controls_command<T: Read + Write>(
                         vec![1, 0x04],
                         Some(ctx.updates),
                     ) {
-                        if let Ok(actual) = parse_feature_flags_response(&res.payload, 0x04) {
+                        if let Ok(actual) = parse_oppo_feature_flags_response(&res.payload, 0x04) {
                             state.in_ear_detection = Some(actual);
                             let _ = ctx.updates.send(UiUpdate::InEarDetectionEnabled(actual));
                         }
@@ -434,7 +435,7 @@ pub fn handle_controls_command<T: Read + Write>(
                         vec![1, 0x3a],
                         Some(ctx.updates),
                     ) {
-                        if let Ok(actual) = parse_feature_flags_response(&res.payload, 0x3a) {
+                        if let Ok(actual) = parse_oppo_feature_flags_response(&res.payload, 0x3a) {
                             state.sleep_detection = Some(actual);
                             let _ = ctx.updates.send(UiUpdate::SleepDetectionEnabled(actual));
                         }

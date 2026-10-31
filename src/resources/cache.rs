@@ -185,4 +185,3 @@ pub fn save_cached_model(
     }
     Ok(file_path)
 }
-

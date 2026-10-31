@@ -268,4 +268,3 @@ pub fn get_autostart_background() -> bool {
 pub fn set_autostart_background(enabled: bool) -> io::Result<()> {
     set_autostart_background_in(&gtk::glib::user_config_dir(), enabled)
 }
-

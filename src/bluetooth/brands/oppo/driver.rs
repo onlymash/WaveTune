@@ -25,7 +25,10 @@ use crate::{
     app::events::{UiUpdate, WorkerCommand},
     bluetooth::{DeviceChoice, DeviceSnapshot, driver::HeadsetDriver},
     compatibility::{self, DeviceProfile},
-    protocol::{AppPacket, FrameDecoder, WearState, parse_paired_devices_event, parse_wear_event},
+    protocol::{
+        OppoAppPacket, OppoFrameDecoder, WearState, parse_oppo_paired_devices_event,
+        parse_oppo_wear_event,
+    },
 };
 
 use super::{
@@ -40,7 +43,7 @@ use super::{
 };
 
 pub struct OppoDriver {
-    decoder: FrameDecoder,
+    decoder: OppoFrameDecoder,
     read_only: bool,
     is_known_model: bool,
     profile: Option<&'static DeviceProfile>,
@@ -61,7 +64,7 @@ impl Default for OppoDriver {
 impl OppoDriver {
     pub fn new() -> Self {
         Self {
-            decoder: FrameDecoder::default(),
+            decoder: OppoFrameDecoder::default(),
             read_only: false,
             is_known_model: false,
             profile: None,
@@ -166,14 +169,14 @@ impl HeadsetDriver for OppoDriver {
             .push(bytes)
             .map_err(|error| crate::t!("protocol-frame-decode-failed", error))?;
         for frame_bytes in packets {
-            if let Ok(packet) = AppPacket::decode(&frame_bytes) {
+            if let Ok(packet) = OppoAppPacket::decode(&frame_bytes) {
                 if self.read_only {
                     if self.is_known_model
                         && packet.command == 0x0204
                         && matches!(packet.payload.first(), Some(1 | 2))
                     {
                         if packet.payload.first() == Some(&2)
-                            && let Ok(update) = parse_wear_event(&packet.payload)
+                            && let Ok(update) = parse_oppo_wear_event(&packet.payload)
                         {
                             merge_wear_state(&mut self.wear, update);
                         }
@@ -183,13 +186,13 @@ impl HeadsetDriver for OppoDriver {
                 }
                 if packet.command == 0x0204
                     && packet.payload.first() == Some(&6)
-                    && let Ok(devices) = parse_paired_devices_event(&packet.payload)
+                    && let Ok(devices) = parse_oppo_paired_devices_event(&packet.payload)
                 {
                     self.dual_device.paired_devices = Ok(devices);
                 }
                 if packet.command == 0x0204
                     && packet.payload.first() == Some(&2)
-                    && let Ok(update) = parse_wear_event(&packet.payload)
+                    && let Ok(update) = parse_oppo_wear_event(&packet.payload)
                 {
                     merge_wear_state(&mut self.wear, update);
                 }

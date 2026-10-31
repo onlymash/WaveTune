@@ -19,17 +19,17 @@ use std::{io::Write, sync::mpsc::Sender};
 
 use crate::bluetooth::UiUpdate;
 use crate::protocol::{
-    AppPacket, FEATURE_BASS_ENGINE, FEATURE_HI_RES, WearState, parse_bass_engine_event,
-    parse_battery_event, parse_custom_equalizer_list, parse_equalizer_event, parse_fit_test_event,
-    parse_noise_mode_event, parse_paired_devices_event, parse_spatial_audio_response,
-    parse_wear_event,
+    FEATURE_BASS_ENGINE, FEATURE_HI_RES, OppoAppPacket, WearState, parse_oppo_bass_engine_event,
+    parse_oppo_battery_event, parse_oppo_custom_equalizer_list, parse_oppo_equalizer_event,
+    parse_oppo_fit_test_event, parse_oppo_noise_mode_event, parse_oppo_paired_devices_event,
+    parse_oppo_spatial_audio_response, parse_oppo_wear_event,
 };
 
 use super::transport::reply_packet;
 
 pub fn handle_oppo_unsolicited<T: Write>(
     stream: &mut T,
-    packet: &AppPacket,
+    packet: &OppoAppPacket,
     updates: Option<&Sender<UiUpdate>>,
 ) {
     match packet.command {
@@ -94,19 +94,19 @@ pub fn handle_oppo_unsolicited<T: Write>(
     };
 
     if packet.command == 0x0506 {
-        if let Ok(list) = parse_custom_equalizer_list(&packet.payload, false) {
+        if let Ok(list) = parse_oppo_custom_equalizer_list(&packet.payload, false) {
             let _ = updates.send(UiUpdate::CustomEqualizers(list));
         }
         return;
     }
     if packet.command == 0x0504 {
-        if let Ok(preset) = parse_equalizer_event(&packet.payload) {
+        if let Ok(preset) = parse_oppo_equalizer_event(&packet.payload) {
             let _ = updates.send(UiUpdate::Equalizer(preset));
         }
         return;
     }
     if packet.command == 0x0508 {
-        if let Ok(level) = parse_bass_engine_event(&packet.payload) {
+        if let Ok(level) = parse_oppo_bass_engine_event(&packet.payload) {
             let _ = updates.send(UiUpdate::BassEngineLevel(level));
         }
         return;
@@ -148,7 +148,7 @@ pub fn handle_oppo_unsolicited<T: Write>(
     if (packet.command == 0x012a || packet.command == 0x812a || packet.command == 0x0510)
         && !packet.payload.is_empty()
     {
-        if let Ok(mode) = parse_spatial_audio_response(&packet.payload) {
+        if let Ok(mode) = parse_oppo_spatial_audio_response(&packet.payload) {
             let _ = updates.send(UiUpdate::SpatialAudio(mode));
         }
         return;
@@ -158,28 +158,28 @@ pub fn handle_oppo_unsolicited<T: Write>(
     }
     match packet.payload.first() {
         Some(1) => {
-            if let Ok(state) = parse_battery_event(&packet.payload) {
+            if let Ok(state) = parse_oppo_battery_event(&packet.payload) {
                 let _ = updates.send(UiUpdate::Battery(state));
             }
         }
         Some(2) => {
-            if let Ok(state) = parse_wear_event(&packet.payload) {
+            if let Ok(state) = parse_oppo_wear_event(&packet.payload) {
                 let _ = updates.send(UiUpdate::Wear(state));
             }
         }
         Some(3) => {
-            if let Some(mode) = parse_noise_mode_event(&packet.payload) {
+            if let Some(mode) = parse_oppo_noise_mode_event(&packet.payload) {
                 let _ = updates.send(UiUpdate::NoiseMode(mode));
             }
         }
         Some(4) => {
-            if let Ok(result) = parse_fit_test_event(&packet.payload) {
+            if let Ok(result) = parse_oppo_fit_test_event(&packet.payload) {
                 let _ = updates.send(UiUpdate::FitTestRunning(false));
                 let _ = updates.send(UiUpdate::FitTestResult(result));
             }
         }
         Some(6) => {
-            let result = parse_paired_devices_event(&packet.payload)
+            let result = parse_oppo_paired_devices_event(&packet.payload)
                 .map_err(|error| crate::t!("dual-device-event-invalid", error));
             let _ = updates.send(UiUpdate::PairedDevices(result));
         }
@@ -187,18 +187,18 @@ pub fn handle_oppo_unsolicited<T: Write>(
     }
 }
 
-pub fn publish_read_only_event(packet: &AppPacket, updates: &Sender<UiUpdate>) {
+pub fn publish_read_only_event(packet: &OppoAppPacket, updates: &Sender<UiUpdate>) {
     if packet.command != 0x0204 {
         return;
     }
     match packet.payload.first() {
         Some(1) => {
-            if let Ok(state) = parse_battery_event(&packet.payload) {
+            if let Ok(state) = parse_oppo_battery_event(&packet.payload) {
                 let _ = updates.send(UiUpdate::Battery(state));
             }
         }
         Some(2) => {
-            if let Ok(state) = parse_wear_event(&packet.payload) {
+            if let Ok(state) = parse_oppo_wear_event(&packet.payload) {
                 let _ = updates.send(UiUpdate::Wear(state));
             }
         }

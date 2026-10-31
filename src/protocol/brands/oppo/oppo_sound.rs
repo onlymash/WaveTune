@@ -43,16 +43,12 @@ pub fn parse_oppo_feature_flags_response(
         .is_some_and(|record| record[1] != 0))
 }
 
-pub use parse_oppo_feature_flags_response as parse_feature_flags_response;
-
 pub fn parse_oppo_equalizer_response(payload: &[u8]) -> Result<u8, OppoProtocolError> {
     if payload.first() != Some(&0) || payload.len() < 2 {
         return Err(OppoProtocolError::InvalidPacketLength);
     }
     Ok(payload[1])
 }
-
-pub use parse_oppo_equalizer_response as parse_equalizer_response;
 
 pub fn parse_oppo_equalizer_event(payload: &[u8]) -> Result<u8, OppoProtocolError> {
     payload
@@ -61,16 +57,12 @@ pub fn parse_oppo_equalizer_event(payload: &[u8]) -> Result<u8, OppoProtocolErro
         .ok_or(OppoProtocolError::InvalidPacketLength)
 }
 
-pub use parse_oppo_equalizer_event as parse_equalizer_event;
-
 pub fn parse_oppo_spatial_audio_response(payload: &[u8]) -> Result<u8, OppoProtocolError> {
     if payload.first() != Some(&0) || payload.len() < 2 || payload[1] > 2 {
         return Err(OppoProtocolError::InvalidPacketLength);
     }
     Ok(payload[1])
 }
-
-pub use parse_oppo_spatial_audio_response as parse_spatial_audio_response;
 
 pub fn parse_oppo_bass_engine_response(
     payload: &[u8],
@@ -91,8 +83,6 @@ pub fn parse_oppo_bass_engine_response(
     })
 }
 
-pub use parse_oppo_bass_engine_response as parse_bass_engine_response;
-
 pub fn parse_oppo_bass_engine_event(payload: &[u8]) -> Result<BassEngineLevel, OppoProtocolError> {
     let (min, max, current) = if payload.len() >= 4 && payload[0] == 0 {
         (payload[1] as i8, payload[2] as i8, payload[3] as i8)
@@ -110,8 +100,6 @@ pub fn parse_oppo_bass_engine_event(payload: &[u8]) -> Result<BassEngineLevel, O
         current: current.clamp(min, max),
     })
 }
-
-pub use parse_oppo_bass_engine_event as parse_bass_engine_event;
 
 pub fn parse_oppo_custom_equalizer_list(
     payload: &[u8],
@@ -182,8 +170,6 @@ pub fn parse_oppo_custom_equalizer_list(
     Ok(list)
 }
 
-pub use parse_oppo_custom_equalizer_list as parse_custom_equalizer_list;
-
 pub fn encode_oppo_custom_equalizer(
     action: CustomEqualizerAction,
     params: &CustomEqualizerParams<'_>,
@@ -204,6 +190,3 @@ pub fn encode_oppo_custom_equalizer(
     }
     payload
 }
-
-pub use encode_oppo_custom_equalizer as encode_oppo_custom_equalizer_command;
-pub use encode_oppo_custom_equalizer as encode_custom_equalizer_command;

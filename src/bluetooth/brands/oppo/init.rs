@@ -28,13 +28,14 @@ use crate::bluetooth::{
 };
 use crate::compatibility::{self};
 use crate::protocol::{
-    BatteryState, FEATURE_BASS_ENGINE, FEATURE_HI_RES, FirmwareVersions, FrameDecoder,
-    NoiseCycleState, WearState, capability_bitmap_allows, parse_bass_engine_response,
-    parse_battery_response, parse_color_response, parse_custom_equalizer_list,
-    parse_equalizer_response, parse_feature_flags_response, parse_firmware_response,
-    parse_head_motion_type_response, parse_noise_cycle_response, parse_noise_mode_response,
-    parse_priority_device_response, parse_prompt_volume_response, parse_spatial_audio_response,
-    parse_touch_controls_response, parse_wear_response,
+    BatteryState, FEATURE_BASS_ENGINE, FEATURE_HI_RES, FirmwareVersions, NoiseCycleState,
+    OppoFrameDecoder, WearState, capability_bitmap_allows, parse_oppo_bass_engine_response,
+    parse_oppo_battery_response, parse_oppo_color_response, parse_oppo_custom_equalizer_list,
+    parse_oppo_equalizer_response, parse_oppo_feature_flags_response, parse_oppo_firmware_response,
+    parse_oppo_head_motion_type_response, parse_oppo_noise_cycle_response,
+    parse_oppo_noise_mode_response, parse_oppo_priority_device_response,
+    parse_oppo_prompt_volume_response, parse_oppo_spatial_audio_response,
+    parse_oppo_touch_controls_response, parse_oppo_wear_response,
 };
 
 use super::features::dual_device::read_paired_devices;
@@ -65,7 +66,7 @@ pub fn find_feature_in_records(payload: &[u8], feature_id: u8) -> Option<bool> {
 
 pub fn query_feature_flag<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     batch_cache: &Option<Vec<u8>>,
     feature_id: u8,
     updates: Option<&Sender<UiUpdate>>,
@@ -76,7 +77,7 @@ pub fn query_feature_flag<T: Read + Write>(
         }
     }
     match request(stream, decoder, 0x010d, 0, vec![1, feature_id], updates) {
-        Ok(res) => parse_feature_flags_response(&res.payload, feature_id).ok(),
+        Ok(res) => parse_oppo_feature_flags_response(&res.payload, feature_id).ok(),
         Err(_) => None,
     }
 }
@@ -85,8 +86,8 @@ pub fn initialize_oppo_session<T: Read + Write>(
     stream: &mut T,
     name: &str,
     updates: Option<&Sender<UiUpdate>>,
-) -> Result<(DeviceSnapshot, FrameDecoder), String> {
-    let mut decoder = FrameDecoder::default();
+) -> Result<(DeviceSnapshot, OppoFrameDecoder), String> {
+    let mut decoder = OppoFrameDecoder::default();
 
     let mut handshake = None;
     for _ in 0..3 {
@@ -117,7 +118,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
         0,
     ]);
     let color_id = match request(stream, &mut decoder, 0x010b, 0, vec![], updates) {
-        Ok(packet) => parse_color_response(&packet.payload).ok(),
+        Ok(packet) => parse_oppo_color_response(&packet.payload).ok(),
         Err(_) => None,
     };
     let profile = compatibility::profile_for_product_id(product_id);
@@ -271,16 +272,16 @@ pub fn initialize_oppo_session<T: Read + Write>(
     }
 
     let battery = request(stream, &mut decoder, 0x0106, 0xf0, vec![], updates)?;
-    let battery = parse_battery_response(&battery.payload)
+    let battery = parse_oppo_battery_response(&battery.payload)
         .map_err(|error| crate::t!("battery-response-invalid", error))?;
 
     let firmware = request(stream, &mut decoder, 0x0105, 0, vec![], updates)?;
-    let firmware = parse_firmware_response(&firmware.payload)
+    let firmware = parse_oppo_firmware_response(&firmware.payload)
         .map_err(|error| crate::t!("firmware-response-invalid", error))?;
 
     let wear = if profile.supports_wear_detection() {
         let wear = request(stream, &mut decoder, 0x0109, 0, vec![], updates)?;
-        parse_wear_response(&wear.payload)
+        parse_oppo_wear_response(&wear.payload)
             .map_err(|error| crate::t!("wear-response-invalid", error))?
     } else {
         WearState::default()
@@ -299,7 +300,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
 
     let noise_mode = if !profile.noise_modes.is_empty() {
         let noise = request(stream, &mut decoder, 0x010c, 0, vec![1, 1], updates)?;
-        parse_noise_mode_response(&noise.payload)
+        parse_oppo_noise_mode_response(&noise.payload)
     } else {
         None
     };
@@ -366,7 +367,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
     let supports_equalizer = profile.supports_equalizer();
     let equalizer_preset = if supports_equalizer {
         match request(stream, &mut decoder, 0x010f, 0, vec![], updates) {
-            Ok(response) => parse_equalizer_response(&response.payload).ok(),
+            Ok(response) => parse_oppo_equalizer_response(&response.payload).ok(),
             Err(_) => None,
         }
     } else {
@@ -378,7 +379,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
     let custom_equalizers = if supports_custom_equalizer {
         match request(stream, &mut decoder, 0x0122, 0, vec![], updates) {
             Ok(response) => {
-                parse_custom_equalizer_list(&response.payload, true).unwrap_or_default()
+                parse_oppo_custom_equalizer_list(&response.payload, true).unwrap_or_default()
             }
             Err(_) => Vec::new(),
         }
@@ -390,7 +391,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
     let supports_head_tracking = profile.supports_head_tracking();
     let spatial_audio_mode = if supports_spatial_audio {
         match request(stream, &mut decoder, 0x012a, 0, vec![], updates) {
-            Ok(response) => parse_spatial_audio_response(&response.payload).ok(),
+            Ok(response) => parse_oppo_spatial_audio_response(&response.payload).ok(),
             Err(_) => None,
         }
     } else {
@@ -419,7 +420,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
             updates,
         );
         let level = match request(stream, &mut decoder, 0x0124, 0, vec![], updates) {
-            Ok(response) => parse_bass_engine_response(&response.payload).ok(),
+            Ok(response) => parse_oppo_bass_engine_response(&response.payload).ok(),
             Err(_) => None,
         };
         (enabled, level)
@@ -443,7 +444,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
     let supports_touch_customization = profile.supports_touch_customization();
     let key_functions = if supports_touch_customization {
         match request(stream, &mut decoder, 0x0108, 0, vec![2, 3, 1], updates) {
-            Ok(res) => parse_touch_controls_response(&res.payload).unwrap_or_default(),
+            Ok(res) => parse_oppo_touch_controls_response(&res.payload).unwrap_or_default(),
             Err(_) => Vec::new(),
         }
     } else {
@@ -453,7 +454,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
     let noise_cycle = if !profile.noise_modes.is_empty() {
         match request(stream, &mut decoder, 0x010c, 0, vec![2, 1], updates) {
             Ok(res) => {
-                let (_, mask) = parse_noise_cycle_response(&res.payload).unwrap_or((1, 0));
+                let (_, mask) = parse_oppo_noise_cycle_response(&res.payload).unwrap_or((1, 0));
                 NoiseCycleState {
                     left_mask: mask,
                     right_mask: mask,
@@ -468,7 +469,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
     let supports_prompt_volume = profile.supports_prompt_volume();
     let prompt_volume = if supports_prompt_volume {
         match request(stream, &mut decoder, 0x0130, 0, vec![], updates) {
-            Ok(res) => parse_prompt_volume_response(&res.payload).ok(),
+            Ok(res) => parse_oppo_prompt_volume_response(&res.payload).ok(),
             Err(_) => None,
         }
     } else {
@@ -478,7 +479,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
     let supports_head_motion = profile.supports_head_motion();
     let head_motion_type = if supports_head_motion {
         match request(stream, &mut decoder, 0x0134, 0, vec![], updates) {
-            Ok(res) => parse_head_motion_type_response(&res.payload).ok(),
+            Ok(res) => parse_oppo_head_motion_type_response(&res.payload).ok(),
             Err(_) => None,
         }
     } else {
@@ -487,7 +488,9 @@ pub fn initialize_oppo_session<T: Read + Write>(
 
     let preferred_device = if profile.supports_dual_device() {
         match request(stream, &mut decoder, 0x0132, 0, vec![2], updates) {
-            Ok(res) => parse_priority_device_response(&res.payload).ok().flatten(),
+            Ok(res) => parse_oppo_priority_device_response(&res.payload)
+                .ok()
+                .flatten(),
             Err(_) => None,
         }
     } else {
@@ -599,7 +602,7 @@ pub use initialize_oppo_session as initialize_session;
 
 pub fn probe_read_only_features<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     updates: Option<&Sender<UiUpdate>>,
 ) -> (
     BatteryState,
@@ -666,7 +669,7 @@ pub fn probe_read_only_features<T: Read + Write>(
     }
 
     match request(stream, decoder, 0x0106, 0xf0, vec![], updates) {
-        Ok(response) => match parse_battery_response(&response.payload) {
+        Ok(response) => match parse_oppo_battery_response(&response.payload) {
             Ok(state) => {
                 if state.left.is_some() || state.right.is_some() || state.case.is_some() {
                     detected_features.push(crate::t!("battery-read"));
@@ -681,7 +684,7 @@ pub fn probe_read_only_features<T: Read + Write>(
     }
 
     match request(stream, decoder, 0x0105, 0, vec![], updates) {
-        Ok(response) => match parse_firmware_response(&response.payload) {
+        Ok(response) => match parse_oppo_firmware_response(&response.payload) {
             Ok(state) => {
                 detected_features.push(crate::t!("firmware-version-read"));
                 firmware = state;
@@ -692,7 +695,7 @@ pub fn probe_read_only_features<T: Read + Write>(
     }
 
     match request(stream, decoder, 0x0109, 0, vec![], updates) {
-        Ok(response) => match parse_wear_response(&response.payload) {
+        Ok(response) => match parse_oppo_wear_response(&response.payload) {
             Ok(state) => {
                 if state.left.is_some() || state.right.is_some() || state.case_open.is_some() {
                     detected_features.push(crate::t!("wear-case-lid-read"));

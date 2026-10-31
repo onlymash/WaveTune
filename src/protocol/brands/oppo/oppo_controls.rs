@@ -30,16 +30,12 @@ pub fn parse_oppo_wear_response(payload: &[u8]) -> Result<WearState, OppoProtoco
     parse_wear_components(&payload[1..])
 }
 
-pub use parse_oppo_wear_response as parse_wear_response;
-
 pub fn parse_oppo_wear_event(payload: &[u8]) -> Result<WearState, OppoProtocolError> {
     if payload.first() != Some(&2) {
         return Err(OppoProtocolError::InvalidPacketLength);
     }
     parse_wear_components(&payload[1..])
 }
-
-pub use parse_oppo_wear_event as parse_wear_event;
 
 fn parse_wear_components(payload: &[u8]) -> Result<WearState, OppoProtocolError> {
     let Some((&count, records)) = payload.split_first() else {
@@ -97,8 +93,6 @@ pub fn parse_oppo_touch_controls_response(
     Ok(list)
 }
 
-pub use parse_oppo_touch_controls_response as parse_touch_controls_response;
-
 pub fn encode_oppo_set_key_function(key_function: &KeyFunction) -> Vec<u8> {
     vec![
         0x01,
@@ -108,8 +102,6 @@ pub fn encode_oppo_set_key_function(key_function: &KeyFunction) -> Vec<u8> {
         key_function.function,
     ]
 }
-
-pub use encode_oppo_set_key_function as encode_set_key_function;
 
 pub fn parse_oppo_fit_test_event(payload: &[u8]) -> Result<FitTestResult, OppoProtocolError> {
     if payload.first() != Some(&4) || payload.len() < 5 {
@@ -135,19 +127,13 @@ pub fn parse_oppo_fit_test_event(payload: &[u8]) -> Result<FitTestResult, OppoPr
     Ok(FitTestResult { left, right })
 }
 
-pub use parse_oppo_fit_test_event as parse_fit_test_event;
-
 pub fn encode_oppo_find_earbuds(ring: bool) -> Vec<u8> {
     vec![if ring { 0x01 } else { 0x00 }]
 }
 
-pub use encode_oppo_find_earbuds as encode_find_earbuds;
-
 pub fn encode_oppo_fit_test(start: bool) -> Vec<u8> {
     vec![if start { 0x01 } else { 0x00 }]
 }
-
-pub use encode_oppo_fit_test as encode_fit_test;
 
 pub fn parse_oppo_prompt_volume_response(payload: &[u8]) -> Result<u8, OppoProtocolError> {
     if payload.first() != Some(&0) || payload.len() < 2 {
@@ -160,13 +146,9 @@ pub fn parse_oppo_prompt_volume_response(payload: &[u8]) -> Result<u8, OppoProto
     Ok(volume)
 }
 
-pub use parse_oppo_prompt_volume_response as parse_prompt_volume_response;
-
 pub fn encode_oppo_set_prompt_volume(volume: u8) -> Vec<u8> {
     vec![volume]
 }
-
-pub use encode_oppo_set_prompt_volume as encode_set_prompt_volume;
 
 pub fn parse_oppo_head_motion_type_response(payload: &[u8]) -> Result<u8, OppoProtocolError> {
     if payload.first() != Some(&0) || payload.len() < 2 {
@@ -179,13 +161,9 @@ pub fn parse_oppo_head_motion_type_response(payload: &[u8]) -> Result<u8, OppoPr
     Ok(motion_type)
 }
 
-pub use parse_oppo_head_motion_type_response as parse_head_motion_type_response;
-
 pub fn encode_oppo_set_head_motion_type(motion_type: u8) -> Vec<u8> {
     vec![motion_type]
 }
-
-pub use encode_oppo_set_head_motion_type as encode_set_head_motion_type;
 
 pub fn parse_oppo_noise_cycle_response(payload: &[u8]) -> Result<(u8, u32), OppoProtocolError> {
     if payload.first() != Some(&0) || payload.len() < 4 || payload[1] != 0x02 {
@@ -201,8 +179,6 @@ pub fn parse_oppo_noise_cycle_response(payload: &[u8]) -> Result<(u8, u32), Oppo
     }
     Ok((cycle_type, mask))
 }
-
-pub use parse_oppo_noise_cycle_response as parse_noise_cycle_response;
 
 pub fn encode_oppo_set_noise_cycle(setting: &NoiseCycleSetting) -> Vec<u8> {
     let cycle_type = if setting.is_shared {
@@ -227,5 +203,3 @@ pub fn encode_oppo_set_noise_cycle(setting: &NoiseCycleSetting) -> Vec<u8> {
     payload.extend_from_slice(&bytes[..len]);
     payload
 }
-
-pub use encode_oppo_set_noise_cycle as encode_set_noise_cycle;

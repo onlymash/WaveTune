@@ -24,7 +24,9 @@ use std::{
 
 use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
 use crate::compatibility::{self, NoiseMode};
-use crate::protocol::{FrameDecoder, WearState, encode_noise_mode, parse_noise_mode_response};
+use crate::protocol::{
+    OppoFrameDecoder, WearState, encode_oppo_noise_mode, parse_oppo_noise_mode_response,
+};
 
 use crate::bluetooth::brands::oppo::features::OppoFeatureContext;
 use crate::bluetooth::brands::oppo::transport::request;
@@ -39,7 +41,7 @@ pub fn noise_mode_name(index: u8, modes: &[NoiseMode]) -> String {
 
 pub fn set_noise_mode<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     supported_indices: &[u8],
     modes: &[NoiseMode],
     current_wear: &mut WearState,
@@ -64,11 +66,11 @@ pub fn set_noise_mode<T: Read + Write>(
                 protocol_index
             ));
         }
-        let payload = encode_noise_mode(protocol_index);
+        let payload = encode_oppo_noise_mode(protocol_index);
         request(stream, decoder, 0x0404, 0, payload, Some(&deferred_tx))?;
 
         let result = request(stream, decoder, 0x010c, 0, vec![1, 1], Some(&deferred_tx))?;
-        let mut actual = parse_noise_mode_response(&result.payload)
+        let mut actual = parse_oppo_noise_mode_response(&result.payload)
             .ok_or_else(|| crate::t!("noise-mode-readback-unrecognized"))?;
         if !compatibility::noise_mode_readback_matches_for(protocol_index, actual, modes) {
             for delay_ms in [250, 500] {
@@ -76,7 +78,7 @@ pub fn set_noise_mode<T: Read + Write>(
                 if let Ok(retry) =
                     request(stream, decoder, 0x010c, 0, vec![1, 1], Some(&deferred_tx))
                 {
-                    if let Some(retry_val) = parse_noise_mode_response(&retry.payload) {
+                    if let Some(retry_val) = parse_oppo_noise_mode_response(&retry.payload) {
                         if compatibility::noise_mode_readback_matches_for(
                             protocol_index,
                             retry_val,

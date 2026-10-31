@@ -24,8 +24,6 @@ pub fn parse_oppo_noise_mode_response(payload: &[u8]) -> Option<u8> {
     bitmap_index(&payload[3..])
 }
 
-pub use parse_oppo_noise_mode_response as parse_noise_mode_response;
-
 pub fn parse_oppo_supported_noise_modes_response(payload: &[u8]) -> Option<Vec<u8>> {
     if payload.first() != Some(&0) || payload.len() < 3 {
         return None;
@@ -52,16 +50,12 @@ pub fn parse_oppo_supported_noise_modes_response(payload: &[u8]) -> Option<Vec<u
     )
 }
 
-pub use parse_oppo_supported_noise_modes_response as parse_supported_noise_modes_response;
-
 pub fn parse_oppo_noise_mode_event(payload: &[u8]) -> Option<u8> {
     if payload.first() != Some(&3) || payload.get(1) != Some(&1) || payload.get(2) != Some(&1) {
         return None;
     }
     bitmap_index(&payload[3..])
 }
-
-pub use parse_oppo_noise_mode_event as parse_noise_mode_event;
 
 pub fn encode_oppo_noise_mode(protocol_index: u8) -> Vec<u8> {
     let byte_count = usize::from(protocol_index / 8) + 1;
@@ -70,8 +64,6 @@ pub fn encode_oppo_noise_mode(protocol_index: u8) -> Vec<u8> {
     payload[2 + usize::from(protocol_index / 8)] = 1 << (protocol_index % 8);
     payload
 }
-
-pub use encode_oppo_noise_mode as encode_noise_mode;
 
 fn bitmap_index(bitmap: &[u8]) -> Option<u8> {
     bitmap.iter().enumerate().find_map(|(byte_index, byte)| {

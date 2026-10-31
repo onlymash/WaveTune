@@ -27,26 +27,27 @@ use crate::bluetooth::brands::oppo::features::{OppoFeatureContext, OppoSoundStat
 use crate::bluetooth::brands::oppo::transport::request;
 use crate::protocol::{
     BassEngineLevel, CustomEqualizerAction, CustomEqualizerParams, FEATURE_BASS_ENGINE,
-    FEATURE_HI_RES, FrameDecoder, encode_custom_equalizer_command, parse_bass_engine_response,
-    parse_custom_equalizer_list, parse_equalizer_response, parse_feature_flags_response,
-    parse_spatial_audio_response,
+    FEATURE_HI_RES, OppoFrameDecoder, encode_oppo_custom_equalizer,
+    parse_oppo_bass_engine_response, parse_oppo_custom_equalizer_list,
+    parse_oppo_equalizer_response, parse_oppo_feature_flags_response,
+    parse_oppo_spatial_audio_response,
 };
 
 pub fn set_equalizer<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     preset: u8,
     updates: &Sender<UiUpdate>,
 ) -> Result<u8, String> {
     request(stream, decoder, 0x0406, 0, vec![preset], Some(updates))?;
     let result = request(stream, decoder, 0x010f, 0, vec![], Some(updates))?;
-    let mut actual = parse_equalizer_response(&result.payload)
+    let mut actual = parse_oppo_equalizer_response(&result.payload)
         .map_err(|error| crate::t!("equalizer-readback-invalid", error))?;
     if actual != preset {
         for delay_ms in [250, 500] {
             thread::sleep(Duration::from_millis(delay_ms));
             if let Ok(retry) = request(stream, decoder, 0x010f, 0, vec![], Some(updates)) {
-                if let Ok(retry_val) = parse_equalizer_response(&retry.payload) {
+                if let Ok(retry_val) = parse_oppo_equalizer_response(&retry.payload) {
                     if retry_val == preset {
                         actual = retry_val;
                         break;
@@ -63,19 +64,19 @@ pub fn set_equalizer<T: Read + Write>(
 
 pub fn set_spatial_audio<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     mode: u8,
     updates: &Sender<UiUpdate>,
 ) -> Result<u8, String> {
     request(stream, decoder, 0x0422, 0, vec![mode], Some(updates))?;
     let result = request(stream, decoder, 0x012a, 0, vec![], Some(updates))?;
-    let mut actual = parse_spatial_audio_response(&result.payload)
+    let mut actual = parse_oppo_spatial_audio_response(&result.payload)
         .map_err(|error| crate::t!("spatial-audio-readback-invalid", error))?;
     if actual != mode {
         for delay_ms in [250, 500] {
             thread::sleep(Duration::from_millis(delay_ms));
             if let Ok(retry) = request(stream, decoder, 0x012a, 0, vec![], Some(updates)) {
-                if let Ok(retry_val) = parse_spatial_audio_response(&retry.payload) {
+                if let Ok(retry_val) = parse_oppo_spatial_audio_response(&retry.payload) {
                     if retry_val == mode {
                         actual = retry_val;
                         break;
@@ -92,7 +93,7 @@ pub fn set_spatial_audio<T: Read + Write>(
 
 pub fn set_game_mode<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     feature_id: u8,
     enabled: bool,
     updates: &Sender<UiUpdate>,
@@ -109,7 +110,7 @@ pub fn set_game_mode<T: Read + Write>(
 
 pub fn set_bass_engine_enabled<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     enabled: bool,
     updates: &Sender<UiUpdate>,
 ) -> Result<bool, String> {
@@ -125,7 +126,7 @@ pub fn set_bass_engine_enabled<T: Read + Write>(
 
 pub fn set_bass_engine_level<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     min: i8,
     max: i8,
     level: i8,
@@ -141,7 +142,7 @@ pub fn set_bass_engine_level<T: Read + Write>(
         Some(updates),
     )?;
     let result = request(stream, decoder, 0x0124, 0, vec![], Some(updates))?;
-    let actual = parse_bass_engine_response(&result.payload)
+    let actual = parse_oppo_bass_engine_response(&result.payload)
         .map_err(|error| crate::t!("bass-engine-readback-invalid", error))?;
     if actual.current != clamped {
         return Err(crate::t!(
@@ -155,7 +156,7 @@ pub fn set_bass_engine_level<T: Read + Write>(
 
 pub fn set_hi_res<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     enabled: bool,
     updates: &Sender<UiUpdate>,
 ) -> Result<bool, String> {
@@ -171,7 +172,7 @@ pub fn set_hi_res<T: Read + Write>(
 
 pub fn set_feature_toggle<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     feature_id: u8,
     enabled: bool,
     feature_name: &str,
@@ -194,7 +195,7 @@ pub fn set_feature_toggle<T: Read + Write>(
         vec![1, feature_id],
         Some(updates),
     )?;
-    let mut actual = parse_feature_flags_response(&result.payload, feature_id)
+    let mut actual = parse_oppo_feature_flags_response(&result.payload, feature_id)
         .map_err(|error| crate::t!("feature-readback-invalid", feature_name, error))?;
     if actual != enabled {
         for delay_ms in [250, 500] {
@@ -207,7 +208,8 @@ pub fn set_feature_toggle<T: Read + Write>(
                 vec![1, feature_id],
                 Some(updates),
             ) {
-                if let Ok(retry_val) = parse_feature_flags_response(&retry.payload, feature_id) {
+                if let Ok(retry_val) = parse_oppo_feature_flags_response(&retry.payload, feature_id)
+                {
                     if retry_val == enabled {
                         actual = retry_val;
                         break;
@@ -273,7 +275,7 @@ pub fn handle_sound_command<T: Read + Write>(
                 .cloned();
             if let Some(p) = preset {
                 let payload =
-                    encode_custom_equalizer_command(CustomEqualizerAction::Update, &(&p).into());
+                    encode_oppo_custom_equalizer(CustomEqualizerAction::Update, &(&p).into());
                 match request(
                     ctx.stream,
                     ctx.decoder,
@@ -291,7 +293,7 @@ pub fn handle_sound_command<T: Read + Write>(
                             vec![],
                             Some(ctx.updates),
                         ) {
-                            if let Ok(list) = parse_custom_equalizer_list(&res.payload, true) {
+                            if let Ok(list) = parse_oppo_custom_equalizer_list(&res.payload, true) {
                                 state.custom_equalizers = list.clone();
                                 let _ = ctx.updates.send(UiUpdate::CustomEqualizers(list));
                             }
@@ -329,7 +331,7 @@ pub fn handle_sound_command<T: Read + Write>(
                 max_gain: 6,
                 bands,
             };
-            let payload = encode_custom_equalizer_command(CustomEqualizerAction::Create, &params);
+            let payload = encode_oppo_custom_equalizer(CustomEqualizerAction::Create, &params);
             match request(
                 ctx.stream,
                 ctx.decoder,
@@ -347,7 +349,7 @@ pub fn handle_sound_command<T: Read + Write>(
                         vec![],
                         Some(ctx.updates),
                     ) {
-                        if let Ok(list) = parse_custom_equalizer_list(&res.payload, true) {
+                        if let Ok(list) = parse_oppo_custom_equalizer_list(&res.payload, true) {
                             state.custom_equalizers = list.clone();
                             let _ = ctx.updates.send(UiUpdate::CustomEqualizers(list));
                         }
@@ -389,7 +391,7 @@ pub fn handle_sound_command<T: Read + Write>(
                 max_gain,
                 bands,
             };
-            let payload = encode_custom_equalizer_command(CustomEqualizerAction::Update, &params);
+            let payload = encode_oppo_custom_equalizer(CustomEqualizerAction::Update, &params);
             match request(
                 ctx.stream,
                 ctx.decoder,
@@ -407,7 +409,7 @@ pub fn handle_sound_command<T: Read + Write>(
                         vec![],
                         Some(ctx.updates),
                     ) {
-                        if let Ok(list) = parse_custom_equalizer_list(&res.payload, true) {
+                        if let Ok(list) = parse_oppo_custom_equalizer_list(&res.payload, true) {
                             state.custom_equalizers = list.clone();
                             let _ = ctx.updates.send(UiUpdate::CustomEqualizers(list));
                         }
@@ -449,7 +451,7 @@ pub fn handle_sound_command<T: Read + Write>(
                 max_gain,
                 bands: &bands,
             };
-            let payload = encode_custom_equalizer_command(CustomEqualizerAction::Delete, &params);
+            let payload = encode_oppo_custom_equalizer(CustomEqualizerAction::Delete, &params);
             match request(
                 ctx.stream,
                 ctx.decoder,
@@ -467,7 +469,7 @@ pub fn handle_sound_command<T: Read + Write>(
                         vec![],
                         Some(ctx.updates),
                     ) {
-                        if let Ok(list) = parse_custom_equalizer_list(&res.payload, true) {
+                        if let Ok(list) = parse_oppo_custom_equalizer_list(&res.payload, true) {
                             state.custom_equalizers = list.clone();
                             let _ = ctx.updates.send(UiUpdate::CustomEqualizers(list));
                         }

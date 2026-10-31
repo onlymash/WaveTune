@@ -278,4 +278,3 @@ fn downloads_and_caches_x3_3d_scene() {
     }
     assert!(got_scene, "Should receive DeviceScene for Enco X3");
 }
-

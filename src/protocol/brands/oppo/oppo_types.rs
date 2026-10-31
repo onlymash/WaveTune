@@ -24,8 +24,6 @@ pub struct OppoAppPacket {
     pub payload: Vec<u8>,
 }
 
-pub type AppPacket = OppoAppPacket;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OppoProtocolError {
     InvalidFrameLength,
@@ -34,8 +32,6 @@ pub enum OppoProtocolError {
     MessageTooLong,
     InvalidPacketLength,
 }
-
-pub type ProtocolError = OppoProtocolError;
 
 impl fmt::Display for OppoProtocolError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -23,7 +23,7 @@ use std::{
 
 use crate::bluetooth::transport::{RfcommServiceQuery, is_socket_timeout, open_rfcomm};
 use crate::bluetooth::{DeviceChoice, UiUpdate};
-use crate::protocol::{AppPacket, FrameDecoder, encode_frame};
+use crate::protocol::{OppoAppPacket, OppoFrameDecoder, encode_oppo_frame};
 
 use super::unsolicited::handle_oppo_unsolicited;
 
@@ -61,7 +61,7 @@ pub fn reply_packet<T: Write>(
     sequence: u8,
     payload: Vec<u8>,
 ) -> Result<(), String> {
-    let packet = AppPacket {
+    let packet = OppoAppPacket {
         command: command | 0x8000,
         sequence,
         payload,
@@ -69,7 +69,7 @@ pub fn reply_packet<T: Write>(
     let packet_bytes = packet
         .encode()
         .map_err(|error| crate::t!("protocol-command-encode-failed", error))?;
-    let frame = encode_frame(&packet_bytes)
+    let frame = encode_oppo_frame(&packet_bytes)
         .map_err(|error| crate::t!("protocol-frame-encode-failed", error))?;
     stream
         .write_all(&frame)
@@ -80,18 +80,18 @@ pub fn reply_packet<T: Write>(
 
 pub fn request<T: Read + Write>(
     stream: &mut T,
-    decoder: &mut FrameDecoder,
+    decoder: &mut OppoFrameDecoder,
     command: u16,
     sequence: u8,
     payload: Vec<u8>,
     updates: Option<&Sender<UiUpdate>>,
-) -> Result<AppPacket, String> {
-    let packet = AppPacket {
+) -> Result<OppoAppPacket, String> {
+    let packet = OppoAppPacket {
         command,
         sequence,
         payload,
     };
-    let frame = encode_frame(
+    let frame = encode_oppo_frame(
         &packet
             .encode()
             .map_err(|error| crate::t!("protocol-command-encode-failed", error))?,
@@ -124,7 +124,7 @@ pub fn request<T: Read + Write>(
         let mut response = None;
         let mut trailing_packets = Vec::new();
         for (index, frame) in frames.iter().enumerate() {
-            let Ok(received) = AppPacket::decode(&frame) else {
+            let Ok(received) = OppoAppPacket::decode(&frame) else {
                 continue;
             };
             if received.command == (command | 0x8000) && received.sequence == sequence {
@@ -136,7 +136,7 @@ pub fn request<T: Read + Write>(
         }
         if let Some(response) = response {
             for bytes in trailing_packets {
-                if let Ok(packet) = AppPacket::decode(&bytes) {
+                if let Ok(packet) = OppoAppPacket::decode(&bytes) {
                     handle_oppo_unsolicited(stream, &packet, updates);
                 }
             }

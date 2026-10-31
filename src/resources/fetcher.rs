@@ -207,4 +207,3 @@ pub fn spawn_artwork_fetch(product_id: u32, color_id: Option<u8>, updates_tx: Se
             }
         });
 }
-

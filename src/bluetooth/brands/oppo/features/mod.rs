@@ -24,8 +24,8 @@ use crate::{
     app::events::UiUpdate,
     compatibility::{DeviceProfile, NoiseMode},
     protocol::{
-        BassEngineLevel, CustomEqualizer, FrameDecoder, KeyFunction, NoiseCycleState, PairedDevice,
-        PairedDeviceAddress, WearState,
+        BassEngineLevel, CustomEqualizer, KeyFunction, NoiseCycleState, OppoFrameDecoder,
+        PairedDevice, PairedDeviceAddress, WearState,
     },
 };
 
@@ -37,7 +37,7 @@ pub mod sound;
 /// Execution context passed to OPPO feature handlers.
 pub struct OppoFeatureContext<'a, T: Read + Write> {
     pub stream: &'a mut T,
-    pub decoder: &'a mut FrameDecoder,
+    pub decoder: &'a mut OppoFrameDecoder,
     pub updates: &'a Sender<UiUpdate>,
     pub read_only: bool,
     pub profile: Option<&'static DeviceProfile>,
