@@ -129,7 +129,7 @@ impl ComboRowExtManual for adw::ComboRow {
         self.set_model(Some(&string_list));
         let ids: Vec<u8> = items.iter().map(|(id, _)| *id).collect();
         unsafe {
-            self.set_data("enco-item-ids", ids);
+            self.set_data("item-ids", ids);
         }
     }
 
@@ -138,7 +138,7 @@ impl ComboRowExtManual for adw::ComboRow {
         if pos == gtk::INVALID_LIST_POSITION {
             return None;
         }
-        let ids = unsafe { self.data::<Vec<u8>>("enco-item-ids") }?;
+        let ids = unsafe { self.data::<Vec<u8>>("item-ids") }?;
         let ids = unsafe { ids.as_ref() };
         ids.get(pos as usize).copied()
     }
@@ -148,7 +148,7 @@ impl ComboRowExtManual for adw::ComboRow {
             self.set_selected(gtk::INVALID_LIST_POSITION);
             return;
         };
-        let ids = unsafe { self.data::<Vec<u8>>("enco-item-ids") };
+        let ids = unsafe { self.data::<Vec<u8>>("item-ids") };
         if let Some(ids) = ids {
             let ids = unsafe { ids.as_ref() };
             if let Some(pos) = ids.iter().position(|&x| x == target) {
@@ -162,7 +162,7 @@ impl ComboRowExtManual for adw::ComboRow {
     fn clear_items(&self) {
         self.set_model(None::<&gtk::StringList>);
         unsafe {
-            self.set_data("enco-item-ids", Vec::<u8>::new());
+            self.set_data("item-ids", Vec::<u8>::new());
         }
     }
 }

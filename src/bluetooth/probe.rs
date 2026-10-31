@@ -17,8 +17,9 @@
 
 use crate::protocol::{BatteryState, WearState};
 
-use super::brands::oppo::{OppoDeviceSnapshot, initialize_oppo_session, open_oppo_rfcomm};
+use super::brands::oppo::{initialize_oppo_session, open_oppo_rfcomm};
 use super::discovery::find_devices;
+use super::snapshot::DeviceSnapshot;
 
 pub fn probe() -> Result<(), String> {
     let mut devices = find_devices()?;
@@ -42,22 +43,28 @@ pub fn probe() -> Result<(), String> {
     }
 }
 
-fn print_snapshot(snapshot: &OppoDeviceSnapshot) {
-    println!("{}", crate::t!("probe-device", snapshot.name.as_str()));
+pub(crate) fn print_snapshot(snapshot: &DeviceSnapshot) {
     println!(
         "{}",
-        crate::t!("probe-model-profile", snapshot.model.as_str())
+        crate::t!("probe-device", snapshot.identity.name.as_str())
     );
     println!(
         "{}",
-        crate::t!("probe-product-id", format!("{:06X}", snapshot.product_id))
+        crate::t!("probe-model-profile", snapshot.identity.model.as_str())
     );
-    if let Some(color_id) = snapshot.color_id {
+    println!(
+        "{}",
+        crate::t!(
+            "probe-product-id",
+            format!("{:06X}", snapshot.identity.product_id)
+        )
+    );
+    if let Some(color_id) = snapshot.identity.color_id {
         println!("{}", crate::t!("probe-color-id", color_id));
     }
     print_battery(&snapshot.battery);
-    if snapshot.supports_wear_detection {
-        print_wear(&snapshot.wear);
+    if snapshot.wear.supports_wear_detection {
+        print_wear(&snapshot.wear.wear);
     } else {
         println!("{}", crate::t!("wear-status-not-supported"));
     }
@@ -66,31 +73,46 @@ fn print_snapshot(snapshot: &OppoDeviceSnapshot) {
         "{}",
         crate::t!(
             "probe-firmware",
-            snapshot.firmware.left.as_deref().unwrap_or(&not_reported),
-            snapshot.firmware.right.as_deref().unwrap_or(&not_reported),
-            snapshot.firmware.case.as_deref().unwrap_or(&not_reported),
+            snapshot
+                .identity
+                .firmware
+                .left
+                .as_deref()
+                .unwrap_or(&not_reported),
+            snapshot
+                .identity
+                .firmware
+                .right
+                .as_deref()
+                .unwrap_or(&not_reported),
+            snapshot
+                .identity
+                .firmware
+                .case
+                .as_deref()
+                .unwrap_or(&not_reported),
         )
     );
-    if snapshot.read_only {
+    if snapshot.identity.read_only {
         let unconfirmed = crate::t!("common-unconfirmed");
         println!(
             "{}",
             crate::t!(
                 "probe-detected-read-only",
-                if snapshot.detected_features.is_empty() {
+                if snapshot.diagnostics.detected_features.is_empty() {
                     unconfirmed
                 } else {
-                    snapshot.detected_features.join(", ")
+                    snapshot.diagnostics.detected_features.join(", ")
                 }
             )
         );
-        for error in &snapshot.probe_errors {
+        for error in &snapshot.diagnostics.probe_errors {
             println!("{}", crate::t!("probe-note", error));
         }
         println!("{}", crate::t!("controls-not-enabled"));
         return;
     }
-    if let Some(mode) = snapshot.noise_mode {
+    if let Some(mode) = snapshot.noise.current_mode {
         println!("{}", crate::t!("probe-noise-mode-index", mode));
     } else {
         println!("{}", crate::t!("noise-mode-not-returned"));
@@ -99,12 +121,13 @@ fn print_snapshot(snapshot: &OppoDeviceSnapshot) {
         "{}",
         crate::t!(
             "probe-noise-mode-support",
-            snapshot.noise_mode_support_note.as_str()
+            snapshot.noise.support_note.as_str()
         )
     );
-    if snapshot.supports_equalizer {
-        if let Some(preset) = snapshot.equalizer_preset {
-            let presets = crate::compatibility::equalizer_presets_for_product(snapshot.product_id);
+    if snapshot.sound.supports_equalizer {
+        if let Some(preset) = snapshot.sound.equalizer_preset {
+            let presets =
+                crate::compatibility::equalizer_presets_for_product(snapshot.identity.product_id);
             let preset_name = crate::compatibility::equalizer_preset_key(preset, presets)
                 .map(|key| crate::t!(key))
                 .unwrap_or_else(|| preset.to_string());
@@ -113,9 +136,10 @@ fn print_snapshot(snapshot: &OppoDeviceSnapshot) {
             println!("{}", crate::t!("equalizer-not-returned"));
         }
     }
-    if snapshot.supports_custom_equalizer {
-        if !snapshot.custom_equalizers.is_empty() {
+    if snapshot.sound.supports_custom_equalizer {
+        if !snapshot.sound.custom_equalizers.is_empty() {
             let names: Vec<String> = snapshot
+                .sound
                 .custom_equalizers
                 .iter()
                 .map(|eq| {
@@ -131,16 +155,16 @@ fn print_snapshot(snapshot: &OppoDeviceSnapshot) {
             println!("{}", crate::t!("probe-custom-eq-none"));
         }
     }
-    if snapshot.supports_spatial_audio {
-        if let Some(mode) = snapshot.spatial_audio_mode {
+    if snapshot.sound.supports_spatial_audio {
+        if let Some(mode) = snapshot.sound.spatial_audio_mode {
             let mode_key = crate::compatibility::spatial_audio_mode_key(mode);
             println!("{}", crate::t!("probe-spatial-audio", crate::t!(mode_key)));
         } else {
             println!("{}", crate::t!("spatial-audio-not-returned"));
         }
     }
-    if snapshot.supports_game_mode {
-        if let Some(enabled) = snapshot.game_mode_enabled {
+    if snapshot.sound.supports_game_mode {
+        if let Some(enabled) = snapshot.sound.game_mode_enabled {
             let state_str = if enabled {
                 crate::t!("common-on")
             } else {
@@ -151,14 +175,14 @@ fn print_snapshot(snapshot: &OppoDeviceSnapshot) {
             println!("{}", crate::t!("game-mode-not-returned"));
         }
     }
-    if snapshot.supports_bass_engine {
-        if let Some(enabled) = snapshot.bass_engine_enabled {
+    if snapshot.sound.supports_bass_engine {
+        if let Some(enabled) = snapshot.sound.bass_engine_enabled {
             let state_str = if enabled {
                 crate::t!("common-on")
             } else {
                 crate::t!("common-off")
             };
-            if let Some(level) = snapshot.bass_engine_level {
+            if let Some(level) = &snapshot.sound.bass_engine_level {
                 println!(
                     "{}",
                     crate::t!(
@@ -176,8 +200,8 @@ fn print_snapshot(snapshot: &OppoDeviceSnapshot) {
             println!("{}", crate::t!("bass-engine-not-returned"));
         }
     }
-    if snapshot.supports_hi_res {
-        if let Some(enabled) = snapshot.hi_res_enabled {
+    if snapshot.sound.supports_hi_res {
+        if let Some(enabled) = snapshot.sound.hi_res_enabled {
             let state_str = if enabled {
                 crate::t!("common-on")
             } else {
@@ -186,6 +210,48 @@ fn print_snapshot(snapshot: &OppoDeviceSnapshot) {
             println!("{}", crate::t!("probe-hi-res", state_str));
         } else {
             println!("{}", crate::t!("hi-res-not-returned"));
+        }
+    }
+    if snapshot.sound.supports_audio_codec {
+        if let Some(codec) = snapshot.sound.audio_codec {
+            let codec_name = match codec {
+                0 => "SBC",
+                1 => "AAC",
+                2 => "aptX",
+                19 => "LDAC",
+                _ => "Unknown",
+            };
+            println!("{}", crate::t!("probe-audio-codec", codec_name));
+        }
+    }
+    if snapshot.dual_device.supports_dual_device {
+        if let Some(dual) = snapshot.dual_device.dual_device_enabled {
+            let state_str = if dual {
+                crate::t!("common-on")
+            } else {
+                crate::t!("common-off")
+            };
+            println!("{}", crate::t!("probe-dual-device", state_str));
+        }
+        match &snapshot.dual_device.paired_devices {
+            Ok(devs) => {
+                if devs.is_empty() {
+                    println!("{}", crate::t!("dual-device-none-connected"));
+                } else {
+                    println!("{}", crate::t!("dual-device-list-title"));
+                    for dev in devs {
+                        let conn_str = if dev.connected {
+                            format!(" ({})", crate::t!("dual-device-connected"))
+                        } else {
+                            String::new()
+                        };
+                        println!("  - {}{conn_str}", dev.name);
+                    }
+                }
+            }
+            Err(error) => {
+                println!("{}", crate::t!("probe-dual-device-error", error.as_str()));
+            }
         }
     }
 }

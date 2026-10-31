@@ -47,6 +47,8 @@ impl GestureSettingsWidgets {
         self.call_gesture_group
             .set_visible(supports_touch && gesture_rows.iter().any(|r| r.is_call_control));
         self.ear_selector.set_visible(supports_touch);
+        self.set_gesture_combos_sensitive(supports_touch);
+        self.set_noise_cycle_sensitive(supports_touch);
     }
 
     pub fn update_key_functions(
@@ -71,6 +73,7 @@ impl GestureSettingsWidgets {
                 combo.set_selected_id(Some(func as u8));
             }
         }
+        self.set_gesture_combos_sensitive(true);
 
         // Check if long-press is currently noise control
         let hold_controls_noise = gesture_rows
@@ -112,6 +115,11 @@ impl GestureSettingsWidgets {
         for (_, combo) in &self.gesture_combos {
             combo.set_sensitive(sensitive);
         }
+    }
+
+    #[cfg(test)]
+    pub fn is_gesture_combos_sensitive(&self) -> bool {
+        self.gesture_combos.iter().all(|(_, c)| c.is_sensitive())
     }
 
     pub fn set_noise_cycle_sensitive(&self, sensitive: bool) {

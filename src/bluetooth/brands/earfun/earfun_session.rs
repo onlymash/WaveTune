@@ -26,7 +26,7 @@ use std::{
 use crate::app::events::SettingDomain;
 use crate::bluetooth::transport::{RfcommServiceQuery, is_socket_timeout, open_rfcomm};
 use crate::bluetooth::{DeviceChoice, UiUpdate, WorkerCommand};
-use crate::compatibility::{self, NoiseMode};
+use crate::compatibility;
 use crate::protocol::brands::earfun::{
     EarFunAudioCodec, EarFunCommands, EarFunFrameDecoder, EarFunPacket, encode_earfun_eq_band,
     parse_earfun_ambient_mode, parse_earfun_anc_sub_mode, parse_earfun_audio_codec,
@@ -35,8 +35,7 @@ use crate::protocol::brands::earfun::{
     parse_earfun_transparency_sub_mode,
 };
 use crate::protocol::{
-    BatteryPart, BatteryState, FirmwareVersions, PairedDevice, PairedDeviceAction, WearPart,
-    WearState,
+    BatteryState, FirmwareVersions, PairedDevice, PairedDeviceAction, WearPart, WearState,
 };
 
 pub const EARFUN_AIR_PRO_4_PRODUCT_ID: u32 = 0x004535;
@@ -68,40 +67,11 @@ pub const EARFUN_SECONDARY_SPP_NAMES: &[&str] = &["gaia", "earfun", "spp", "seri
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const POLL_INTERVAL: Duration = Duration::from_secs(15);
 
-#[allow(dead_code)]
-pub struct EarFunDeviceSnapshot {
-    pub name: String,
-    pub product_id: u32,
-    pub color_id: Option<u8>,
-    pub model: String,
-    pub is_known_model: bool,
-    pub read_only: bool,
-    pub battery: BatteryState,
-    pub firmware: FirmwareVersions,
-    pub wear: WearState,
-    pub supports_wear_detection: bool,
-    pub in_ear_detection_enabled: Option<bool>,
-    pub noise_mode: Option<u8>,
-    pub noise_mode_indices: Vec<u8>,
-    pub noise_mode_support_note: String,
-    pub noise_modes: &'static [NoiseMode],
-    pub anc_sub: u8,
-    pub transp_sub: u8,
-    pub supports_dual_device: bool,
-    pub dual_device_enabled: Option<bool>,
-    pub supports_paired_devices: bool,
-    pub paired_devices: Result<Vec<PairedDevice>, String>,
-    pub paired_device_controls_enabled: Result<bool, String>,
-    pub supports_game_mode: bool,
-    pub game_mode_enabled: Option<bool>,
-    pub supports_equalizer: bool,
-    pub equalizer_preset: Option<u8>,
-    pub supports_audio_codec: bool,
-    pub audio_codec: Option<u8>,
-    pub available_codecs: Vec<u8>,
-    pub detected_features: Vec<String>,
-    pub probe_errors: Vec<String>,
-}
+pub use crate::bluetooth::snapshot::{
+    ControlsSnapshot, DeviceIdentitySnapshot, DeviceSnapshot, DualDeviceSnapshot, NoiseSnapshot,
+    ProbeDiagnostics, SoundSnapshot, WearSnapshot,
+};
+pub type EarFunDeviceSnapshot = DeviceSnapshot;
 
 pub fn open_earfun_rfcomm(device: &DeviceChoice) -> std::io::Result<std::fs::File> {
     let mut service_uuids = device.control_service_uuids.clone();
@@ -466,41 +436,66 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
         .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
 
         let snapshot = EarFunDeviceSnapshot {
-            name: device_name.to_string(),
-            product_id: product_id.unwrap_or(0),
-            color_id: None,
-            model,
-            is_known_model,
-            read_only: true,
+            identity: DeviceIdentitySnapshot {
+                name: device_name.to_string(),
+                product_id: product_id.unwrap_or(0),
+                color_id: None,
+                model,
+                is_known_model,
+                read_only: true,
+                firmware,
+            },
             battery: BatteryState {
                 left: left_bat,
                 right: right_bat,
                 case: case_bat,
             },
-            firmware,
-            wear: WearState::default(),
-            supports_wear_detection: false,
-            in_ear_detection_enabled: None,
-            noise_mode: None,
-            noise_mode_indices: vec![],
-            noise_mode_support_note: String::new(),
-            noise_modes: &[],
-            anc_sub: 2,
-            transp_sub: 0,
-            supports_dual_device: false,
-            dual_device_enabled: None,
-            supports_paired_devices: false,
-            paired_devices: Err(crate::t!("dual-device-not-supported")),
-            paired_device_controls_enabled: Err(crate::t!("dual-device-not-supported")),
-            supports_game_mode: false,
-            game_mode_enabled: None,
-            supports_equalizer: false,
-            equalizer_preset: None,
-            supports_audio_codec: false,
-            audio_codec: None,
-            available_codecs: vec![],
-            detected_features,
-            probe_errors,
+            wear: WearSnapshot {
+                wear: WearState::default(),
+                supports_wear_detection: false,
+            },
+            noise: NoiseSnapshot {
+                current_mode: None,
+                supported_indices: vec![],
+                modes: &[],
+                support_note: String::new(),
+                anc_sub: 2,
+                transp_sub: 0,
+            },
+            sound: SoundSnapshot {
+                supports_equalizer: false,
+                supports_custom_equalizer: false,
+                equalizer_preset: None,
+                presets: vec![],
+                custom_equalizers: vec![],
+                supports_spatial_audio: false,
+                supports_head_tracking: false,
+                spatial_audio_mode: None,
+                supports_game_mode: false,
+                game_mode_enabled: None,
+                game_mode_feature_id: 0x06,
+                supports_bass_engine: false,
+                bass_engine_enabled: None,
+                bass_engine_level: None,
+                supports_hi_res: false,
+                hi_res_enabled: None,
+                supports_audio_codec: false,
+                audio_codec: None,
+                available_codecs: vec![],
+            },
+            controls: ControlsSnapshot::default(),
+            dual_device: DualDeviceSnapshot {
+                supports_dual_device: false,
+                dual_device_enabled: None,
+                preferred_device: None,
+                paired_devices: Err(crate::t!("dual-device-not-supported")),
+                controls_enabled: Err(crate::t!("dual-device-not-supported")),
+            },
+            diagnostics: ProbeDiagnostics {
+                detected_features,
+                probe_errors,
+                capabilities: vec![],
+            },
         };
         return Ok((snapshot, decoder));
     }
@@ -720,42 +715,71 @@ pub fn initialize_earfun_session<T: Read + Write + AsRawFd>(
         WearState::default()
     };
 
+    let presets = compatibility::equalizer_presets_for_product(pid).to_vec();
     let snapshot = EarFunDeviceSnapshot {
-        name: device_name.to_string(),
-        product_id: pid,
-        color_id: None,
-        model,
-        is_known_model: true,
-        read_only: false,
-        battery,
-        firmware,
-        wear,
-        supports_wear_detection,
-        in_ear_detection_enabled,
-        noise_mode: Some(current_protocol_index),
-        noise_mode_indices,
-        noise_mode_support_note: "EarFun GAIA V3 Noise Architecture".to_string(),
-        noise_modes,
-        anc_sub,
-        transp_sub,
-        supports_dual_device,
-        dual_device_enabled,
-        supports_paired_devices: supports_dual_device,
-        paired_devices,
-        paired_device_controls_enabled,
-        supports_game_mode,
-        game_mode_enabled,
-        supports_equalizer,
-        equalizer_preset: if supports_equalizer {
-            Some(crate::resources::get_saved_equalizer_preset(pid, device_address).unwrap_or(0))
-        } else {
-            None
+        identity: DeviceIdentitySnapshot {
+            name: device_name.to_string(),
+            product_id: pid,
+            color_id: None,
+            model,
+            is_known_model: true,
+            read_only: false,
+            firmware,
         },
-        supports_audio_codec,
-        audio_codec,
-        available_codecs,
-        detected_features,
-        probe_errors,
+        battery,
+        wear: WearSnapshot {
+            wear,
+            supports_wear_detection,
+        },
+        noise: NoiseSnapshot {
+            current_mode: Some(current_protocol_index),
+            supported_indices: noise_mode_indices,
+            modes: noise_modes,
+            support_note: "EarFun GAIA V3 Noise Architecture".to_string(),
+            anc_sub,
+            transp_sub,
+        },
+        sound: SoundSnapshot {
+            supports_equalizer,
+            supports_custom_equalizer: false,
+            equalizer_preset: if supports_equalizer {
+                Some(crate::resources::get_saved_equalizer_preset(pid, device_address).unwrap_or(0))
+            } else {
+                None
+            },
+            presets,
+            custom_equalizers: vec![],
+            supports_spatial_audio: false,
+            supports_head_tracking: false,
+            spatial_audio_mode: None,
+            supports_game_mode,
+            game_mode_enabled,
+            game_mode_feature_id: 0x06,
+            supports_bass_engine: false,
+            bass_engine_enabled: None,
+            bass_engine_level: None,
+            supports_hi_res: false,
+            hi_res_enabled: None,
+            supports_audio_codec,
+            audio_codec,
+            available_codecs,
+        },
+        controls: ControlsSnapshot {
+            in_ear_detection_enabled,
+            ..ControlsSnapshot::default()
+        },
+        dual_device: DualDeviceSnapshot {
+            supports_dual_device,
+            dual_device_enabled,
+            preferred_device: None,
+            paired_devices,
+            controls_enabled: paired_device_controls_enabled,
+        },
+        diagnostics: ProbeDiagnostics {
+            detected_features,
+            probe_errors,
+            capabilities: vec![],
+        },
     };
 
     Ok((snapshot, decoder))
@@ -1064,90 +1088,27 @@ fn monitor_device(
     let _ = updates.send(UiUpdate::Connected {
         device: device.clone(),
     });
-    let _ = updates.send(UiUpdate::NoiseControlsEnabled(
-        !snapshot.read_only && !snapshot.noise_modes.is_empty(),
-    ));
-    let _ = updates.send(UiUpdate::NoiseModeOptions {
-        indices: snapshot.noise_mode_indices.clone(),
-        note: snapshot.noise_mode_support_note.clone(),
-        modes: snapshot.noise_modes.to_vec(),
-    });
-    let _ = updates.send(UiUpdate::ProductId {
-        product_id: snapshot.product_id,
-        color_id: snapshot.color_id,
-    });
-    let _ = updates.send(UiUpdate::Firmware(snapshot.firmware));
-    let _ = updates.send(UiUpdate::Wear(snapshot.wear.clone()));
-    let _ = updates.send(UiUpdate::Battery(snapshot.battery));
+    let _ = updates.send(UiUpdate::InitialSession(Box::new(snapshot.clone())));
 
-    let presets = compatibility::equalizer_presets_for_product(snapshot.product_id).to_vec();
-    let _ = updates.send(UiUpdate::SoundFeatures {
-        supports_equalizer: snapshot.supports_equalizer,
-        supports_custom_equalizer: false,
-        supports_spatial_audio: false,
-        supports_head_tracking: false,
-        supports_game_mode: snapshot.supports_game_mode,
-        supports_bass_engine: false,
-        supports_hi_res: false,
-        supports_audio_codec: snapshot.supports_audio_codec,
-        available_codecs: snapshot.available_codecs.clone(),
-        presets,
-    });
-
-    if let Some(codec) = snapshot.audio_codec {
-        let _ = updates.send(UiUpdate::AudioCodec(codec));
-    }
-
-    if let Some(preset) = snapshot.equalizer_preset {
+    if let Some(preset) = snapshot.sound.equalizer_preset {
         if preset != 0 {
             let _ = apply_equalizer_preset(
                 &mut stream,
                 &mut decoder,
-                snapshot.product_id,
+                snapshot.identity.product_id,
                 preset,
                 Some(updates),
             );
         }
-        let _ = updates.send(UiUpdate::Equalizer(preset));
     }
-    if let Some(enabled) = snapshot.game_mode_enabled {
-        let _ = updates.send(UiUpdate::GameMode(enabled));
-    }
-    if let Some(mode) = snapshot.noise_mode {
-        let _ = updates.send(UiUpdate::NoiseMode(mode));
-    }
-
-    let _ = updates.send(UiUpdate::ControlsFeatures {
-        supports_touch_customization: false,
-        supports_dual_device: snapshot.supports_dual_device,
-        supports_wear_detection: snapshot.supports_wear_detection,
-        supports_sleep_detection: false,
-        supports_head_motion: false,
-        supports_find_device: false,
-        supports_fit_detection: false,
-        supports_prompt_volume: false,
-        gesture_rows: vec![],
-    });
-
-    if let Some(enabled) = snapshot.in_ear_detection_enabled {
-        let _ = updates.send(UiUpdate::InEarDetectionEnabled(enabled));
-    }
-    if let Some(enabled) = snapshot.dual_device_enabled {
-        let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(enabled));
-    }
-
-    let _ = updates.send(UiUpdate::PairedDeviceControlsEnabled(
-        snapshot.paired_device_controls_enabled.clone(),
-    ));
-    let _ = updates.send(UiUpdate::PairedDevices(snapshot.paired_devices.clone()));
 
     let _ = updates.send(UiUpdate::Status(crate::t!("channel-connected")));
 
-    let mut current_anc_sub = snapshot.anc_sub;
-    let mut current_transp_sub = snapshot.transp_sub;
-    let current_audio_codec = snapshot.audio_codec;
-    let current_dual_device = snapshot.dual_device_enabled;
-    let has_submodes = snapshot.noise_modes.iter().any(|m| m.parent.is_some());
+    let mut current_anc_sub = snapshot.noise.anc_sub;
+    let mut current_transp_sub = snapshot.noise.transp_sub;
+    let current_audio_codec = snapshot.sound.audio_codec;
+    let current_dual_device = snapshot.dual_device.dual_device_enabled;
+    let has_submodes = snapshot.noise.modes.iter().any(|m| m.parent.is_some());
     let mut last_poll = Instant::now();
 
     loop {
@@ -1159,7 +1120,7 @@ fn monitor_device(
                 match set_noise_mode(
                     &mut stream,
                     &mut decoder,
-                    snapshot.product_id,
+                    snapshot.identity.product_id,
                     protocol_index,
                     &mut current_anc_sub,
                     &mut current_transp_sub,
@@ -1208,7 +1169,7 @@ fn monitor_device(
                 match set_dual_device(
                     &mut stream,
                     &mut decoder,
-                    snapshot.product_id,
+                    snapshot.identity.product_id,
                     enabled,
                     current_audio_codec,
                     updates,
@@ -1237,7 +1198,7 @@ fn monitor_device(
                 match set_audio_codec(
                     &mut stream,
                     &mut decoder,
-                    snapshot.product_id,
+                    snapshot.identity.product_id,
                     codec,
                     current_dual_device,
                     updates,
@@ -1328,13 +1289,13 @@ fn monitor_device(
                 match apply_equalizer_preset(
                     &mut stream,
                     &mut decoder,
-                    snapshot.product_id,
+                    snapshot.identity.product_id,
                     preset_index,
                     Some(updates),
                 ) {
                     Ok(()) => {
                         let _ = crate::resources::save_equalizer_preset(
-                            snapshot.product_id,
+                            snapshot.identity.product_id,
                             Some(&mac_str),
                             preset_index,
                         );
@@ -1374,7 +1335,7 @@ fn monitor_device(
             )
             .ok()
             .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
-            let case = if snapshot.product_id != EARFUN_AIR_S_PRODUCT_ID {
+            let case = if snapshot.identity.product_id != EARFUN_AIR_S_PRODUCT_ID {
                 request(
                     &mut stream,
                     &mut decoder,
@@ -1456,107 +1417,6 @@ pub fn probe_earfun(device: &DeviceChoice) -> Result<(), String> {
         device.product_id,
         None,
     )?;
-    print_earfun_snapshot(&snapshot);
+    crate::bluetooth::probe::print_snapshot(&snapshot);
     Ok(())
-}
-
-fn print_battery_part(name: &str, part: &Option<BatteryPart>) {
-    if let Some(part) = part {
-        println!("{name}: {}%", part.percentage);
-    } else {
-        println!("{name}: {}", crate::t!("common-not-reported"));
-    }
-}
-
-fn print_earfun_snapshot(snapshot: &EarFunDeviceSnapshot) {
-    println!("{}", crate::t!("probe-device", snapshot.name.as_str()));
-    println!(
-        "{}",
-        crate::t!("probe-model-profile", snapshot.model.as_str())
-    );
-    println!(
-        "{}",
-        crate::t!("probe-product-id", format!("{:06X}", snapshot.product_id))
-    );
-    print_battery_part(&crate::t!("battery-left-ear"), &snapshot.battery.left);
-    print_battery_part(&crate::t!("battery-right-ear"), &snapshot.battery.right);
-    print_battery_part(&crate::t!("battery-case"), &snapshot.battery.case);
-
-    let not_reported = crate::t!("common-not-reported");
-    println!(
-        "{}",
-        crate::t!(
-            "probe-firmware",
-            snapshot.firmware.left.as_deref().unwrap_or(&not_reported),
-            snapshot.firmware.right.as_deref().unwrap_or(&not_reported),
-            snapshot.firmware.case.as_deref().unwrap_or(&not_reported),
-        )
-    );
-
-    if let Some(mode) = snapshot.noise_mode {
-        println!("{}", crate::t!("probe-noise-mode-index", mode));
-    }
-    println!(
-        "{}",
-        crate::t!(
-            "probe-noise-mode-support",
-            snapshot.noise_mode_support_note.as_str()
-        )
-    );
-
-    if let Some(game) = snapshot.game_mode_enabled {
-        println!("Game Mode: {}", if game { "On" } else { "Off" });
-    }
-    if let Some(dual) = snapshot.dual_device_enabled {
-        println!(
-            "Dual-Device Connection: {}",
-            if dual { "On" } else { "Off" }
-        );
-    }
-    if let Some(in_ear) = snapshot.in_ear_detection_enabled {
-        println!("In-Ear Detection: {}", if in_ear { "On" } else { "Off" });
-    }
-
-    if snapshot.supports_audio_codec {
-        if let Some(codec) = snapshot.audio_codec {
-            let codec_name = EarFunAudioCodec::from_u8(codec)
-                .map(|c| crate::t!(c.key()))
-                .unwrap_or_else(|| codec.to_string());
-            println!("Audio Codec: {codec_name}");
-        }
-    }
-
-    if snapshot.supports_equalizer {
-        if let Some(preset) = snapshot.equalizer_preset {
-            let presets = crate::compatibility::equalizer_presets_for_product(snapshot.product_id);
-            let preset_name = crate::compatibility::equalizer_preset_key(preset, presets)
-                .map(|key| crate::t!(key))
-                .unwrap_or_else(|| preset.to_string());
-            println!("Headset Equalizer Preset: {preset_name}");
-        } else {
-            println!("Equalizer preset: Not returned");
-        }
-    }
-
-    if snapshot.supports_paired_devices {
-        match &snapshot.paired_devices {
-            Ok(devices) => {
-                println!("Paired Devices: {}", devices.len());
-                for dev in devices {
-                    let host_tag = if dev.is_current_host {
-                        " (This Device)"
-                    } else {
-                        ""
-                    };
-                    let status_str = if dev.connected {
-                        "Connected"
-                    } else {
-                        "Disconnected"
-                    };
-                    println!("  - {}{host_tag} [{status_str}]", dev.name);
-                }
-            }
-            Err(e) => println!("Failed to query paired devices: {e}"),
-        }
-    }
 }

@@ -940,6 +940,13 @@ fn ui_components_layout_and_behavior() {
     assert!(!controls_widgets.features.is_in_ear_sensitive());
     assert!(!controls_widgets.features.is_sleep_sensitive());
     assert!(!controls_widgets.head_motion.is_switch_sensitive());
+    assert!(!controls_widgets.gestures.is_gesture_combos_sensitive());
+
+    // Enable touch gestures via set_supported
+    controls_widgets
+        .gestures
+        .set_supported(true, crate::compatibility::STANDARD_GESTURE_ROWS);
+    assert!(controls_widgets.gestures.is_gesture_combos_sensitive());
 
     // Update dual device enabled -> true
     crate::ui::controls_state::update_dual_device(&controls_widgets, true);

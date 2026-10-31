@@ -24,14 +24,14 @@ use std::{
 
 use crate::compatibility::{self, NoiseMode};
 use crate::protocol::{
-    AppPacket, BassEngineLevel, BatteryState, CustomEqualizer, EarSide, FEATURE_BASS_ENGINE,
-    FEATURE_HI_RES, FirmwareVersions, FrameDecoder, KeyFunction, NoiseCycleState, PairedDevice,
-    PairedDeviceAction, PairedDeviceAddress, WearState, capability_bitmap_allows,
-    encode_custom_equalizer_command, encode_find_earbuds, encode_fit_test, encode_frame,
-    encode_set_head_motion_type, encode_set_key_function, encode_set_noise_cycle,
-    encode_set_priority_device, encode_set_prompt_volume, noise_mode_readback_matches_for,
-    noise_mode_write_payload_for, parse_bass_engine_event, parse_bass_engine_response,
-    parse_battery_event, parse_battery_response, parse_color_response, parse_custom_equalizer_list,
+    AppPacket, BassEngineLevel, BatteryState, EarSide, FEATURE_BASS_ENGINE, FEATURE_HI_RES,
+    FirmwareVersions, FrameDecoder, KeyFunction, NoiseCycleState, PairedDevice, PairedDeviceAction,
+    PairedDeviceAddress, WearState, capability_bitmap_allows, encode_custom_equalizer_command,
+    encode_find_earbuds, encode_fit_test, encode_frame, encode_set_head_motion_type,
+    encode_set_key_function, encode_set_noise_cycle, encode_set_priority_device,
+    encode_set_prompt_volume, noise_mode_readback_matches_for, noise_mode_write_payload_for,
+    parse_bass_engine_event, parse_bass_engine_response, parse_battery_event,
+    parse_battery_response, parse_color_response, parse_custom_equalizer_list,
     parse_equalizer_event, parse_equalizer_response, parse_feature_flags_response,
     parse_firmware_response, parse_fit_test_event, parse_head_motion_type_response,
     parse_noise_cycle_response, parse_noise_mode_event, parse_noise_mode_response,
@@ -72,61 +72,11 @@ pub(crate) fn open_oppo_rfcomm(device: &DeviceChoice) -> std::io::Result<std::fs
     open_rfcomm(device.address, &query)
 }
 
-pub struct OppoDeviceSnapshot {
-    pub name: String,
-    pub product_id: u32,
-    pub color_id: Option<u8>,
-    pub model: String,
-    pub is_known_model: bool,
-    pub read_only: bool,
-    pub battery: BatteryState,
-    pub firmware: FirmwareVersions,
-    pub wear: WearState,
-    pub supports_wear_detection: bool,
-    pub noise_mode: Option<u8>,
-    pub noise_mode_indices: Vec<u8>,
-    pub noise_mode_support_note: String,
-    pub noise_modes: &'static [NoiseMode],
-    pub supports_paired_devices: bool,
-    pub detected_features: Vec<String>,
-    pub probe_errors: Vec<String>,
-    pub paired_devices: Result<Vec<crate::protocol::PairedDevice>, String>,
-    pub paired_device_controls_enabled: Result<bool, String>,
-    pub supports_equalizer: bool,
-    pub supports_custom_equalizer: bool,
-    pub custom_equalizers: Vec<CustomEqualizer>,
-    pub equalizer_preset: Option<u8>,
-    pub supports_spatial_audio: bool,
-    pub supports_head_tracking: bool,
-    pub spatial_audio_mode: Option<u8>,
-    pub supports_game_mode: bool,
-    pub game_mode_enabled: Option<bool>,
-    pub game_mode_feature_id: u8,
-    pub supports_bass_engine: bool,
-    pub bass_engine_enabled: Option<bool>,
-    pub bass_engine_level: Option<BassEngineLevel>,
-    pub supports_hi_res: bool,
-    pub hi_res_enabled: Option<bool>,
-    pub supports_touch_customization: bool,
-    pub key_functions: Vec<KeyFunction>,
-    pub noise_cycle: NoiseCycleState,
-    pub is_finding_earbuds: bool,
-    pub supports_prompt_volume: bool,
-    pub prompt_volume: Option<u8>,
-    pub supports_head_motion: bool,
-    pub head_motion_type: Option<u8>,
-    pub supports_fit_detection: bool,
-    pub supports_find_device: bool,
-    pub supports_sleep_detection: bool,
-    pub in_ear_detection_enabled: Option<bool>,
-    pub sleep_detection_enabled: Option<bool>,
-    pub dual_device_enabled: Option<bool>,
-    pub preferred_device: Option<PairedDeviceAddress>,
-    #[allow(dead_code)]
-    pub capabilities: Vec<u8>,
-}
-
-pub type DeviceSnapshot = OppoDeviceSnapshot;
+pub use crate::bluetooth::snapshot::{
+    ControlsSnapshot, DeviceIdentitySnapshot, DeviceSnapshot, DualDeviceSnapshot, NoiseSnapshot,
+    ProbeDiagnostics, SoundSnapshot, WearSnapshot,
+};
+pub type OppoDeviceSnapshot = DeviceSnapshot;
 
 pub fn spawn_oppo_monitor(
     device: DeviceChoice,
@@ -174,130 +124,43 @@ fn monitor_device(
     let _ = updates.send(UiUpdate::Connected {
         device: device.clone(),
     });
-    let _ = updates.send(UiUpdate::NoiseControlsEnabled(
-        !snapshot.read_only && !snapshot.noise_modes.is_empty(),
-    ));
-    let _ = updates.send(UiUpdate::NoiseModeOptions {
-        indices: snapshot.noise_mode_indices.clone(),
-        note: snapshot.noise_mode_support_note.clone(),
-        modes: snapshot.noise_modes.to_vec(),
-    });
-    let _ = updates.send(UiUpdate::ProductId {
-        product_id: snapshot.product_id,
-        color_id: snapshot.color_id,
-    });
-    let _ = updates.send(UiUpdate::Firmware(snapshot.firmware));
-    let _ = updates.send(UiUpdate::Wear(snapshot.wear.clone()));
-    let _ = updates.send(UiUpdate::Battery(snapshot.battery));
-    let _ = updates.send(UiUpdate::PairedDeviceControlsEnabled(
-        snapshot.paired_device_controls_enabled.clone(),
-    ));
-    let presets = compatibility::equalizer_presets_for_product(snapshot.product_id).to_vec();
-    let _ = updates.send(UiUpdate::SoundFeatures {
-        supports_equalizer: snapshot.supports_equalizer,
-        supports_custom_equalizer: snapshot.supports_custom_equalizer,
-        supports_spatial_audio: snapshot.supports_spatial_audio,
-        supports_head_tracking: snapshot.supports_head_tracking,
-        supports_game_mode: snapshot.supports_game_mode,
-        supports_bass_engine: snapshot.supports_bass_engine,
-        supports_hi_res: snapshot.supports_hi_res,
-        supports_audio_codec: false,
-        available_codecs: vec![],
-        presets,
-    });
-    if snapshot.supports_custom_equalizer {
-        let _ = updates.send(UiUpdate::CustomEqualizers(
-            snapshot.custom_equalizers.clone(),
-        ));
-    }
-    if let Some(preset) = snapshot.equalizer_preset {
-        let _ = updates.send(UiUpdate::Equalizer(preset));
-    }
-    if let Some(mode) = snapshot.spatial_audio_mode {
-        let _ = updates.send(UiUpdate::SpatialAudio(mode));
-    }
-    if let Some(enabled) = snapshot.game_mode_enabled {
-        let _ = updates.send(UiUpdate::GameMode(enabled));
-    }
-    if let Some(enabled) = snapshot.bass_engine_enabled {
-        let _ = updates.send(UiUpdate::BassEngineEnabled(enabled));
-    }
-    if let Some(level) = snapshot.bass_engine_level {
-        let _ = updates.send(UiUpdate::BassEngineLevel(level));
-    }
-    if let Some(enabled) = snapshot.hi_res_enabled {
-        let _ = updates.send(UiUpdate::HiRes(enabled));
-    }
-    let mut paired_devices = snapshot.paired_devices.clone();
-    let _ = updates.send(UiUpdate::PairedDevices(snapshot.paired_devices));
-    if let Some(mode) = snapshot.noise_mode {
-        let _ = updates.send(UiUpdate::NoiseMode(mode));
-    }
-    let gesture_rows = compatibility::gesture_rows_for_product(snapshot.product_id).to_vec();
-    let _ = updates.send(UiUpdate::ControlsFeatures {
-        supports_touch_customization: snapshot.supports_touch_customization,
-        supports_dual_device: snapshot.supports_paired_devices,
-        supports_wear_detection: snapshot.supports_wear_detection,
-        supports_sleep_detection: snapshot.supports_sleep_detection,
-        supports_head_motion: snapshot.supports_head_motion,
-        supports_find_device: snapshot.supports_find_device,
-        supports_fit_detection: snapshot.supports_fit_detection,
-        supports_prompt_volume: snapshot.supports_prompt_volume,
-        gesture_rows,
-    });
-    if !snapshot.key_functions.is_empty() {
-        let _ = updates.send(UiUpdate::KeyFunctions(snapshot.key_functions.clone()));
-    }
-    let _ = updates.send(UiUpdate::NoiseCycle(snapshot.noise_cycle));
-    let _ = updates.send(UiUpdate::IsFindingEarbuds(snapshot.is_finding_earbuds));
-    if let Some(vol) = snapshot.prompt_volume {
-        let _ = updates.send(UiUpdate::PromptVolume(vol));
-    }
-    if let Some(motion) = snapshot.head_motion_type {
-        let _ = updates.send(UiUpdate::HeadMotionType(motion));
-    }
-    if let Some(enabled) = snapshot.in_ear_detection_enabled {
-        let _ = updates.send(UiUpdate::InEarDetectionEnabled(enabled));
-    }
-    if let Some(enabled) = snapshot.sleep_detection_enabled {
-        let _ = updates.send(UiUpdate::SleepDetectionEnabled(enabled));
-    }
-    if let Some(enabled) = snapshot.dual_device_enabled {
-        let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(enabled));
-    }
-    let _ = updates.send(UiUpdate::PreferredDevice(snapshot.preferred_device));
+    let _ = updates.send(UiUpdate::InitialSession(Box::new(snapshot.clone())));
 
-    let _ = updates.send(UiUpdate::Status(if snapshot.read_only {
-        let detected = if snapshot.detected_features.is_empty() {
+    let _ = updates.send(UiUpdate::Status(if snapshot.identity.read_only {
+        let detected = if snapshot.diagnostics.detected_features.is_empty() {
             crate::t!("probe-no-queries-confirmed")
         } else {
             crate::t!(
                 "probe-detected-read-only",
-                snapshot.detected_features.join(list_separator())
+                snapshot
+                    .diagnostics
+                    .detected_features
+                    .join(list_separator())
             )
         };
-        if snapshot.probe_errors.is_empty() {
+        if snapshot.diagnostics.probe_errors.is_empty() {
             crate::t!("channel-connected-read-only", detected)
         } else {
             crate::t!(
                 "channel-connected-read-only-with-errors",
                 detected,
-                snapshot.probe_errors.join(clause_separator())
+                snapshot.diagnostics.probe_errors.join(clause_separator())
             )
         }
     } else {
         crate::t!("channel-connected-syncing")
     }));
-    let mut current_wear = snapshot.wear.clone();
-    let mut current_custom_equalizers = snapshot.custom_equalizers.clone();
-    let mut current_key_functions = snapshot.key_functions.clone();
-    let mut current_noise_cycle = snapshot.noise_cycle;
-    let mut current_prompt_volume = snapshot.prompt_volume;
-    let mut current_head_motion = snapshot.head_motion_type;
-    let mut current_in_ear_detection = snapshot.in_ear_detection_enabled;
-    let mut current_sleep_detection = snapshot.sleep_detection_enabled;
-    let mut current_dual_device = snapshot.dual_device_enabled;
-    let mut current_preferred_device = snapshot.preferred_device;
+    let mut current_wear = snapshot.wear.wear.clone();
+    let mut current_custom_equalizers = snapshot.sound.custom_equalizers.clone();
+    let mut current_key_functions = snapshot.controls.key_functions.clone();
+    let mut current_noise_cycle = snapshot.controls.noise_cycle;
+    let mut current_prompt_volume = snapshot.controls.prompt_volume;
+    let mut current_head_motion = snapshot.controls.head_motion_type;
+    let mut current_in_ear_detection = snapshot.controls.in_ear_detection_enabled;
+    let mut current_sleep_detection = snapshot.controls.sleep_detection_enabled;
+    let mut current_dual_device = snapshot.dual_device.dual_device_enabled;
+    let mut current_preferred_device = snapshot.dual_device.preferred_device;
+    let mut paired_devices = snapshot.dual_device.paired_devices.clone();
 
     loop {
         match commands.try_recv() {
@@ -306,7 +169,7 @@ fn monitor_device(
                 return Ok(());
             }
             Ok(WorkerCommand::SetEqualizer(preset)) => {
-                if snapshot.read_only || !snapshot.supports_equalizer {
+                if snapshot.identity.read_only || !snapshot.sound.supports_equalizer {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Equalizer,
                         message: crate::t!("equalizer-blocked"),
@@ -328,7 +191,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SelectCustomEqualizer(id)) => {
-                if snapshot.read_only || !snapshot.supports_custom_equalizer {
+                if snapshot.identity.read_only || !snapshot.sound.supports_custom_equalizer {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Equalizer,
                         message: crate::t!("equalizer-custom-blocked"),
@@ -368,7 +231,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::AddCustomEqualizer { name, bands }) => {
-                if snapshot.read_only || !snapshot.supports_custom_equalizer {
+                if snapshot.identity.read_only || !snapshot.sound.supports_custom_equalizer {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Equalizer,
                         message: crate::t!("equalizer-custom-blocked"),
@@ -398,7 +261,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SaveCustomEqualizer { id, name, bands }) => {
-                if snapshot.read_only || !snapshot.supports_custom_equalizer {
+                if snapshot.identity.read_only || !snapshot.sound.supports_custom_equalizer {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Equalizer,
                         message: crate::t!("equalizer-custom-blocked"),
@@ -434,7 +297,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::DeleteCustomEqualizer(id)) => {
-                if snapshot.read_only || !snapshot.supports_custom_equalizer {
+                if snapshot.identity.read_only || !snapshot.sound.supports_custom_equalizer {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Equalizer,
                         message: crate::t!("equalizer-custom-blocked"),
@@ -471,7 +334,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetSpatialAudio(mode)) => {
-                if snapshot.read_only || !snapshot.supports_spatial_audio {
+                if snapshot.identity.read_only || !snapshot.sound.supports_spatial_audio {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::SpatialAudio,
                         message: crate::t!("spatial-audio-blocked"),
@@ -493,7 +356,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetGameMode(enabled)) => {
-                if snapshot.read_only || !snapshot.supports_game_mode {
+                if snapshot.identity.read_only || !snapshot.sound.supports_game_mode {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::GameMode,
                         message: crate::t!("game-mode-blocked"),
@@ -504,7 +367,7 @@ fn monitor_device(
                 match set_game_mode(
                     &mut stream,
                     &mut decoder,
-                    snapshot.game_mode_feature_id,
+                    snapshot.sound.game_mode_feature_id,
                     enabled,
                     updates,
                 ) {
@@ -525,7 +388,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetBassEngineEnabled(enabled)) => {
-                if snapshot.read_only || !snapshot.supports_bass_engine {
+                if snapshot.identity.read_only || !snapshot.sound.supports_bass_engine {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::BassEngine,
                         message: crate::t!("bass-engine-blocked"),
@@ -535,7 +398,7 @@ fn monitor_device(
                 let _ = updates.send(UiUpdate::Status(crate::t!("bass-engine-waiting-confirm")));
                 match set_bass_engine_enabled(&mut stream, &mut decoder, enabled, updates) {
                     Ok(actual) => {
-                        snapshot.bass_engine_enabled = Some(actual);
+                        snapshot.sound.bass_engine_enabled = Some(actual);
                         let _ = updates.send(UiUpdate::BassEngineEnabled(actual));
                         let _ = updates.send(UiUpdate::Status(if actual {
                             crate::t!("bass-engine-state-enabled")
@@ -552,7 +415,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetBassEngineLevel(level)) => {
-                if snapshot.read_only || !snapshot.supports_bass_engine {
+                if snapshot.identity.read_only || !snapshot.sound.supports_bass_engine {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::BassEngine,
                         message: crate::t!("bass-engine-level-blocked"),
@@ -560,6 +423,7 @@ fn monitor_device(
                     continue;
                 }
                 let (min, max) = snapshot
+                    .sound
                     .bass_engine_level
                     .as_ref()
                     .map(|b| (b.min, b.max))
@@ -569,7 +433,7 @@ fn monitor_device(
                 )));
                 match set_bass_engine_level(&mut stream, &mut decoder, min, max, level, updates) {
                     Ok(actual) => {
-                        snapshot.bass_engine_level = Some(actual);
+                        snapshot.sound.bass_engine_level = Some(actual);
                         let _ = updates.send(UiUpdate::BassEngineLevel(actual));
                         let _ = updates.send(UiUpdate::Status(crate::t!(
                             "bass-engine-level-applied",
@@ -585,7 +449,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetHiRes(enabled)) => {
-                if snapshot.read_only || !snapshot.supports_hi_res {
+                if snapshot.identity.read_only || !snapshot.sound.supports_hi_res {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::HiRes,
                         message: crate::t!("hi-res-blocked"),
@@ -595,7 +459,7 @@ fn monitor_device(
                 let _ = updates.send(UiUpdate::Status(crate::t!("hi-res-waiting-confirm")));
                 match set_hi_res(&mut stream, &mut decoder, enabled, updates) {
                     Ok(actual) => {
-                        snapshot.hi_res_enabled = Some(actual);
+                        snapshot.sound.hi_res_enabled = Some(actual);
                         let _ = updates.send(UiUpdate::HiRes(actual));
                         let _ = updates.send(UiUpdate::Status(if actual {
                             crate::t!("hi-res-state-enabled")
@@ -612,7 +476,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetNoiseMode(protocol_index)) => {
-                if snapshot.read_only {
+                if snapshot.identity.read_only {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::NoiseMode,
                         message: crate::t!("noise-mode-blocked"),
@@ -623,10 +487,10 @@ fn monitor_device(
                 let result = set_noise_mode(
                     &mut stream,
                     &mut decoder,
-                    &snapshot.noise_mode_indices,
-                    snapshot.noise_modes,
+                    &snapshot.noise.supported_indices,
+                    snapshot.noise.modes,
                     &mut current_wear,
-                    snapshot.supports_wear_detection,
+                    snapshot.wear.supports_wear_detection,
                     protocol_index,
                     updates,
                 );
@@ -645,11 +509,11 @@ fn monitor_device(
                     }
                 }
                 let _ = updates.send(UiUpdate::NoiseControlsEnabled(
-                    !snapshot.read_only && !snapshot.noise_modes.is_empty(),
+                    !snapshot.identity.read_only && !snapshot.noise.modes.is_empty(),
                 ));
             }
             Ok(WorkerCommand::SetPairedDevice { address, action }) => {
-                if snapshot.read_only || !snapshot.supports_paired_devices {
+                if snapshot.identity.read_only || !snapshot.dual_device.supports_dual_device {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("dual-device-management-blocked"),
@@ -660,7 +524,7 @@ fn monitor_device(
                 let result = set_paired_device(
                     &mut stream,
                     &mut decoder,
-                    &snapshot.paired_device_controls_enabled,
+                    &snapshot.dual_device.controls_enabled,
                     &paired_devices,
                     address,
                     action,
@@ -698,7 +562,7 @@ fn monitor_device(
                 action,
                 function,
             }) => {
-                if snapshot.read_only || !snapshot.supports_touch_customization {
+                if snapshot.identity.read_only || !snapshot.controls.supports_touch_customization {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("controls-gesture-blocked"),
@@ -709,6 +573,7 @@ fn monitor_device(
                 let payload = encode_set_key_function(side, button, action, function);
                 match request(&mut stream, &mut decoder, 0x0401, 0, payload, Some(updates)) {
                     Ok(_) => {
+                        let mut updated = false;
                         if let Ok(res) = request(
                             &mut stream,
                             &mut decoder,
@@ -718,9 +583,30 @@ fn monitor_device(
                             Some(updates),
                         ) {
                             if let Ok(list) = parse_touch_controls_response(&res.payload) {
-                                current_key_functions = list.clone();
-                                let _ = updates.send(UiUpdate::KeyFunctions(list));
+                                if !list.is_empty() {
+                                    current_key_functions = list.clone();
+                                    let _ = updates.send(UiUpdate::KeyFunctions(list));
+                                    updated = true;
+                                }
                             }
+                        }
+                        if !updated {
+                            if let Some(existing) = current_key_functions.iter_mut().find(|k| {
+                                (k.side == side || k.side == EarSide::Both)
+                                    && k.button == button
+                                    && k.action == action
+                            }) {
+                                existing.function = function;
+                            } else {
+                                current_key_functions.push(KeyFunction {
+                                    side,
+                                    button,
+                                    action,
+                                    function,
+                                });
+                            }
+                            let _ =
+                                updates.send(UiUpdate::KeyFunctions(current_key_functions.clone()));
                         }
                         let _ =
                             updates.send(UiUpdate::Status(crate::t!("controls-gesture-updated")));
@@ -739,7 +625,7 @@ fn monitor_device(
                 mask,
                 is_shared,
             }) => {
-                if snapshot.read_only || snapshot.noise_modes.is_empty() {
+                if snapshot.identity.read_only || snapshot.noise.modes.is_empty() {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("controls-noise-cycle-blocked"),
@@ -790,7 +676,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::FindEarbuds(ring)) => {
-                if snapshot.read_only || !snapshot.supports_find_device {
+                if snapshot.identity.read_only || !snapshot.controls.supports_find_device {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("controls-find-blocked"),
@@ -800,7 +686,7 @@ fn monitor_device(
                 let payload = encode_find_earbuds(ring);
                 match request(&mut stream, &mut decoder, 0x0400, 0, payload, Some(updates)) {
                     Ok(_) => {
-                        snapshot.is_finding_earbuds = ring;
+                        snapshot.controls.is_finding_earbuds = ring;
                         let _ = updates.send(UiUpdate::IsFindingEarbuds(ring));
                         let _ = updates.send(UiUpdate::Status(if ring {
                             crate::t!("controls-find-ringing")
@@ -813,13 +699,14 @@ fn monitor_device(
                             domain: SettingDomain::Controls,
                             message: crate::t!("controls-find-failed", error),
                         });
-                        let _ =
-                            updates.send(UiUpdate::IsFindingEarbuds(snapshot.is_finding_earbuds));
+                        let _ = updates.send(UiUpdate::IsFindingEarbuds(
+                            snapshot.controls.is_finding_earbuds,
+                        ));
                     }
                 }
             }
             Ok(WorkerCommand::RunFitTest) => {
-                if snapshot.read_only || !snapshot.supports_fit_detection {
+                if snapshot.identity.read_only || !snapshot.controls.supports_fit_detection {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("controls-fit-test-blocked"),
@@ -852,7 +739,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetPromptVolume(volume)) => {
-                if snapshot.read_only || !snapshot.supports_prompt_volume {
+                if snapshot.identity.read_only || !snapshot.controls.supports_prompt_volume {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("controls-prompt-volume-blocked"),
@@ -886,7 +773,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetHeadMotionType(motion_type)) => {
-                if snapshot.read_only || !snapshot.supports_head_motion {
+                if snapshot.identity.read_only || !snapshot.controls.supports_head_motion {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("controls-head-motion-blocked"),
@@ -919,7 +806,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetDualDeviceConnection(enabled)) => {
-                if snapshot.read_only || !snapshot.supports_paired_devices {
+                if snapshot.identity.read_only || !snapshot.dual_device.supports_dual_device {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("dual-device-toggle-blocked"),
@@ -939,7 +826,7 @@ fn monitor_device(
                         ) {
                             if let Ok(actual) = parse_feature_flags_response(&res.payload, 17) {
                                 current_dual_device = Some(actual);
-                                snapshot.paired_device_controls_enabled = Ok(actual);
+                                snapshot.dual_device.controls_enabled = Ok(actual);
                                 let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(actual));
                                 let _ =
                                     updates.send(UiUpdate::PairedDeviceControlsEnabled(Ok(actual)));
@@ -960,7 +847,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetInEarDetection(enabled)) => {
-                if snapshot.read_only || !snapshot.supports_wear_detection {
+                if snapshot.identity.read_only || !snapshot.wear.supports_wear_detection {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("wear-detection-blocked"),
@@ -997,7 +884,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetSleepDetection(enabled)) => {
-                if snapshot.read_only || !snapshot.supports_sleep_detection {
+                if snapshot.identity.read_only || !snapshot.controls.supports_sleep_detection {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("controls-sleep-detection-blocked"),
@@ -1036,7 +923,7 @@ fn monitor_device(
                 }
             }
             Ok(WorkerCommand::SetPreferredDevice(addr)) => {
-                if snapshot.read_only || !snapshot.supports_paired_devices {
+                if snapshot.identity.read_only || !snapshot.dual_device.supports_dual_device {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("controls-preferred-device-blocked"),
@@ -1083,8 +970,8 @@ fn monitor_device(
                     .map_err(|error| crate::t!("protocol-frame-decode-failed", error))?;
                 for bytes in packets {
                     if let Ok(packet) = AppPacket::decode(&bytes) {
-                        if snapshot.read_only {
-                            if snapshot.is_known_model
+                        if snapshot.identity.read_only {
+                            if snapshot.identity.is_known_model
                                 && packet.command == 0x0204
                                 && matches!(packet.payload.first(), Some(1 | 2))
                             {
@@ -1222,65 +1109,89 @@ pub fn initialize_oppo_session<T: Read + Write>(
         let noise_mode_support_note = crate::t!("probe-read-only-controls-note", note.as_str());
         return Ok((
             DeviceSnapshot {
-                name: name.to_string(),
-                product_id,
-                color_id,
-                model,
-                is_known_model,
-                read_only: true,
+                identity: DeviceIdentitySnapshot {
+                    name: name.to_string(),
+                    product_id,
+                    color_id,
+                    model,
+                    is_known_model,
+                    read_only: true,
+                    firmware,
+                },
                 battery,
-                firmware,
-                wear,
-                supports_wear_detection: profile
-                    .is_some_and(|profile| profile.supports_wear_detection()),
-                noise_mode: None,
-                noise_mode_indices: Vec::new(),
-                noise_mode_support_note,
-                noise_modes: profile.map_or(&[], |profile| profile.noise_modes),
-                supports_paired_devices: profile
-                    .is_some_and(|profile| profile.supports_dual_device()),
-                detected_features,
-                probe_errors,
-                paired_devices: Err(note.clone()),
-                paired_device_controls_enabled: Err(note),
-                supports_equalizer: profile.is_some_and(|profile| profile.supports_equalizer()),
-                supports_custom_equalizer: profile
-                    .is_some_and(|profile| profile.supports_custom_equalizer()),
-                custom_equalizers: Vec::new(),
-                equalizer_preset: None,
-                supports_spatial_audio: profile
-                    .is_some_and(|profile| profile.supports_spatial_audio()),
-                supports_head_tracking: profile
-                    .is_some_and(|profile| profile.supports_head_tracking()),
-                spatial_audio_mode: None,
-                supports_game_mode: profile.is_some_and(|profile| profile.supports_game_mode()),
-                game_mode_enabled: None,
-                game_mode_feature_id: 0x06,
-                supports_bass_engine: profile.is_some_and(|profile| profile.supports_bass_engine()),
-                bass_engine_enabled: None,
-                bass_engine_level: None,
-                supports_hi_res: profile.is_some_and(|profile| profile.supports_hi_res()),
-                hi_res_enabled: None,
-                supports_touch_customization: profile
-                    .is_some_and(|profile| profile.supports_touch_customization()),
-                key_functions: Vec::new(),
-                noise_cycle: NoiseCycleState::default(),
-                is_finding_earbuds: false,
-                supports_prompt_volume: profile
-                    .is_some_and(|profile| profile.supports_prompt_volume()),
-                prompt_volume: None,
-                supports_head_motion: profile.is_some_and(|profile| profile.supports_head_motion()),
-                head_motion_type: None,
-                supports_fit_detection: profile
-                    .is_some_and(|profile| profile.supports_fit_detection()),
-                supports_find_device: profile.is_some_and(|profile| profile.supports_find_device()),
-                supports_sleep_detection: profile
-                    .is_some_and(|profile| profile.supports_sleep_detection()),
-                in_ear_detection_enabled: None,
-                sleep_detection_enabled: None,
-                dual_device_enabled: None,
-                preferred_device: None,
-                capabilities,
+                wear: WearSnapshot {
+                    wear,
+                    supports_wear_detection: profile
+                        .is_some_and(|profile| profile.supports_wear_detection()),
+                },
+                noise: NoiseSnapshot {
+                    current_mode: None,
+                    supported_indices: Vec::new(),
+                    modes: profile.map_or(&[], |profile| profile.noise_modes),
+                    support_note: noise_mode_support_note,
+                    anc_sub: 2,
+                    transp_sub: 0,
+                },
+                sound: SoundSnapshot {
+                    supports_equalizer: profile.is_some_and(|profile| profile.supports_equalizer()),
+                    supports_custom_equalizer: profile
+                        .is_some_and(|profile| profile.supports_custom_equalizer()),
+                    equalizer_preset: None,
+                    presets: Vec::new(),
+                    custom_equalizers: Vec::new(),
+                    supports_spatial_audio: profile
+                        .is_some_and(|profile| profile.supports_spatial_audio()),
+                    supports_head_tracking: profile
+                        .is_some_and(|profile| profile.supports_head_tracking()),
+                    spatial_audio_mode: None,
+                    supports_game_mode: profile.is_some_and(|profile| profile.supports_game_mode()),
+                    game_mode_enabled: None,
+                    game_mode_feature_id: 0x06,
+                    supports_bass_engine: profile
+                        .is_some_and(|profile| profile.supports_bass_engine()),
+                    bass_engine_enabled: None,
+                    bass_engine_level: None,
+                    supports_hi_res: profile.is_some_and(|profile| profile.supports_hi_res()),
+                    hi_res_enabled: None,
+                    supports_audio_codec: false,
+                    audio_codec: None,
+                    available_codecs: Vec::new(),
+                },
+                controls: ControlsSnapshot {
+                    supports_touch_customization: profile
+                        .is_some_and(|profile| profile.supports_touch_customization()),
+                    supports_sleep_detection: profile
+                        .is_some_and(|profile| profile.supports_sleep_detection()),
+                    supports_head_motion: profile
+                        .is_some_and(|profile| profile.supports_head_motion()),
+                    supports_find_device: profile
+                        .is_some_and(|profile| profile.supports_find_device()),
+                    supports_fit_detection: profile
+                        .is_some_and(|profile| profile.supports_fit_detection()),
+                    supports_prompt_volume: profile
+                        .is_some_and(|profile| profile.supports_prompt_volume()),
+                    key_functions: Vec::new(),
+                    gesture_rows: Vec::new(),
+                    noise_cycle: NoiseCycleState::default(),
+                    prompt_volume: None,
+                    head_motion_type: None,
+                    in_ear_detection_enabled: None,
+                    sleep_detection_enabled: None,
+                    is_finding_earbuds: false,
+                },
+                dual_device: DualDeviceSnapshot {
+                    supports_dual_device: profile
+                        .is_some_and(|profile| profile.supports_dual_device()),
+                    dual_device_enabled: None,
+                    preferred_device: None,
+                    paired_devices: Err(note.clone()),
+                    controls_enabled: Err(note),
+                },
+                diagnostics: ProbeDiagnostics {
+                    detected_features,
+                    probe_errors,
+                    capabilities,
+                },
             },
             decoder,
         ));
@@ -1555,58 +1466,82 @@ pub fn initialize_oppo_session<T: Read + Write>(
         let _ = request(stream, &mut decoder, 0x0419, 0xf0, vec![0x00], updates);
     }
 
+    let presets = compatibility::equalizer_presets_for_product(product_id).to_vec();
+    let gesture_rows = compatibility::gesture_rows_for_product(product_id).to_vec();
+
     Ok((
         DeviceSnapshot {
-            name: name.to_string(),
-            product_id,
-            color_id,
-            model: profile.model.to_string(),
-            is_known_model: true,
-            read_only: false,
+            identity: DeviceIdentitySnapshot {
+                name: name.to_string(),
+                product_id,
+                color_id,
+                model: profile.model.to_string(),
+                is_known_model: true,
+                read_only: false,
+                firmware,
+            },
             battery,
-            firmware,
-            wear,
-            supports_wear_detection: profile.supports_wear_detection(),
-            noise_mode,
-            noise_mode_indices,
-            noise_mode_support_note,
-            noise_modes: profile.noise_modes,
-            supports_paired_devices,
-            detected_features: Vec::new(),
-            probe_errors: Vec::new(),
-            paired_devices,
-            paired_device_controls_enabled,
-            supports_equalizer,
-            supports_custom_equalizer,
-            custom_equalizers,
-            equalizer_preset,
-            supports_spatial_audio,
-            supports_head_tracking,
-            spatial_audio_mode,
-            supports_game_mode,
-            game_mode_enabled,
-            game_mode_feature_id,
-            supports_bass_engine,
-            bass_engine_enabled,
-            bass_engine_level,
-            supports_hi_res,
-            hi_res_enabled,
-            supports_touch_customization,
-            key_functions,
-            noise_cycle,
-            is_finding_earbuds: false,
-            supports_prompt_volume,
-            prompt_volume,
-            supports_head_motion,
-            head_motion_type,
-            supports_fit_detection: profile.supports_fit_detection(),
-            supports_find_device: profile.supports_find_device(),
-            supports_sleep_detection: profile.supports_sleep_detection(),
-            in_ear_detection_enabled,
-            sleep_detection_enabled,
-            dual_device_enabled,
-            preferred_device,
-            capabilities,
+            wear: WearSnapshot {
+                wear,
+                supports_wear_detection: profile.supports_wear_detection(),
+            },
+            noise: NoiseSnapshot {
+                current_mode: noise_mode,
+                supported_indices: noise_mode_indices,
+                modes: profile.noise_modes,
+                support_note: noise_mode_support_note,
+                anc_sub: 2,
+                transp_sub: 0,
+            },
+            sound: SoundSnapshot {
+                supports_equalizer,
+                supports_custom_equalizer,
+                equalizer_preset,
+                presets,
+                custom_equalizers,
+                supports_spatial_audio,
+                supports_head_tracking,
+                spatial_audio_mode,
+                supports_game_mode,
+                game_mode_enabled,
+                game_mode_feature_id,
+                supports_bass_engine,
+                bass_engine_enabled,
+                bass_engine_level,
+                supports_hi_res,
+                hi_res_enabled,
+                supports_audio_codec: false,
+                audio_codec: None,
+                available_codecs: Vec::new(),
+            },
+            controls: ControlsSnapshot {
+                supports_touch_customization,
+                supports_sleep_detection: profile.supports_sleep_detection(),
+                supports_head_motion,
+                supports_find_device: profile.supports_find_device(),
+                supports_fit_detection: profile.supports_fit_detection(),
+                supports_prompt_volume,
+                key_functions,
+                gesture_rows,
+                noise_cycle,
+                prompt_volume,
+                head_motion_type,
+                in_ear_detection_enabled,
+                sleep_detection_enabled,
+                is_finding_earbuds: false,
+            },
+            dual_device: DualDeviceSnapshot {
+                supports_dual_device: supports_paired_devices,
+                dual_device_enabled,
+                preferred_device,
+                paired_devices,
+                controls_enabled: paired_device_controls_enabled,
+            },
+            diagnostics: ProbeDiagnostics {
+                detected_features: Vec::new(),
+                probe_errors: Vec::new(),
+                capabilities,
+            },
         },
         decoder,
     ))

@@ -177,6 +177,40 @@ impl DeviceController {
 
     pub fn on_update(&self, update: &UiUpdate) -> bool {
         match update {
+            UiUpdate::InitialSession(snapshot) => {
+                self.component.render_connected(&snapshot.identity.name);
+                self.component
+                    .device
+                    .name
+                    .set_text(&snapshot.identity.model);
+                self.component.device.product_id.set_text(&crate::t!(
+                    "device-product-id",
+                    format!("{:06X}", snapshot.identity.product_id)
+                ));
+                self.component.render_firmware(&snapshot.identity.firmware);
+                self.component.render_battery(&snapshot.battery, false);
+                self.component
+                    .render_wear(&snapshot.wear.wear, snapshot.wear.supports_wear_detection);
+                self.component
+                    .paired
+                    .set_visible(snapshot.dual_device.supports_dual_device);
+
+                let mut sorted = snapshot.dual_device.paired_devices.clone();
+                if let Ok(devs) = &mut sorted {
+                    devs.sort_by_key(|d| (!d.connected, !d.is_current_host));
+                    *self.cached_paired_devices.borrow_mut() = devs.clone();
+                }
+                *self.paired_devices.borrow_mut() = sorted;
+                self.render_paired();
+
+                crate::resources::spawn_artwork_fetch(
+                    snapshot.identity.product_id,
+                    snapshot.identity.color_id,
+                    self.context.updates_tx.clone(),
+                );
+                self.render_candidates();
+                true
+            }
             UiUpdate::Status(message) => {
                 self.component
                     .device

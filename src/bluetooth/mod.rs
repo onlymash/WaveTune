@@ -20,6 +20,7 @@ use bluer::Address;
 pub mod brands;
 pub(super) mod discovery;
 mod probe;
+pub mod snapshot;
 #[cfg(test)]
 mod tests;
 pub(super) mod transport;
@@ -29,11 +30,11 @@ pub use crate::app::events::{UiUpdate, WorkerCommand};
 pub use brands::oppo as session;
 #[allow(unused_imports)]
 pub use brands::oppo::{
-    DeviceSnapshot, OppoDeviceSnapshot, initialize_oppo_session, initialize_session,
-    spawn_oppo_monitor,
+    OppoDeviceSnapshot, initialize_oppo_session, initialize_session, spawn_oppo_monitor,
 };
 pub use discovery::spawn_discovery;
 pub use probe::probe;
+pub use snapshot::*;
 
 pub fn spawn_monitor(
     device: DeviceChoice,

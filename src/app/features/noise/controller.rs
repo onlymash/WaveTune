@@ -82,6 +82,12 @@ impl NoiseController {
 
     pub fn on_update(&self, update: &UiUpdate) -> bool {
         match update {
+            UiUpdate::InitialSession(snapshot) => {
+                let supports_noise = !snapshot.noise.modes.is_empty();
+                self.component.widgets.set_visible(supports_noise);
+                self.component.render(&self.context.session_state.borrow());
+                true
+            }
             UiUpdate::ProductId { product_id, .. } => {
                 let profile = crate::compatibility::profile_for_product_id(*product_id);
                 let supports_noise = profile.is_some_and(|p| p.supports_noise_control());

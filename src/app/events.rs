@@ -16,7 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use crate::{
-    bluetooth::DeviceChoice,
+    bluetooth::{DeviceChoice, DeviceSnapshot},
     compatibility::{EqualizerPreset, GestureRow, NoiseMode},
     protocol::{
         BassEngineLevel, BatteryState, CustomEqualizer, EarSide, FirmwareVersions, FitTestResult,
@@ -38,6 +38,7 @@ pub enum SettingDomain {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum UiUpdate {
     Status(String),
     SettingError {
@@ -51,6 +52,7 @@ pub enum UiUpdate {
     Connected {
         device: DeviceChoice,
     },
+    InitialSession(Box<DeviceSnapshot>),
     Battery(BatteryState),
     PairedDevices(Result<Vec<PairedDevice>, String>),
     PairedDeviceControlsEnabled(Result<bool, String>),

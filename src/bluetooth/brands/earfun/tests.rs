@@ -170,26 +170,26 @@ mod tests {
             initialize_earfun_session(&mut client, "EarFun Air Pro 4", None, None, None)
                 .expect("session initialization should succeed");
 
-        assert_eq!(snapshot.model, "EarFun Air Pro 4");
-        assert_eq!(snapshot.firmware.left.as_deref(), Some("0.4.1"));
+        assert_eq!(snapshot.identity.model, "EarFun Air Pro 4");
+        assert_eq!(snapshot.identity.firmware.left.as_deref(), Some("0.4.1"));
         assert_eq!(snapshot.battery.left.unwrap().percentage, 90);
         assert_eq!(snapshot.battery.right.unwrap().percentage, 100);
         assert_eq!(snapshot.battery.case.unwrap().percentage, 80);
-        assert_eq!(snapshot.noise_mode, Some(3)); // AI Environment Adaptive
-        assert_eq!(snapshot.game_mode_enabled, Some(true));
-        assert_eq!(snapshot.in_ear_detection_enabled, Some(true));
-        assert_eq!(snapshot.dual_device_enabled, Some(true));
-        assert!(snapshot.supports_paired_devices);
-        assert!(snapshot.supports_audio_codec);
-        assert_eq!(snapshot.audio_codec, Some(19));
+        assert_eq!(snapshot.noise.current_mode, Some(3)); // AI Environment Adaptive
+        assert_eq!(snapshot.sound.game_mode_enabled, Some(true));
+        assert_eq!(snapshot.controls.in_ear_detection_enabled, Some(true));
+        assert_eq!(snapshot.dual_device.dual_device_enabled, Some(true));
+        assert!(snapshot.dual_device.supports_dual_device);
+        assert!(snapshot.sound.supports_audio_codec);
+        assert_eq!(snapshot.sound.audio_codec, Some(19));
 
-        let devs = snapshot.paired_devices.unwrap();
+        let devs = snapshot.dual_device.paired_devices.unwrap();
         assert_eq!(devs.len(), 2);
         assert_eq!(devs[0].name, "PC-Work");
         assert!(devs[0].connected);
         assert_eq!(devs[1].name, "Phone");
         assert!(!devs[1].connected);
-        assert!(snapshot.paired_device_controls_enabled.is_ok());
+        assert!(snapshot.dual_device.controls_enabled.is_ok());
 
         device_thread.join().unwrap();
     }
@@ -268,7 +268,7 @@ mod tests {
         assert_eq!(snapshot.battery.right.unwrap().percentage, 95);
         // Case battery reporting 0xFF (255) must be parsed as None (unavailable/unreported), not 255%
         assert!(snapshot.battery.case.is_none());
-        assert_eq!(snapshot.audio_codec, Some(8));
+        assert_eq!(snapshot.sound.audio_codec, Some(8));
 
         device_thread.join().unwrap();
     }
@@ -422,17 +422,17 @@ mod tests {
             initialize_earfun_session(&mut client, "Custom Air S Name", None, None, None)
                 .expect("Air S session initialization should succeed");
 
-        assert_eq!(snapshot.model, "EarFun Air S");
-        assert_eq!(snapshot.product_id, EARFUN_AIR_S_PRODUCT_ID);
-        assert_eq!(snapshot.firmware.left.as_deref(), Some("0.1.2"));
+        assert_eq!(snapshot.identity.model, "EarFun Air S");
+        assert_eq!(snapshot.identity.product_id, EARFUN_AIR_S_PRODUCT_ID);
+        assert_eq!(snapshot.identity.firmware.left.as_deref(), Some("0.1.2"));
         assert_eq!(snapshot.battery.left.unwrap().percentage, 80);
         assert_eq!(snapshot.battery.right.unwrap().percentage, 85);
         assert!(snapshot.battery.case.is_none());
-        assert_eq!(snapshot.noise_mode, Some(1)); // Standard ANC
-        assert_eq!(snapshot.noise_modes.len(), 3);
-        assert!(!snapshot.supports_wear_detection);
-        assert!(snapshot.game_mode_enabled.unwrap());
-        assert!(snapshot.dual_device_enabled.unwrap());
+        assert_eq!(snapshot.noise.current_mode, Some(1)); // Standard ANC
+        assert_eq!(snapshot.noise.modes.len(), 3);
+        assert!(!snapshot.wear.supports_wear_detection);
+        assert!(snapshot.sound.game_mode_enabled.unwrap());
+        assert!(snapshot.dual_device.dual_device_enabled.unwrap());
 
         device_thread.join().unwrap();
     }
@@ -509,16 +509,16 @@ mod tests {
             initialize_earfun_session(&mut client, "My Renamed Headset", None, None, None)
                 .expect("Free Pro 3 session initialization should succeed");
 
-        assert_eq!(snapshot.model, "EarFun Free Pro 3");
-        assert_eq!(snapshot.product_id, EARFUN_FREE_PRO_3_PRODUCT_ID);
+        assert_eq!(snapshot.identity.model, "EarFun Free Pro 3");
+        assert_eq!(snapshot.identity.product_id, EARFUN_FREE_PRO_3_PRODUCT_ID);
         assert_eq!(snapshot.battery.case.unwrap().percentage, 90);
-        assert_eq!(snapshot.noise_mode, Some(4)); // Strong ANC
-        assert_eq!(snapshot.noise_modes.len(), 10);
-        assert!(!snapshot.supports_wear_detection);
-        assert!(!snapshot.game_mode_enabled.unwrap());
-        assert!(snapshot.dual_device_enabled.unwrap());
-        assert!(snapshot.supports_audio_codec);
-        assert_eq!(snapshot.audio_codec, Some(3));
+        assert_eq!(snapshot.noise.current_mode, Some(4)); // Strong ANC
+        assert_eq!(snapshot.noise.modes.len(), 10);
+        assert!(!snapshot.wear.supports_wear_detection);
+        assert!(!snapshot.sound.game_mode_enabled.unwrap());
+        assert!(snapshot.dual_device.dual_device_enabled.unwrap());
+        assert!(snapshot.sound.supports_audio_codec);
+        assert_eq!(snapshot.sound.audio_codec, Some(3));
 
         device_thread.join().unwrap();
     }
@@ -560,17 +560,17 @@ mod tests {
             initialize_earfun_session(&mut client, "Generic EarFun", None, None, None)
                 .expect("Unknown model session initialization should succeed in read-only mode");
 
-        assert_eq!(snapshot.model, crate::t!("device-unknown-model"));
-        assert!(!snapshot.is_known_model);
-        assert!(snapshot.read_only);
+        assert_eq!(snapshot.identity.model, crate::t!("device-unknown-model"));
+        assert!(!snapshot.identity.is_known_model);
+        assert!(snapshot.identity.read_only);
         assert_eq!(snapshot.battery.left.unwrap().percentage, 50);
         assert_eq!(snapshot.battery.right.unwrap().percentage, 50);
         assert_eq!(snapshot.battery.case.unwrap().percentage, 70);
-        assert!(snapshot.noise_mode.is_none());
-        assert!(!snapshot.supports_wear_detection);
-        assert!(!snapshot.supports_dual_device);
-        assert!(!snapshot.supports_game_mode);
-        assert!(!snapshot.supports_equalizer);
+        assert!(snapshot.noise.current_mode.is_none());
+        assert!(!snapshot.wear.supports_wear_detection);
+        assert!(!snapshot.dual_device.supports_dual_device);
+        assert!(!snapshot.sound.supports_game_mode);
+        assert!(!snapshot.sound.supports_equalizer);
 
         device_thread.join().unwrap();
     }

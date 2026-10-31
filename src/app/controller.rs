@@ -136,12 +136,19 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
     // Event loop for UI updates
     gtk::glib::spawn_future_local(async move {
         while let Some(update) = async_rx.recv().await {
+            if let UiUpdate::InitialSession(snapshot) = &update {
+                session_state.borrow_mut().apply_initial_snapshot(snapshot);
+            }
+
             let _ = device_controller.on_update(&update);
             let _ = noise_controller.on_update(&update);
             let _ = sound_controller.on_update(&update);
             let _ = controls_controller.on_update(&update);
 
             match &update {
+                UiUpdate::InitialSession(..) => {
+                    noise_controller.render(&session_state.borrow());
+                }
                 UiUpdate::Connected { .. } | UiUpdate::Finished => {
                     noise_controller.render(&session_state.borrow());
                     sound_controller.reset();

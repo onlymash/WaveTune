@@ -101,7 +101,11 @@ impl ControlsController {
             .widgets
             .gestures
             .connect_gesture_selected(move |row_def, func_id, combo| {
-                let side = selected_ear.get();
+                let side = if row_def.both_ears {
+                    EarSide::Both
+                } else {
+                    selected_ear.get()
+                };
                 let button = row_def.button;
                 let action = row_def.action;
                 let function = func_id;
@@ -437,6 +441,32 @@ impl ControlsController {
 
     pub fn on_update(&self, update: &UiUpdate) -> bool {
         match update {
+            UiUpdate::InitialSession(snapshot) => {
+                self.render_features();
+                let st = self.context.session_state.borrow();
+                self.component.render_key_functions(
+                    &st.controls.key_functions,
+                    self.selected_ear.get(),
+                    &st.controls.gesture_rows,
+                );
+                self.component
+                    .render_noise_cycle(st.controls.noise_cycle, self.selected_ear.get());
+                self.component
+                    .render_dual_device(st.dual_device.current_dual_device);
+                self.component.render_in_ear(st.controls.in_ear_detection);
+                self.component.render_sleep(st.controls.sleep_detection);
+                self.component
+                    .render_prompt_volume(st.controls.prompt_volume);
+                self.component.render_head_motion(st.controls.head_motion);
+                self.component.render_preferred_devices(
+                    st.controls.preferred_device,
+                    &self.cached_paired_devices.borrow(),
+                );
+                if !snapshot.identity.read_only {
+                    self.component.re_enable_controls();
+                }
+                true
+            }
             UiUpdate::ProductId { product_id, .. } => {
                 let profile = crate::compatibility::profile_for_product_id(*product_id);
                 let supports_dual_device =

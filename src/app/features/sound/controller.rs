@@ -316,8 +316,24 @@ impl SoundController {
             });
     }
 
+    pub fn render_all(&self) {
+        let sound = &self.context.session_state.borrow().sound;
+        self.component.render_features(sound);
+        self.component.render_equalizer(sound);
+        self.component.render_spatial(sound);
+        self.component.render_game_mode(sound);
+        self.component.render_bass(sound);
+        self.component.render_hi_res(sound);
+        self.component.render_codec(sound);
+        self.render_custom_equalizers();
+    }
+
     pub fn on_update(&self, update: &UiUpdate) -> bool {
         match update {
+            UiUpdate::InitialSession(_) => {
+                self.render_all();
+                true
+            }
             UiUpdate::ProductId { product_id, .. } => {
                 let profile = crate::compatibility::profile_for_product_id(*product_id);
                 let supports_eq = profile.is_some_and(|p| p.supports_equalizer());

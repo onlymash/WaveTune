@@ -144,12 +144,12 @@ fn unsupported_models_stop_after_read_only_identification() {
 
     let (snapshot, _) = super::session::initialize_session(&mut client, "test headset", None)
         .expect("unknown models should connect in read-only identification mode");
-    assert_eq!(snapshot.product_id, 0x123456);
-    assert_eq!(snapshot.color_id, Some(1));
-    assert!(!snapshot.is_known_model);
-    assert!(snapshot.read_only);
-    assert!(snapshot.noise_mode_indices.is_empty());
-    assert!(snapshot.paired_devices.is_err());
+    assert_eq!(snapshot.identity.product_id, 0x123456);
+    assert_eq!(snapshot.identity.color_id, Some(1));
+    assert!(!snapshot.identity.is_known_model);
+    assert!(snapshot.identity.read_only);
+    assert!(snapshot.noise.supported_indices.is_empty());
+    assert!(snapshot.dual_device.paired_devices.is_err());
     device_thread.join().unwrap();
 }
 
@@ -245,27 +245,33 @@ fn catalog_model_uses_runtime_capabilities_without_requiring_hardware_verificati
 
     let (snapshot, _) = super::session::initialize_session(&mut client, "Enco X3", None)
         .expect("catalog models use model profiles even without write capability bits");
-    assert_eq!(snapshot.product_id, 0x067410);
-    assert_eq!(snapshot.color_id, Some(2));
-    assert_eq!(snapshot.model, "OPPO Enco X3");
-    assert!(!snapshot.read_only);
-    assert!(!snapshot.noise_mode_indices.is_empty());
-    assert!(!snapshot.capabilities.iter().any(|byte| *byte != 0));
-    assert!(snapshot.supports_wear_detection);
-    assert!(snapshot.supports_paired_devices);
-    assert!(snapshot.paired_devices.is_ok());
-    assert!(snapshot.supports_equalizer);
-    assert_eq!(snapshot.equalizer_preset, Some(7));
-    assert!(snapshot.supports_spatial_audio);
-    assert_eq!(snapshot.spatial_audio_mode, Some(1));
-    assert!(snapshot.supports_game_mode);
-    assert_eq!(snapshot.game_mode_enabled, Some(true));
-    assert!(snapshot.supports_hi_res);
-    assert_eq!(snapshot.hi_res_enabled, Some(true));
-    assert!(!snapshot.supports_bass_engine);
-    assert_eq!(snapshot.bass_engine_enabled, None);
-    assert!(snapshot.supports_touch_customization);
-    assert_eq!(snapshot.in_ear_detection_enabled, Some(true));
+    assert_eq!(snapshot.identity.product_id, 0x067410);
+    assert_eq!(snapshot.identity.color_id, Some(2));
+    assert_eq!(snapshot.identity.model, "OPPO Enco X3");
+    assert!(!snapshot.identity.read_only);
+    assert!(!snapshot.noise.supported_indices.is_empty());
+    assert!(
+        !snapshot
+            .diagnostics
+            .capabilities
+            .iter()
+            .any(|byte| *byte != 0)
+    );
+    assert!(snapshot.wear.supports_wear_detection);
+    assert!(snapshot.dual_device.supports_dual_device);
+    assert!(snapshot.dual_device.paired_devices.is_ok());
+    assert!(snapshot.sound.supports_equalizer);
+    assert_eq!(snapshot.sound.equalizer_preset, Some(7));
+    assert!(snapshot.sound.supports_spatial_audio);
+    assert_eq!(snapshot.sound.spatial_audio_mode, Some(1));
+    assert!(snapshot.sound.supports_game_mode);
+    assert_eq!(snapshot.sound.game_mode_enabled, Some(true));
+    assert!(snapshot.sound.supports_hi_res);
+    assert_eq!(snapshot.sound.hi_res_enabled, Some(true));
+    assert!(!snapshot.sound.supports_bass_engine);
+    assert_eq!(snapshot.sound.bass_engine_enabled, None);
+    assert!(snapshot.controls.supports_touch_customization);
+    assert_eq!(snapshot.controls.in_ear_detection_enabled, Some(true));
     device_thread.join().unwrap();
 }
 

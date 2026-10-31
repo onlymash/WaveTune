@@ -18,6 +18,7 @@
 use std::path::PathBuf;
 
 use crate::{
+    bluetooth::DeviceSnapshot,
     compatibility::{EqualizerPreset, GestureRow, NoiseMode},
     protocol::{
         BassEngineLevel, BatteryState, CustomEqualizer, KeyFunction, NoiseCycleState, PairedDevice,
@@ -80,6 +81,77 @@ impl HeadsetSessionState {
         self.sound.reset_on_disconnect();
         self.controls.reset_on_disconnect();
         self.dual_device.reset_on_disconnect();
+    }
+
+    /// Atomically apply an initial device snapshot to the session state.
+    pub fn apply_initial_snapshot(&mut self, snapshot: &DeviceSnapshot) {
+        self.connected = true;
+        self.device_name = snapshot.identity.name.clone();
+        self.product_id = Some(snapshot.identity.product_id);
+        self.battery = snapshot.battery.clone();
+        self.case_battery_is_stale = false;
+        self.wear = snapshot.wear.wear.clone();
+        self.supports_wear_detection = snapshot.wear.supports_wear_detection;
+
+        // Noise
+        self.noise.enabled = !snapshot.identity.read_only && !snapshot.noise.modes.is_empty();
+        self.noise.current_mode = snapshot.noise.current_mode;
+        if let Some(mode) = snapshot.noise.current_mode {
+            if mode != 0 {
+                self.noise.last_non_off_mode = Some(mode);
+            }
+        }
+        self.noise.supported_indices = snapshot.noise.supported_indices.clone();
+        self.noise.modes = snapshot.noise.modes.to_vec();
+        self.noise.support_note = snapshot.noise.support_note.clone();
+
+        // Sound
+        self.sound.supports_eq = snapshot.sound.supports_equalizer;
+        self.sound.supports_custom_eq = snapshot.sound.supports_custom_equalizer;
+        self.sound.current_eq_preset = snapshot.sound.equalizer_preset;
+        self.sound.presets = snapshot.sound.presets.clone();
+        self.sound.custom_equalizers = snapshot.sound.custom_equalizers.clone();
+
+        self.sound.supports_spatial = snapshot.sound.supports_spatial_audio;
+        self.sound.supports_head_tracking = snapshot.sound.supports_head_tracking;
+        self.sound.current_spatial_mode = snapshot.sound.spatial_audio_mode;
+
+        self.sound.supports_game_mode = snapshot.sound.supports_game_mode;
+        self.sound.current_game_mode = snapshot.sound.game_mode_enabled;
+
+        self.sound.supports_bass_engine = snapshot.sound.supports_bass_engine;
+        self.sound.bass_engine_enabled = snapshot.sound.bass_engine_enabled;
+        self.sound.bass_engine_level = snapshot.sound.bass_engine_level;
+
+        self.sound.supports_hi_res = snapshot.sound.supports_hi_res;
+        self.sound.hi_res_enabled = snapshot.sound.hi_res_enabled;
+
+        self.sound.supports_audio_codec = snapshot.sound.supports_audio_codec;
+        self.sound.current_audio_codec = snapshot.sound.audio_codec;
+        self.sound.available_codecs = snapshot.sound.available_codecs.clone();
+
+        // Controls
+        self.controls.supports_touch_customization = snapshot.controls.supports_touch_customization;
+        self.controls.supports_sleep_detection = snapshot.controls.supports_sleep_detection;
+        self.controls.supports_head_motion = snapshot.controls.supports_head_motion;
+        self.controls.supports_find_device = snapshot.controls.supports_find_device;
+        self.controls.supports_fit_detection = snapshot.controls.supports_fit_detection;
+        self.controls.supports_prompt_volume = snapshot.controls.supports_prompt_volume;
+
+        self.controls.key_functions = snapshot.controls.key_functions.clone();
+        self.controls.gesture_rows = snapshot.controls.gesture_rows.clone();
+        self.controls.noise_cycle = Some(snapshot.controls.noise_cycle);
+        self.controls.prompt_volume = snapshot.controls.prompt_volume;
+        self.controls.head_motion = snapshot.controls.head_motion_type;
+        self.controls.in_ear_detection = snapshot.controls.in_ear_detection_enabled;
+        self.controls.sleep_detection = snapshot.controls.sleep_detection_enabled;
+        self.controls.preferred_device = snapshot.dual_device.preferred_device;
+
+        // Dual device
+        self.dual_device.supports_dual_device = snapshot.dual_device.supports_dual_device;
+        self.dual_device.current_dual_device = snapshot.dual_device.dual_device_enabled;
+        self.dual_device.paired_devices = snapshot.dual_device.paired_devices.clone();
+        self.dual_device.controls_enabled = snapshot.dual_device.controls_enabled.clone();
     }
 }
 
