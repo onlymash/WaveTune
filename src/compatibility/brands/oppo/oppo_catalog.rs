@@ -15,7 +15,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-// Compatibility facts derived from TIANLI0/EncoDeck model catalogs; see docs/OPPO_BLUETOOTH_API.md.
+// Compatibility facts derived from TIANLI0/EncoDeck model catalogs; see docs/api/OPPO_BLUETOOTH_API.md.
 use crate::compatibility::{DeviceProfile, NoiseMode, NoiseModeKind, features};
 
 pub static OPPO_DEVICE_PROFILES: &[DeviceProfile] = &[

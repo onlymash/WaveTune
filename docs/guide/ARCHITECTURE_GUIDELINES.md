@@ -125,7 +125,7 @@ pub(crate) struct FeatureContext {
 
 ## 四、 页面与 UI 控件规范
 
-页面装配与子组件封装须严格遵守 [`docs/UI_COMPONENT_GUIDELINES.md`](UI_COMPONENT_GUIDELINES.md)：
+页面装配与子组件封装须严格遵守 [`docs/guide/UI_COMPONENT_GUIDELINES.md`](UI_COMPONENT_GUIDELINES.md)：
 1. **主页面纯胶水装配**：`build_*_page` 行数严格控制在百行以内，仅负责容器组装与子组件调用；
 2. **控件私有化**：各功能卡片结构体（`*Widgets`）的所有原生 GTK 控件字段**一律私有**，外部仅能通过领域语义方法（如 `render()`、`update_*()`、`reset()`）交互；
 3. **测试接口隔离**：测试检查器统一归入 `#[cfg(test)] impl *Widgets`，生产环境严禁直接透传原生控件句柄。
@@ -134,7 +134,7 @@ pub(crate) struct FeatureContext {
 
 ## 五、 底层通信与协议安全底线
 
-遵循 [`AGENTS.md`](file:///home/onlymash/Projects/WaveTune/AGENTS.md) 与 [`docs/OPPO_BLUETOOTH_API.md`](OPPO_BLUETOOTH_API.md) 的安全约束：
+遵循 [`AGENTS.md`](file:///home/onlymash/Projects/WaveTune/AGENTS.md) 与 [`docs/api/OPPO_BLUETOOTH_API.md`](../api/OPPO_BLUETOOTH_API.md) 的安全约束：
 1. **单指令写管道（Single Command Write Pipeline）**：
    写操作必须严格遵循“校验配置能力 $\to$ 发送单条指令 $\to$ 等待设备 ACK $\to$ 回读验证状态”的安全流程，禁止批量无序下发指令；
 2. **未知设备只读保护**：
@@ -155,7 +155,7 @@ pub(crate) struct FeatureContext {
 2. **通用会话执行器 (`SessionRunner`)**：
    统一管理底层 RFCOMM 线程、超时、异常捕获及 UI 状态推送，彻底杜绝跨品牌重复实现 Worker 循环；
 3. **统一分发工厂 (`create_driver`)**：
-   通过 `AnyDriver` 实现品牌静态分发，新品牌接入流程与代码模板详见 [`docs/NEW_BRAND_INTEGRATION_GUIDE.md`](NEW_BRAND_INTEGRATION_GUIDE.md)；
+   通过 `AnyDriver` 实现品牌静态分发，新品牌接入流程与代码模板详见 [`docs/guide/NEW_BRAND_INTEGRATION_GUIDE.md`](NEW_BRAND_INTEGRATION_GUIDE.md)；
 4. **驱动上下文与领域子状态聚合 (`FeatureContext` & Domain Substates)**：
    驱动指令处理严禁使用长参数列表（避免 `clippy::too_many_arguments`）：
    - 使用统一的特性上下文（如 `OppoFeatureContext`）聚合 I/O 流、协议解码器、只读标记、机型配置及 UI 通道；
@@ -165,8 +165,6 @@ pub(crate) struct FeatureContext {
 ---
 
 ## 七、 协议编解码与兼容层规范 (Protocol & Compatibility Architecture)
-
-关于协议与兼容层重构的详细演进背景与设计见 [`docs/PROTOCOL_COMPATIBILITY_REFACTORING_PLAN.md`](PROTOCOL_COMPATIBILITY_REFACTORING_PLAN.md)。
 
 ### 1. 参数对象化与 DTO 设计（Parameter Objectification / DTO）
 - 当编解码函数的入参涉及多个控制参数或复杂字段时，**必须引入强类型的参数对象（DTO）**，严禁使用散装参数；

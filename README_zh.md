@@ -4,7 +4,7 @@
 
 面向 Linux 桌面的非官方多品牌无线耳机控制中心（移植自 [EncoDeck](https://github.com/TIANLI0/EncoDeck)），使用 Rust 与 GTK4 / Libadwaita 构建。当前支持 OPPO、OnePlus、realme 及 EarFun 无线耳机，底层已完成多品牌架构解耦，后续将逐步扩展更多品牌支持。
 
-> 本项目与各耳机厂商无任何官方关联。私有蓝牙协议细节与硬件验证记录见 [`docs/OPPO_BLUETOOTH_API.md`](docs/OPPO_BLUETOOTH_API.md) 及 [`docs/EARFUN_BLUETOOTH_API.md`](docs/EARFUN_BLUETOOTH_API.md)。
+> 本项目与各耳机厂商无任何官方关联。私有蓝牙协议细节与硬件验证记录见 [`docs/api/OPPO_BLUETOOTH_API.md`](docs/api/OPPO_BLUETOOTH_API.md) 及 [`docs/api/EARFUN_BLUETOOTH_API.md`](docs/api/EARFUN_BLUETOOTH_API.md)。
 
 ## 功能特性
 
