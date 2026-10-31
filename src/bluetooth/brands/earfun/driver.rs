@@ -29,13 +29,13 @@ use crate::protocol::brands::earfun::{
     EarFunCommands, EarFunFrameDecoder, parse_earfun_ambient_mode, parse_earfun_anc_sub_mode,
     parse_earfun_battery_component, parse_earfun_transparency_sub_mode,
 };
-use crate::protocol::{BatteryState, EarSide, KeyFunction, PairedDeviceAction};
+use crate::protocol::{BatteryState, CustomEqualizer, EarSide, KeyFunction, PairedDeviceAction};
 
 use super::features::{
     controls::{query_touch_actions, set_in_ear_detection, set_touch_action, set_touch_lock},
     dual_device::{read_earfun_paired_devices, set_dual_device},
     noise::{earfun_mode_to_protocol_index, set_noise_mode},
-    sound::{apply_equalizer_preset, set_audio_codec, set_game_mode},
+    sound::{apply_custom_equalizer, apply_equalizer_preset, set_audio_codec, set_game_mode},
 };
 use super::init::initialize_earfun_session_with_lap;
 use super::transport::{
@@ -51,6 +51,7 @@ pub struct EarFunDriver {
     transp_sub: u8,
     device_address: Option<String>,
     local_lap: Option<[u8; 3]>,
+    custom_equalizers: Vec<CustomEqualizer>,
 }
 
 impl EarFunDriver {
@@ -62,6 +63,7 @@ impl EarFunDriver {
             transp_sub: 0,
             device_address: None,
             local_lap: None,
+            custom_equalizers: Vec::new(),
         }
     }
 }
@@ -69,6 +71,15 @@ impl EarFunDriver {
 impl Default for EarFunDriver {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+impl EarFunDriver {
+    pub fn set_snapshot_for_test(&mut self, product_id: u32) {
+        let mut snapshot = DeviceSnapshot::default();
+        snapshot.identity.product_id = product_id;
+        self.snapshot = Some(snapshot);
     }
 }
 
@@ -102,17 +113,28 @@ impl HeadsetDriver for EarFunDriver {
         self.decoder = decoder;
         self.anc_sub = snapshot.noise.anc_sub;
         self.transp_sub = snapshot.noise.transp_sub;
+        self.custom_equalizers = snapshot.sound.custom_equalizers.clone();
 
         // Auto-apply saved equalizer preset if configured
         if let Some(preset) = snapshot.sound.equalizer_preset {
             if preset != 0 {
-                let _ = apply_equalizer_preset(
-                    stream,
-                    &mut self.decoder,
-                    snapshot.identity.product_id,
-                    preset,
-                    updates,
-                );
+                if let Some(custom) = self.custom_equalizers.iter().find(|c| c.id == preset) {
+                    let _ = apply_custom_equalizer(
+                        stream,
+                        &mut self.decoder,
+                        snapshot.identity.product_id,
+                        &custom.bands,
+                        updates,
+                    );
+                } else {
+                    let _ = apply_equalizer_preset(
+                        stream,
+                        &mut self.decoder,
+                        snapshot.identity.product_id,
+                        preset,
+                        updates,
+                    );
+                }
             }
         }
 
@@ -509,19 +531,186 @@ impl HeadsetDriver for EarFunDriver {
                     Some(updates),
                 ) {
                     Ok(()) => {
+                        for c in &mut self.custom_equalizers {
+                            c.is_selected = false;
+                        }
+                        let _ = crate::resources::save_custom_equalizers(
+                            pid,
+                            self.device_address.as_deref(),
+                            &self.custom_equalizers,
+                        );
                         let _ = crate::resources::save_equalizer_preset(
                             pid,
                             self.device_address.as_deref(),
                             preset_index,
                         );
+                        let _ = updates
+                            .send(UiUpdate::CustomEqualizers(self.custom_equalizers.clone()));
                         let _ = updates.send(UiUpdate::Equalizer(preset_index));
                     }
                     Err(error) => {
                         let _ = updates.send(UiUpdate::SettingError {
                             domain: SettingDomain::Equalizer,
-                            message: error,
+                            message: crate::t!("equalizer-switch-failed", error),
                         });
+                        let _ = updates.send(UiUpdate::Equalizer(
+                            self.snapshot
+                                .as_ref()
+                                .and_then(|s| s.sound.equalizer_preset)
+                                .unwrap_or(0),
+                        ));
                     }
+                }
+                Ok(())
+            }
+            WorkerCommand::SelectCustomEqualizer(id) => {
+                let custom_eq = self.custom_equalizers.iter().find(|c| c.id == id).cloned();
+
+                if let Some(eq) = custom_eq {
+                    let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-switching")));
+                    match apply_custom_equalizer(
+                        stream,
+                        &mut self.decoder,
+                        pid,
+                        &eq.bands,
+                        Some(updates),
+                    ) {
+                        Ok(()) => {
+                            for c in &mut self.custom_equalizers {
+                                c.is_selected = c.id == id;
+                            }
+                            let _ = crate::resources::save_custom_equalizers(
+                                pid,
+                                self.device_address.as_deref(),
+                                &self.custom_equalizers,
+                            );
+                            let _ = crate::resources::save_equalizer_preset(
+                                pid,
+                                self.device_address.as_deref(),
+                                id,
+                            );
+                            let _ = updates
+                                .send(UiUpdate::CustomEqualizers(self.custom_equalizers.clone()));
+                            let _ = updates.send(UiUpdate::Equalizer(id));
+                            let _ = updates
+                                .send(UiUpdate::Status(crate::t!("equalizer-custom-applied")));
+                        }
+                        Err(error) => {
+                            let _ = updates.send(UiUpdate::SettingError {
+                                domain: SettingDomain::Equalizer,
+                                message: crate::t!("equalizer-custom-switch-failed", error),
+                            });
+                            let cur = self
+                                .snapshot
+                                .as_ref()
+                                .and_then(|s| s.sound.equalizer_preset)
+                                .unwrap_or(0);
+                            let _ = updates.send(UiUpdate::Equalizer(cur));
+                        }
+                    }
+                }
+                Ok(())
+            }
+            WorkerCommand::AddCustomEqualizer { name, bands } => {
+                if self.custom_equalizers.len() >= 3 {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Equalizer,
+                        message: crate::t!("equalizer-custom-max-reached"),
+                    });
+                    return Ok(());
+                }
+
+                let mut next_id = 100u8;
+                while self.custom_equalizers.iter().any(|c| c.id == next_id) {
+                    next_id = next_id.saturating_add(1);
+                }
+
+                let new_eq = CustomEqualizer {
+                    id: next_id,
+                    name,
+                    min_gain: -6,
+                    max_gain: 6,
+                    is_selected: false,
+                    bands,
+                };
+
+                self.custom_equalizers.push(new_eq);
+                let _ = crate::resources::save_custom_equalizers(
+                    pid,
+                    self.device_address.as_deref(),
+                    &self.custom_equalizers,
+                );
+                let _ = updates.send(UiUpdate::CustomEqualizers(self.custom_equalizers.clone()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-added")));
+                Ok(())
+            }
+            WorkerCommand::SaveCustomEqualizer { id, name, bands } => {
+                let mut is_active = false;
+                if let Some(target) = self.custom_equalizers.iter_mut().find(|c| c.id == id) {
+                    target.name = name;
+                    target.bands = bands.clone();
+                    is_active = target.is_selected;
+                }
+
+                let _ = crate::resources::save_custom_equalizers(
+                    pid,
+                    self.device_address.as_deref(),
+                    &self.custom_equalizers,
+                );
+                let _ = updates.send(UiUpdate::CustomEqualizers(self.custom_equalizers.clone()));
+
+                // If currently selected, re-apply the modified bands to the earbud
+                if is_active {
+                    let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-saving")));
+                    match apply_custom_equalizer(
+                        stream,
+                        &mut self.decoder,
+                        pid,
+                        &bands,
+                        Some(updates),
+                    ) {
+                        Ok(()) => {
+                            let _ =
+                                updates.send(UiUpdate::Status(crate::t!("equalizer-custom-saved")));
+                        }
+                        Err(error) => {
+                            let _ = updates.send(UiUpdate::SettingError {
+                                domain: SettingDomain::Equalizer,
+                                message: crate::t!("equalizer-custom-save-failed", error),
+                            });
+                        }
+                    }
+                } else {
+                    let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-saved")));
+                }
+                Ok(())
+            }
+            WorkerCommand::DeleteCustomEqualizer(id) => {
+                let was_active = self
+                    .custom_equalizers
+                    .iter()
+                    .find(|c| c.id == id)
+                    .is_some_and(|c| c.is_selected);
+
+                self.custom_equalizers.retain(|c| c.id != id);
+
+                let _ = crate::resources::save_custom_equalizers(
+                    pid,
+                    self.device_address.as_deref(),
+                    &self.custom_equalizers,
+                );
+                let _ = updates.send(UiUpdate::CustomEqualizers(self.custom_equalizers.clone()));
+                let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-deleted")));
+
+                if was_active {
+                    let _ =
+                        apply_equalizer_preset(stream, &mut self.decoder, pid, 0, Some(updates));
+                    let _ = crate::resources::save_equalizer_preset(
+                        pid,
+                        self.device_address.as_deref(),
+                        0,
+                    );
+                    let _ = updates.send(UiUpdate::Equalizer(0));
                 }
                 Ok(())
             }

@@ -30,8 +30,8 @@ pub use earfun_catalog::{
 #[allow(unused_imports)]
 pub use earfun_equalizer::{
     EARFUN_AIR_PRO_4_EQ_PRESETS, EARFUN_AIR_S_EQ_PRESETS, EARFUN_TEN_BAND_EQ_PRESETS,
-    build_equalizer_bands, equalizer_bands_for_preset, equalizer_presets_for_product,
-    preset_gains_for_product,
+    build_equalizer_bands, build_equalizer_bands_from_custom, equalizer_bands_for_preset,
+    equalizer_presets_for_product, preset_gains_for_product,
 };
 #[allow(unused_imports)]
 pub use earfun_gestures::{

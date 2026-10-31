@@ -888,4 +888,90 @@ mod tests {
             .is_err()
         );
     }
+
+    #[test]
+    fn test_earfun_custom_equalizer_driver_workflow() {
+        use crate::app::events::{UiUpdate, WorkerCommand};
+        use crate::bluetooth::driver::HeadsetDriver;
+
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+
+        let mut driver = EarFunDriver::new();
+        // Set a mock snapshot for product ID
+        driver.set_snapshot_for_test(EARFUN_AIR_PRO_4_PRODUCT_ID);
+
+        let (tx, rx) = mpsc::channel();
+
+        // 1. Add Custom Equalizer - local only, no bytes on wire
+        let bands = vec![
+            (31, 1),
+            (62, 2),
+            (125, 3),
+            (250, 2),
+            (500, 1),
+            (1000, 0),
+            (2000, -1),
+            (4000, -2),
+            (8000, -3),
+            (16000, -4),
+        ];
+        driver
+            .handle_command(
+                &mut client,
+                WorkerCommand::AddCustomEqualizer {
+                    name: "Jazz".to_string(),
+                    bands: bands.clone(),
+                },
+                &tx,
+            )
+            .expect("AddCustomEqualizer should succeed");
+
+        let mut got_custom = false;
+        while let Ok(msg) = rx.try_recv() {
+            if let UiUpdate::CustomEqualizers(list) = msg {
+                assert_eq!(list.len(), 1);
+                assert_eq!(list[0].name, "Jazz");
+                assert_eq!(list[0].id, 100);
+                assert!(!list[0].is_selected);
+                got_custom = true;
+            }
+        }
+        assert!(got_custom, "Should emit CustomEqualizers on add");
+
+        // 2. Select Custom Equalizer - writes 10 frames to headset
+        let device_thread = thread::spawn(move || {
+            for i in 0..10 {
+                let req = read_mock_request(&mut device);
+                assert_eq!(req.command, EarFunCommands::SET_EQUALIZER_BAND);
+                assert_eq!(req.payload[0], 0xA1 + i as u8);
+                let ack_pkt = EarFunPacket::new_v3(0x0F81, vec![0x01]);
+                device.write_all(&ack_pkt.encode()).unwrap();
+            }
+        });
+
+        driver
+            .handle_command(&mut client, WorkerCommand::SelectCustomEqualizer(100), &tx)
+            .expect("SelectCustomEqualizer should succeed");
+
+        device_thread.join().unwrap();
+
+        let mut selected_eq = false;
+        while let Ok(msg) = rx.try_recv() {
+            if let UiUpdate::Equalizer(id) = msg {
+                if id == 100 {
+                    selected_eq = true;
+                }
+            }
+        }
+        assert!(
+            selected_eq,
+            "Should emit Equalizer(100) when custom selected"
+        );
+    }
 }

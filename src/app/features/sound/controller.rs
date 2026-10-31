@@ -110,6 +110,29 @@ impl SoundController {
                     }
                 }
             });
+
+        // 3. Add custom EQ row
+        let sound_widgets = self.component.sound_widgets.clone();
+        let context = self.context.clone();
+        sound_widgets
+            .custom_eq
+            .add_custom_row()
+            .connect_activated(move |row| {
+                let context = context.clone();
+                let count = context.session_state.borrow().sound.custom_equalizers.len();
+                let default_name = crate::t!("equalizer-custom-default-name", count + 1);
+                crate::ui::dialogs::show_custom_eq_dialog(
+                    row,
+                    None,
+                    &default_name,
+                    move |name, bands| {
+                        let cmd = WorkerCommand::AddCustomEqualizer { name, bands };
+                        if let Err(err) = context.send_command(cmd) {
+                            context.send_status(crate::t!("equalizer-send-failed", err));
+                        }
+                    },
+                );
+            });
     }
 
     fn bind_spatial_events(&self) {

@@ -17,6 +17,8 @@
 
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BatteryPart {
     pub percentage: u8,
@@ -162,7 +164,7 @@ impl<'a> From<&'a CustomEqualizer> for CustomEqualizerParams<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CustomEqualizer {
     pub id: u8,
     pub name: String,

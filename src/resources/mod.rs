@@ -246,6 +246,78 @@ pub fn save_equalizer_preset(product_id: u32, mac: Option<&str>, preset: u8) -> 
     write_equalizer_preset_to(&config_file_path(), product_id, mac, preset)
 }
 
+pub(crate) fn read_custom_equalizers_from(
+    path: &Path,
+    product_id: u32,
+    mac: Option<&str>,
+) -> Vec<crate::protocol::CustomEqualizer> {
+    if !path.exists() {
+        return Vec::new();
+    }
+    let keyfile = gtk::glib::KeyFile::new();
+    if keyfile
+        .load_from_file(path, gtk::glib::KeyFileFlags::NONE)
+        .is_ok()
+    {
+        // 1. Try device-specific hashed group first
+        if mac.is_some() {
+            let specific_group = device_config_group(product_id, mac);
+            if let Ok(json_str) = keyfile.string(&specific_group, "custom_equalizers") {
+                if let Ok(eqs) =
+                    serde_json::from_str::<Vec<crate::protocol::CustomEqualizer>>(&json_str)
+                {
+                    return eqs;
+                }
+            }
+        }
+        // 2. Fall back to generic product group
+        let generic_group = device_config_group(product_id, None);
+        if let Ok(json_str) = keyfile.string(&generic_group, "custom_equalizers") {
+            if let Ok(eqs) =
+                serde_json::from_str::<Vec<crate::protocol::CustomEqualizer>>(&json_str)
+            {
+                return eqs;
+            }
+        }
+    }
+    Vec::new()
+}
+
+pub(crate) fn write_custom_equalizers_to(
+    path: &Path,
+    product_id: u32,
+    mac: Option<&str>,
+    equalizers: &[crate::protocol::CustomEqualizer],
+) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let keyfile = gtk::glib::KeyFile::new();
+    let _ = keyfile.load_from_file(path, gtk::glib::KeyFileFlags::NONE);
+    let group = device_config_group(product_id, mac);
+    let json_str =
+        serde_json::to_string(equalizers).map_err(|err| io::Error::other(err.to_string()))?;
+    keyfile.set_string(&group, "custom_equalizers", &json_str);
+    keyfile
+        .save_to_file(path)
+        .map_err(|err| io::Error::other(err.to_string()))
+}
+
+pub fn get_saved_custom_equalizers(
+    product_id: u32,
+    mac: Option<&str>,
+) -> Vec<crate::protocol::CustomEqualizer> {
+    read_custom_equalizers_from(&config_file_path(), product_id, mac)
+}
+
+pub fn save_custom_equalizers(
+    product_id: u32,
+    mac: Option<&str>,
+    equalizers: &[crate::protocol::CustomEqualizer],
+) -> io::Result<()> {
+    write_custom_equalizers_to(&config_file_path(), product_id, mac, equalizers)
+}
+
 const AUTOSTART_DESKTOP_ENTRY: &str = "\
 [Desktop Entry]
 Type=Application
@@ -1013,6 +1085,44 @@ mod tests {
             read_equalizer_preset_from(&settings_path, 0x004535, None),
             Some(1)
         );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn custom_equalizer_persistence_round_trip() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "wavetune_custom_eq_test_{}_{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let settings_path = temp_dir.join("wavetune").join("settings.ini");
+
+        // Returns empty when file doesn't exist
+        assert!(read_custom_equalizers_from(&settings_path, 0x004535, None).is_empty());
+
+        let mac = "11:22:33:44:55:66";
+        let custom_list = vec![crate::protocol::CustomEqualizer {
+            id: 100,
+            name: "Rock Test".to_string(),
+            min_gain: -6,
+            max_gain: 6,
+            is_selected: true,
+            bands: vec![(1000, 3), (2000, -2)],
+        }];
+
+        write_custom_equalizers_to(&settings_path, 0x004535, Some(mac), &custom_list)
+            .expect("should write custom equalizers");
+
+        let loaded = read_custom_equalizers_from(&settings_path, 0x004535, Some(mac));
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].id, 100);
+        assert_eq!(loaded[0].name, "Rock Test");
+        assert!(loaded[0].is_selected);
+        assert_eq!(loaded[0].bands, vec![(1000, 3), (2000, -2)]);
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

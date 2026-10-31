@@ -241,3 +241,47 @@ pub fn equalizer_bands_for_preset(product_id: u32, preset_index: u8) -> Option<[
     let gains = preset_gains_for_product(product_id, preset_index)?;
     build_equalizer_bands(product_id, gains)
 }
+
+/// Builds the 10 GaiaEqBand configurations from custom equalizer bands (frequencies and gains in dB).
+pub fn build_equalizer_bands_from_custom(
+    product_id: u32,
+    custom_bands: &[(u16, i8)],
+) -> Option<[GaiaEqBand; 10]> {
+    match product_id {
+        EARFUN_AIR_S_PRODUCT_ID => {
+            let gains = if custom_bands.len() == 6 {
+                [
+                    custom_bands[0].1 as f64,
+                    custom_bands[1].1 as f64,
+                    custom_bands[2].1 as f64,
+                    custom_bands[3].1 as f64,
+                    custom_bands[4].1 as f64,
+                    custom_bands[5].1 as f64,
+                ]
+            } else if custom_bands.len() >= 10 {
+                [
+                    custom_bands[1].1 as f64,
+                    ((custom_bands[2].1 as f64 + custom_bands[3].1 as f64) / 2.0).round(),
+                    custom_bands[4].1 as f64,
+                    custom_bands[5].1 as f64,
+                    custom_bands[8].1 as f64,
+                    custom_bands[9].1 as f64,
+                ]
+            } else {
+                return None;
+            };
+            build_equalizer_bands(product_id, &gains)
+        }
+        EARFUN_AIR_PRO_4_PRODUCT_ID | EARFUN_FREE_PRO_3_PRODUCT_ID => {
+            if custom_bands.len() != 10 {
+                return None;
+            }
+            let mut gains = [0.0; 10];
+            for i in 0..10 {
+                gains[i] = custom_bands[i].1 as f64;
+            }
+            build_equalizer_bands(product_id, &gains)
+        }
+        _ => None,
+    }
+}

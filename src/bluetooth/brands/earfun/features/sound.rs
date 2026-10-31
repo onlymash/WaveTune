@@ -26,7 +26,9 @@ use crate::app::events::UiUpdate;
 use crate::bluetooth::brands::earfun::transport::{
     EARFUN_AIR_PRO_4_PRODUCT_ID, drain_stream, send_command,
 };
-use crate::compatibility::brands::earfun::equalizer_bands_for_preset;
+use crate::compatibility::brands::earfun::{
+    build_equalizer_bands_from_custom, equalizer_bands_for_preset,
+};
 use crate::protocol::brands::earfun::{
     EarFunAudioCodec, EarFunCommands, EarFunFrameDecoder, EarFunPacket, GaiaEqBand,
     encode_earfun_eq_band,
@@ -83,6 +85,18 @@ pub fn apply_equalizer_preset<T: Read + Write>(
     let bands = equalizer_bands_for_preset(product_id, preset_index)
         .ok_or_else(|| crate::t!("equalizer-blocked"))?;
     send_equalizer_bands(stream, decoder, &bands, updates)
+}
+
+pub fn apply_custom_equalizer<T: Read + Write>(
+    stream: &mut T,
+    decoder: &mut EarFunFrameDecoder,
+    product_id: u32,
+    bands: &[(u16, i8)],
+    updates: Option<&Sender<UiUpdate>>,
+) -> Result<(), String> {
+    let eq_bands = build_equalizer_bands_from_custom(product_id, bands)
+        .ok_or_else(|| crate::t!("equalizer-custom-blocked"))?;
+    send_equalizer_bands(stream, decoder, &eq_bands, updates)
 }
 
 pub fn send_equalizer_bands<T: Read + Write>(

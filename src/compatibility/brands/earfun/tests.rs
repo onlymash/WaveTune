@@ -238,3 +238,47 @@ fn test_earfun_build_equalizer_bands_and_dummy_padding() {
     assert!(build_equalizer_bands(EARFUN_AIR_S_PRODUCT_ID, &[0.0; 10]).is_none());
     assert!(build_equalizer_bands(EARFUN_AIR_PRO_4_PRODUCT_ID, &[0.0; 6]).is_none());
 }
+
+#[test]
+fn test_earfun_build_equalizer_bands_from_custom() {
+    let custom_10 = vec![
+        (31, -2),
+        (62, 0),
+        (125, 1),
+        (250, 3),
+        (500, 4),
+        (1000, 5),
+        (2000, 2),
+        (4000, 1),
+        (8000, -1),
+        (16000, -3),
+    ];
+
+    // Air Pro 4: uses all 10 bands directly
+    let pro4_custom =
+        build_equalizer_bands_from_custom(EARFUN_AIR_PRO_4_PRODUCT_ID, &custom_10).unwrap();
+    assert_eq!(pro4_custom.len(), 10);
+    assert_eq!(pro4_custom[0].band_id, 0xA1);
+    assert_eq!(pro4_custom[0].gain_db, -2.0);
+    assert_eq!(pro4_custom[5].gain_db, 5.0);
+    assert_eq!(pro4_custom[9].gain_db, -3.0);
+
+    // Air S with 10 bands: maps closest active bands and pads dummy bands
+    let airs_custom =
+        build_equalizer_bands_from_custom(EARFUN_AIR_S_PRODUCT_ID, &custom_10).unwrap();
+    assert_eq!(airs_custom.len(), 10);
+    // Band 0 is from custom_10[1] (62 Hz -> 63 Hz): gain 0.0
+    assert_eq!(airs_custom[0].gain_db, 0.0);
+    // Band 4 is from custom_10[8] (8000 Hz): gain -1.0
+    assert_eq!(airs_custom[4].gain_db, -1.0);
+    // Band 5 is from custom_10[9] (16000 Hz -> 15000 Hz): gain -3.0
+    assert_eq!(airs_custom[5].gain_db, -3.0);
+    // Dummy bands 6..9
+    assert_eq!(airs_custom[6].gain_db, 4.5);
+    assert_eq!(airs_custom[7].gain_db, -4.5);
+    assert_eq!(airs_custom[8].gain_db, 1.5);
+    assert_eq!(airs_custom[9].gain_db, 3.5);
+
+    // Invalid product ID
+    assert!(build_equalizer_bands_from_custom(0x999999, &custom_10).is_none());
+}

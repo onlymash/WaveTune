@@ -478,6 +478,23 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
     };
 
     let presets = compatibility::equalizer_presets_for_product(pid).to_vec();
+    let supports_custom_equalizer = profile.supports_custom_equalizer();
+    let mut custom_equalizers = if supports_custom_equalizer {
+        crate::resources::get_saved_custom_equalizers(pid, device_address)
+    } else {
+        vec![]
+    };
+    let equalizer_preset = if supports_equalizer {
+        Some(crate::resources::get_saved_equalizer_preset(pid, device_address).unwrap_or(0))
+    } else {
+        None
+    };
+    if let Some(preset_id) = equalizer_preset {
+        for eq in &mut custom_equalizers {
+            eq.is_selected = eq.id == preset_id;
+        }
+    }
+
     let snapshot = DeviceSnapshot {
         identity: DeviceIdentitySnapshot {
             name: device_name.to_string(),
@@ -503,14 +520,10 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
         },
         sound: SoundSnapshot {
             supports_equalizer,
-            supports_custom_equalizer: false,
-            equalizer_preset: if supports_equalizer {
-                Some(crate::resources::get_saved_equalizer_preset(pid, device_address).unwrap_or(0))
-            } else {
-                None
-            },
+            supports_custom_equalizer,
+            equalizer_preset,
             presets,
-            custom_equalizers: vec![],
+            custom_equalizers,
             supports_spatial_audio: false,
             supports_head_tracking: false,
             spatial_audio_mode: None,
