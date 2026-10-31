@@ -11,18 +11,15 @@ WaveTune 遵循**单向数据流（Unidirectional Data Flow, UDF）**与**分层
 ```mermaid
 flowchart TD
     subgraph UI["UI 表现层 (GTK4 / Libadwaita)"]
+        direction TB
         subgraph Views["页面视图 (Page Views)"]
-            HomeView["HomeView"]
-            SoundView["SoundView"]
-            ControlsView["ControlsView"]
-            DeviceView["DeviceView"]
+            direction LR
+            HomeView["HomeView"] ~~~ SoundView["SoundView"] ~~~ ControlsView["ControlsView"] ~~~ DeviceView["DeviceView"]
         end
 
         subgraph Components["业务视图组件 (Feature Components)"]
-            NoiseComp["NoiseComponent"]
-            SoundComp["SoundComponent"]
-            ControlsComp["ControlsComponent"]
-            DeviceComp["DeviceComponent"]
+            direction LR
+            NoiseComp["NoiseComponent"] ~~~ SoundComp["SoundComponent"] ~~~ ControlsComp["ControlsComponent"] ~~~ DeviceComp["DeviceComponent"]
         end
 
         Views --- Components
