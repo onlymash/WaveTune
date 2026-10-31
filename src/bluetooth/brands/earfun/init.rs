@@ -37,7 +37,9 @@ use crate::protocol::{BatteryState, FirmwareVersions, WearPart, WearState};
 
 use super::driver::EarFunDriver;
 use super::features::{
-    dual_device::read_earfun_paired_devices, noise::earfun_mode_to_protocol_index,
+    controls::{query_touch_actions, query_touch_lock},
+    dual_device::read_earfun_paired_devices,
+    noise::earfun_mode_to_protocol_index,
 };
 use super::transport::{
     EARFUN_AIR_PRO_4_PRODUCT_ID, EARFUN_AIR_S_PRODUCT_ID, EARFUN_FREE_PRO_3_PRODUCT_ID, request,
@@ -240,6 +242,8 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
     let supports_game_mode = profile.supports_game_mode();
     let supports_equalizer = profile.supports_equalizer();
     let supports_audio_codec = profile.supports_audio_codec();
+    let supports_touch_customization = profile.supports_touch_customization();
+    let supports_touch_lock = profile.supports_touch_lock();
     let available_codecs: Vec<u8> = compatibility::supported_earfun_codecs(pid)
         .iter()
         .map(|c| c.as_u8())
@@ -427,6 +431,33 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
         None
     };
 
+    // 8. Touch gestures (0x030B) & Touch lock (0x0335)
+    let key_functions = if supports_touch_customization {
+        let gestures = query_touch_actions(stream, &mut decoder, updates).unwrap_or_default();
+        if !gestures.is_empty() {
+            detected_features.push("touch-customization".to_string());
+        }
+        gestures
+    } else {
+        vec![]
+    };
+
+    let gesture_rows = if supports_touch_customization {
+        compatibility::gesture_rows_for_product(pid).to_vec()
+    } else {
+        vec![]
+    };
+
+    let touch_lock_enabled = if supports_touch_lock {
+        let locked = query_touch_lock(stream, &mut decoder, updates).ok();
+        if locked.is_some() {
+            detected_features.push("touch-lock".to_string());
+        }
+        locked
+    } else {
+        None
+    };
+
     // When connected via RFCOMM, earbuds are active and in-ear
     let wear = if supports_wear_detection {
         WearState {
@@ -496,6 +527,11 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
             available_codecs,
         },
         controls: ControlsSnapshot {
+            supports_touch_customization,
+            supports_touch_lock,
+            key_functions,
+            gesture_rows,
+            touch_lock_enabled,
             in_ear_detection_enabled,
             ..ControlsSnapshot::default()
         },

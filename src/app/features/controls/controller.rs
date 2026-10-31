@@ -63,6 +63,7 @@ impl ControlsController {
     pub fn bind_events(&self) {
         self.bind_ear_selection_events();
         self.bind_gesture_combo_events();
+        self.bind_touch_lock_events();
         self.bind_noise_cycle_events();
         self.bind_find_and_fit_events();
         self.bind_prompt_volume_events();
@@ -128,6 +129,26 @@ impl ControlsController {
                             &st.controls.gesture_rows,
                         );
                         combo.set_sensitive(true);
+                    }
+                }
+            });
+    }
+
+    fn bind_touch_lock_events(&self) {
+        let component = self.component.clone();
+        let context = self.context.clone();
+
+        self.component
+            .widgets
+            .gestures
+            .connect_touch_lock_toggled(move |state| {
+                let cmd = WorkerCommand::SetTouchLock(state);
+                match context.send_command(cmd) {
+                    Ok(()) => {}
+                    Err(err) => {
+                        context.send_status(crate::t!("controls-gesture-update-failed", err));
+                        let cur = context.session_state.borrow().controls.touch_lock_enabled;
+                        component.render_touch_lock(cur);
                     }
                 }
             });
@@ -454,6 +475,8 @@ impl ControlsController {
                 self.component
                     .render_dual_device(st.dual_device.current_dual_device);
                 self.component.render_in_ear(st.controls.in_ear_detection);
+                self.component
+                    .render_touch_lock(st.controls.touch_lock_enabled);
                 self.component.render_sleep(st.controls.sleep_detection);
                 self.component
                     .render_prompt_volume(st.controls.prompt_volume);
@@ -557,6 +580,14 @@ impl ControlsController {
                 self.component.render_in_ear(Some(*enabled));
                 true
             }
+            UiUpdate::TouchLockEnabled(enabled) => {
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.controls.touch_lock_enabled = Some(*enabled);
+                }
+                self.component.render_touch_lock(Some(*enabled));
+                true
+            }
             UiUpdate::SleepDetectionEnabled(enabled) => {
                 {
                     let mut st = self.context.session_state.borrow_mut();
@@ -576,6 +607,7 @@ impl ControlsController {
             }
             UiUpdate::ControlsFeatures {
                 supports_touch_customization,
+                supports_touch_lock,
                 supports_dual_device,
                 supports_wear_detection,
                 supports_sleep_detection,
@@ -588,6 +620,7 @@ impl ControlsController {
                 {
                     let mut st = self.context.session_state.borrow_mut();
                     st.controls.supports_touch_customization = *supports_touch_customization;
+                    st.controls.supports_touch_lock = *supports_touch_lock;
                     st.dual_device.supports_dual_device = *supports_dual_device;
                     st.supports_wear_detection = *supports_wear_detection;
                     st.controls.supports_sleep_detection = *supports_sleep_detection;

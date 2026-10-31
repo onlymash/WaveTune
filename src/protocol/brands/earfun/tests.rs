@@ -183,4 +183,129 @@ mod tests {
             vec![0xFF, 0x04, 0x00, 0x00, 0x00, 0x0A, 0x03, 0x08]
         );
     }
+
+    #[test]
+    fn test_earfun_touch_gestures_parse() {
+        use crate::protocol::core::types::{EarSide, GestureAction};
+
+        // 17-byte payload matching Gadgetbridge test vector
+        let payload = [
+            0x01, // status byte
+            0x00, 0x01, // L Single -> 1 (Play/Pause)
+            0x00, 0x02, // R Single -> 2 (Vol Up)
+            0x00, 0x03, // L Double -> 3 (Vol Down)
+            0x00, 0x04, // R Double -> 4 (Prev)
+            0x00, 0x05, // L Triple -> 5 (Next)
+            0x00, 0x06, // R Triple -> 6 (Voice Assistant)
+            0x00, 0x07, // L Long   -> 7 (Game Mode)
+            0x00, 0x08, // R Long   -> 8 (Noise Control)
+        ];
+
+        let gestures = parse_earfun_touch_gestures_response(&payload).unwrap();
+        assert_eq!(gestures.len(), 8);
+
+        assert_eq!(gestures[0].side, EarSide::Left);
+        assert_eq!(gestures[0].action, GestureAction::SingleSqueeze);
+        assert_eq!(gestures[0].function, 1);
+
+        assert_eq!(gestures[1].side, EarSide::Right);
+        assert_eq!(gestures[1].action, GestureAction::SingleSqueeze);
+        assert_eq!(gestures[1].function, 2);
+
+        assert_eq!(gestures[2].side, EarSide::Left);
+        assert_eq!(gestures[2].action, GestureAction::DoubleSqueeze);
+        assert_eq!(gestures[2].function, 3);
+
+        assert_eq!(gestures[3].side, EarSide::Right);
+        assert_eq!(gestures[3].action, GestureAction::DoubleSqueeze);
+        assert_eq!(gestures[3].function, 4);
+
+        assert_eq!(gestures[4].side, EarSide::Left);
+        assert_eq!(gestures[4].action, GestureAction::TripleSqueeze);
+        assert_eq!(gestures[4].function, 5);
+
+        assert_eq!(gestures[5].side, EarSide::Right);
+        assert_eq!(gestures[5].action, GestureAction::TripleSqueeze);
+        assert_eq!(gestures[5].function, 6);
+
+        assert_eq!(gestures[6].side, EarSide::Left);
+        assert_eq!(gestures[6].action, GestureAction::SqueezeAndHold);
+        assert_eq!(gestures[6].function, 7);
+
+        assert_eq!(gestures[7].side, EarSide::Right);
+        assert_eq!(gestures[7].action, GestureAction::SqueezeAndHold);
+        assert_eq!(gestures[7].function, 8);
+
+        // Status 0x00 is also accepted
+        let mut payload_status_0 = payload;
+        payload_status_0[0] = 0x00;
+        assert!(parse_earfun_touch_gestures_response(&payload_status_0).is_ok());
+
+        // Error cases
+        assert!(parse_earfun_touch_gestures_response(&payload[..16]).is_err());
+        let mut invalid_status = payload;
+        invalid_status[0] = 0x02;
+        assert!(parse_earfun_touch_gestures_response(&invalid_status).is_err());
+    }
+
+    #[test]
+    fn test_earfun_touch_gesture_encode() {
+        use crate::protocol::core::types::{EarSide, GestureAction};
+
+        // Left ear Single Tap -> Play/Pause (1)
+        let l_single =
+            encode_earfun_set_touch_action(EarSide::Left, EarFunInteractionType::SingleTap, 1);
+        assert_eq!(l_single, vec![0x01, 0x01, 0x00, 0x00]);
+
+        // Right ear Long Press (0x11) -> Noise Control (8)
+        let r_long =
+            encode_earfun_set_touch_action(EarSide::Right, EarFunInteractionType::LongPress, 8);
+        assert_eq!(r_long, vec![0x00, 0x00, 0x11, 0x08]);
+
+        // Generic GestureAction conversion helper
+        let encoded_l =
+            encode_earfun_set_gesture(EarSide::Left, GestureAction::DoubleSqueeze, 5).unwrap();
+        assert_eq!(encoded_l, vec![0x02, 0x05, 0x00, 0x00]);
+
+        let encoded_r =
+            encode_earfun_set_gesture(EarSide::Right, GestureAction::SqueezeAndHold, 8).unwrap();
+        assert_eq!(encoded_r, vec![0x00, 0x00, 0x11, 0x08]);
+
+        // Whole packet encoding
+        let pkt = EarFunPacket::new(EarFunCommands::SET_TOUCH_ACTION, encoded_r);
+        assert_eq!(
+            pkt.encode(),
+            vec![
+                0xFF, 0x04, 0x00, 0x04, 0x00, 0x0A, 0x03, 0x0A, 0x00, 0x00, 0x11, 0x08
+            ]
+        );
+    }
+
+    #[test]
+    fn test_earfun_touch_lock_parse_and_encode() {
+        // Mode 0: Unlocked (touch enabled)
+        let unlocked = parse_earfun_touch_lock_response(&[0x00, 0x00]).unwrap();
+        assert!(!unlocked);
+
+        // Mode 1: Locked (touch disabled)
+        let locked = parse_earfun_touch_lock_response(&[0x00, 0x01]).unwrap();
+        assert!(locked);
+
+        // Errors
+        assert!(parse_earfun_touch_lock_response(&[0x01, 0x01]).is_err());
+        assert!(parse_earfun_touch_lock_response(&[0x00]).is_err());
+
+        // Encoding
+        assert_eq!(encode_earfun_set_touch_lock(true), vec![0x01]);
+        assert_eq!(encode_earfun_set_touch_lock(false), vec![0x00]);
+
+        let pkt_lock = EarFunPacket::new(
+            EarFunCommands::SET_TOUCH_MODE,
+            encode_earfun_set_touch_lock(true),
+        );
+        assert_eq!(
+            pkt_lock.encode(),
+            vec![0xFF, 0x04, 0x00, 0x01, 0x00, 0x0A, 0x03, 0x34, 0x01]
+        );
+    }
 }

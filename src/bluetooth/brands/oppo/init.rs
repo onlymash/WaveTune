@@ -204,6 +204,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
                 controls: ControlsSnapshot {
                     supports_touch_customization: profile
                         .is_some_and(|profile| profile.supports_touch_customization()),
+                    supports_touch_lock: false,
                     supports_sleep_detection: profile
                         .is_some_and(|profile| profile.supports_sleep_detection()),
                     supports_head_motion: profile
@@ -220,6 +221,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
                     prompt_volume: None,
                     head_motion_type: None,
                     in_ear_detection_enabled: None,
+                    touch_lock_enabled: None,
                     sleep_detection_enabled: None,
                     is_finding_earbuds: false,
                 },
@@ -560,6 +562,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
             },
             controls: ControlsSnapshot {
                 supports_touch_customization,
+                supports_touch_lock: false,
                 supports_sleep_detection: profile.supports_sleep_detection(),
                 supports_head_motion,
                 supports_find_device: profile.supports_find_device(),
@@ -571,6 +574,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
                 prompt_volume,
                 head_motion_type,
                 in_ear_detection_enabled,
+                touch_lock_enabled: None,
                 sleep_detection_enabled,
                 is_finding_earbuds: false,
             },

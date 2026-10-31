@@ -133,6 +133,7 @@ impl Default for SoundSnapshot {
 #[derive(Clone, Debug)]
 pub struct ControlsSnapshot {
     pub supports_touch_customization: bool,
+    pub supports_touch_lock: bool,
     pub supports_sleep_detection: bool,
     pub supports_head_motion: bool,
     pub supports_find_device: bool,
@@ -145,6 +146,7 @@ pub struct ControlsSnapshot {
     pub prompt_volume: Option<u8>,
     pub head_motion_type: Option<u8>,
     pub in_ear_detection_enabled: Option<bool>,
+    pub touch_lock_enabled: Option<bool>,
     pub sleep_detection_enabled: Option<bool>,
     pub is_finding_earbuds: bool,
 }
@@ -153,6 +155,7 @@ impl Default for ControlsSnapshot {
     fn default() -> Self {
         Self {
             supports_touch_customization: false,
+            supports_touch_lock: false,
             supports_sleep_detection: false,
             supports_head_motion: false,
             supports_find_device: false,
@@ -164,6 +167,7 @@ impl Default for ControlsSnapshot {
             prompt_volume: None,
             head_motion_type: None,
             in_ear_detection_enabled: None,
+            touch_lock_enabled: None,
             sleep_detection_enabled: None,
             is_finding_earbuds: false,
         }

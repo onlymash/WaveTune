@@ -103,10 +103,12 @@ pub enum UiUpdate {
     HeadMotionType(u8),
     DualDeviceConnectionEnabled(bool),
     InEarDetectionEnabled(bool),
+    TouchLockEnabled(bool),
     SleepDetectionEnabled(bool),
     PreferredDevice(Option<PairedDeviceAddress>),
     ControlsFeatures {
         supports_touch_customization: bool,
+        supports_touch_lock: bool,
         supports_dual_device: bool,
         supports_wear_detection: bool,
         supports_sleep_detection: bool,
@@ -166,6 +168,7 @@ pub enum WorkerCommand {
     SetHeadMotionType(u8),
     SetDualDeviceConnection(bool),
     SetInEarDetection(bool),
+    SetTouchLock(bool),
     SetSleepDetection(bool),
     SetPreferredDevice(Option<PairedDeviceAddress>),
 }

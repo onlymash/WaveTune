@@ -37,7 +37,10 @@ use crate::{
 pub use driver::EarFunDriver;
 #[allow(unused_imports)]
 pub use features::{
-    controls::set_in_ear_detection,
+    controls::{
+        query_touch_actions, query_touch_lock, set_in_ear_detection, set_touch_action,
+        set_touch_lock,
+    },
     dual_device::{read_earfun_paired_devices, set_dual_device},
     noise::{earfun_mode_to_protocol_index, protocol_index_to_earfun_mode, set_noise_mode},
     sound::{apply_equalizer_preset, set_audio_codec, set_game_mode},
@@ -79,6 +82,7 @@ pub mod earfun_session {
         initialize_earfun_session_with_lap, open_earfun_rfcomm,
         parse_earfun_product_id_from_firmware, probe_earfun, protocol_index_to_earfun_mode,
         read_earfun_paired_devices, request, send_command, set_audio_codec, set_dual_device,
-        set_game_mode, set_in_ear_detection, set_noise_mode, spawn_earfun_monitor,
+        set_game_mode, set_in_ear_detection, set_noise_mode, set_touch_action, set_touch_lock,
+        spawn_earfun_monitor,
     };
 }

@@ -39,6 +39,7 @@ pub mod features {
     pub const BASS_ENGINE: &str = "bass-engine";
     pub const FIND_DEVICE: &str = "find-device";
     pub const TOUCH_CUSTOMIZATION: &str = "touch-customization";
+    pub const TOUCH_LOCK: &str = "touch-lock";
     pub const PROMPT_VOLUME: &str = "prompt-volume";
     pub const SLEEP_DETECTION: &str = "sleep-detection";
     pub const SWIFT_PAIR: &str = "swift-pair";
@@ -166,7 +167,7 @@ pub fn spatial_audio_mode_key(mode: u8) -> &'static str {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct GestureRow {
     pub action: crate::protocol::GestureAction,
     pub is_call_control: bool,
@@ -176,11 +177,50 @@ pub struct GestureRow {
     pub allowed_functions: &'static [u8],
     pub default_function: Option<u8>,
     pub label_key: &'static str,
+    pub function_label_key: fn(u8) -> &'static str,
 }
 
-pub use brands::oppo::{
-    STANDARD_GESTURE_ROWS, gesture_function_label_key, gesture_rows_for_product,
-};
+impl PartialEq for GestureRow {
+    fn eq(&self, other: &Self) -> bool {
+        self.action == other.action
+            && self.is_call_control == other.is_call_control
+            && self.button == other.button
+            && self.both_ears == other.both_ears
+            && self.edits_noise_cycle == other.edits_noise_cycle
+            && self.allowed_functions == other.allowed_functions
+            && self.default_function == other.default_function
+            && self.label_key == other.label_key
+    }
+}
+
+impl Eq for GestureRow {}
+
+impl GestureRow {
+    #[inline]
+    pub fn function_label_key(&self, function: u8) -> &'static str {
+        (self.function_label_key)(function)
+    }
+}
+
+#[allow(unused_imports)]
+pub use brands::oppo::{STANDARD_GESTURE_ROWS, gesture_function_label_key};
+
+pub fn gesture_rows_for_product(product_id: u32) -> &'static [GestureRow] {
+    if let Some(rows) = brands::earfun::gesture_rows_for_product(product_id) {
+        rows
+    } else {
+        brands::oppo::gesture_rows_for_product(product_id)
+    }
+}
+
+#[allow(dead_code)]
+pub fn gesture_function_label_key_for_product(product_id: u32, function: u8) -> &'static str {
+    if brands::earfun::is_earfun_product(product_id) {
+        brands::earfun::earfun_gesture_function_label_key(function)
+    } else {
+        brands::oppo::gesture_function_label_key(function)
+    }
+}
 
 #[allow(dead_code)]
 impl DeviceProfile {
@@ -247,6 +287,11 @@ impl DeviceProfile {
     #[inline]
     pub fn supports_touch_customization(&self) -> bool {
         self.has_feature(features::TOUCH_CUSTOMIZATION)
+    }
+
+    #[inline]
+    pub fn supports_touch_lock(&self) -> bool {
+        self.has_feature(features::TOUCH_LOCK)
     }
 
     #[inline]

@@ -47,6 +47,7 @@ impl ControlsComponent {
             &self.widgets,
             &ControlsFeaturesViewState {
                 supports_touch: state.supports_touch_customization,
+                supports_touch_lock: state.supports_touch_lock,
                 supports_dual: supports_dual_device,
                 supports_wear: supports_wear_detection,
                 supports_sleep: state.supports_sleep_detection,
@@ -96,6 +97,12 @@ impl ControlsComponent {
     pub fn render_in_ear(&self, enabled: Option<bool>) {
         if let Some(en) = enabled {
             controls_state::update_in_ear_detection(&self.widgets, en);
+        }
+    }
+
+    pub fn render_touch_lock(&self, enabled: Option<bool>) {
+        if let Some(en) = enabled {
+            controls_state::update_touch_lock(&self.widgets, en);
         }
     }
 

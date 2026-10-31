@@ -201,31 +201,31 @@ flowchart TD
 ```
 
 ### 阶段一：协议编解码实现与单测
-- [ ] 编写 `src/protocol/brands/earfun/earfun_controls.rs`，包含 `EarFunInteractionType`、手势查询/设置、触控锁定编解码纯函数；
-- [ ] 导出模块至 `src/protocol/brands/earfun/mod.rs`；
-- [ ] 在 `src/protocol/brands/earfun/tests.rs` 补充完整单元测试，验证解析与编码的字节一致性。
+- [x] 编写 `src/protocol/brands/earfun/earfun_controls.rs`，包含 `EarFunInteractionType`、手势查询/设置、触控锁定编解码纯函数；
+- [x] 导出模块至 `src/protocol/brands/earfun/mod.rs`；
+- [x] 在 `src/protocol/brands/earfun/tests.rs` 补充完整单元测试，验证解析与编码的字节一致性。
 
 ### 阶段二：兼容层多品牌手势解耦
-- [ ] 编写 `src/compatibility/brands/earfun/earfun_gestures.rs`，定义 Air Pro 4、Free Pro 3、Air S 的静态 `GestureRow` 数组；
-- [ ] 重构 `src/compatibility/mod.rs`，将单品牌 `STANDARD_GESTURE_ROWS` 升级为多品牌分发的 `gesture_rows_for_product`；
-- [ ] 在 `src/compatibility/brands/earfun/earfun_catalog.rs` 确认特征声明，为 Air Pro 4 和 Free Pro 3 补充 `features::TOUCH_LOCK`。
+- [x] 编写 `src/compatibility/brands/earfun/earfun_gestures.rs`，定义 Air Pro 4、Free Pro 3、Air S 的静态 `GestureRow` 数组；
+- [x] 重构 `src/compatibility/mod.rs`，将单品牌 `STANDARD_GESTURE_ROWS` 升级为多品牌分发的 `gesture_rows_for_product`；
+- [x] 在 `src/compatibility/brands/earfun/earfun_catalog.rs` 确认特征声明，为 Air Pro 4 和 Free Pro 3 补充 `features::TOUCH_LOCK`。
 
 ### 阶段三：蓝牙驱动接入与会话生命周期
-- [ ] 修改 `src/bluetooth/brands/earfun/init.rs`，在握手阶段加入 `0x030B` 与 `0x0335` 状态查询并写入 `ControlsSnapshot`；
-- [ ] 扩展 `src/bluetooth/brands/earfun/features/controls.rs`，实现 `set_touch_action` 与 `set_touch_mode`；
-- [ ] 在 `src/bluetooth/brands/earfun/driver.rs` 的 `handle_command` 中接入 `SetGesture` 与 `SetTouchLock` 分发与状态回读。
+- [x] 修改 `src/bluetooth/brands/earfun/init.rs`，在握手阶段加入 `0x030B` 与 `0x0335` 状态查询并写入 `ControlsSnapshot`；
+- [x] 扩展 `src/bluetooth/brands/earfun/features/controls.rs`，实现 `set_touch_action` 与 `set_touch_mode`；
+- [x] 在 `src/bluetooth/brands/earfun/driver.rs` 的 `handle_command` 中接入 `SetGesture` 与 `SetTouchLock` 分发与状态回读。
 
 ### 阶段四：UI 表现层动态化与业务切片完善
-- [ ] 扩充 `ControlsSnapshot`、`ControlsState` 及 `UiUpdate`，加入触控锁定状态支持；
-- [ ] 重构 `src/ui/pages/controls/gestures.rs`，使 `ComboRow` 支持根据当前连接耳机的 `GestureRow` 动态刷新选项条目（`set_items`）；
-- [ ] 在手势组增加“触控锁定（Touch Lock）”开关卡片；
-- [ ] 验证呼叫手势组与降噪掩码复选框在 EarFun 接入时正确自动隐藏。
+- [x] 扩充 `ControlsSnapshot`、`ControlsState` 及 `UiUpdate`，加入触控锁定状态支持；
+- [x] 重构 `src/ui/pages/controls/gestures.rs`，使 `ComboRow` 支持根据当前连接耳机的 `GestureRow` 动态刷新选项条目（`set_items`）；
+- [x] 在手势组增加“触控锁定（Touch Lock）”开关卡片；
+- [x] 验证呼叫手势组与降噪掩码复选框在 EarFun 接入时正确自动隐藏。
 
 ### 阶段五：国际化、自动化测试与真机联调
-- [ ] 更新 `locales/zh-CN/wavetune.ftl` 与 `locales/en-US/wavetune.ftl`，补充触控锁定与 EarFun 动作文本；
-- [ ] 编写跨品牌手势分发回归测试；
-- [ ] 编写模拟 RFCOMM 数据流的会话测试，验证手势写入与 ACK 闭环；
-- [ ] 在已连接的真实 EarFun Air Pro 4 上运行 `cargo run -- --probe` 与 GUI 联调测试，确认物理耳机手势即时生效。
+- [x] 更新 `locales/zh-CN/wavetune.ftl` 与 `locales/en-US/wavetune.ftl`，补充触控锁定与 EarFun 动作文本；
+- [x] 编写跨品牌手势分发回归测试；
+- [x] 编写模拟 RFCOMM 数据流的会话测试，验证手势写入与 ACK 闭环；
+- [x] 在已连接的真实 EarFun Air Pro 4 上运行 `cargo run -- --probe` 与 GUI 联调测试，确认物理耳机手势即时生效。
 
 ---
 

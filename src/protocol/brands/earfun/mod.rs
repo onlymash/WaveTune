@@ -16,11 +16,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 pub mod earfun_commands;
+pub mod earfun_controls;
 pub mod earfun_packet;
 pub mod earfun_parsers;
 #[cfg(test)]
 mod tests;
 
 pub use earfun_commands::*;
+pub use earfun_controls::*;
 pub use earfun_packet::*;
 pub use earfun_parsers::*;

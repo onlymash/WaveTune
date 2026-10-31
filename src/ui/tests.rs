@@ -941,11 +941,25 @@ fn ui_components_layout_and_behavior() {
     assert!(!controls_widgets.features.is_sleep_sensitive());
     assert!(!controls_widgets.head_motion.is_switch_sensitive());
     assert!(!controls_widgets.gestures.is_gesture_combos_sensitive());
+    assert!(!controls_widgets.gestures.is_touch_lock_sensitive());
 
-    // Enable touch gestures via set_supported
-    controls_widgets
-        .gestures
-        .set_supported(true, crate::compatibility::STANDARD_GESTURE_ROWS);
+    // Enable touch gestures and touch lock via set_supported
+    controls_widgets.gestures.set_supported(
+        true,
+        true,
+        crate::compatibility::STANDARD_GESTURE_ROWS,
+    );
+    assert!(controls_widgets.gestures.is_gesture_combos_sensitive());
+    assert!(controls_widgets.gestures.is_touch_lock_sensitive());
+
+    // When touch lock is enabled, gesture combos should become insensitive
+    crate::ui::controls_state::update_touch_lock(&controls_widgets, true);
+    assert!(controls_widgets.gestures.is_touch_lock_active());
+    assert!(!controls_widgets.gestures.is_gesture_combos_sensitive());
+
+    // When touch lock is disabled, gesture combos should become sensitive again
+    crate::ui::controls_state::update_touch_lock(&controls_widgets, false);
+    assert!(!controls_widgets.gestures.is_touch_lock_active());
     assert!(controls_widgets.gestures.is_gesture_combos_sensitive());
 
     // Update dual device enabled -> true

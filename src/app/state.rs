@@ -132,6 +132,7 @@ impl HeadsetSessionState {
 
         // Controls
         self.controls.supports_touch_customization = snapshot.controls.supports_touch_customization;
+        self.controls.supports_touch_lock = snapshot.controls.supports_touch_lock;
         self.controls.supports_sleep_detection = snapshot.controls.supports_sleep_detection;
         self.controls.supports_head_motion = snapshot.controls.supports_head_motion;
         self.controls.supports_find_device = snapshot.controls.supports_find_device;
@@ -144,6 +145,7 @@ impl HeadsetSessionState {
         self.controls.prompt_volume = snapshot.controls.prompt_volume;
         self.controls.head_motion = snapshot.controls.head_motion_type;
         self.controls.in_ear_detection = snapshot.controls.in_ear_detection_enabled;
+        self.controls.touch_lock_enabled = snapshot.controls.touch_lock_enabled;
         self.controls.sleep_detection = snapshot.controls.sleep_detection_enabled;
         self.controls.preferred_device = snapshot.dual_device.preferred_device;
 
@@ -247,6 +249,7 @@ impl SoundState {
 #[derive(Default, Clone, Debug)]
 pub struct ControlsState {
     pub supports_touch_customization: bool,
+    pub supports_touch_lock: bool,
     pub supports_sleep_detection: bool,
     pub supports_head_motion: bool,
     pub supports_find_device: bool,
@@ -259,6 +262,7 @@ pub struct ControlsState {
     pub prompt_volume: Option<u8>,
     pub head_motion: Option<u8>,
     pub in_ear_detection: Option<bool>,
+    pub touch_lock_enabled: Option<bool>,
     pub sleep_detection: Option<bool>,
     pub preferred_device: Option<PairedDeviceAddress>,
 }
@@ -266,6 +270,7 @@ pub struct ControlsState {
 impl ControlsState {
     pub fn reset_on_disconnect(&mut self) {
         self.supports_touch_customization = false;
+        self.supports_touch_lock = false;
         self.supports_sleep_detection = false;
         self.supports_head_motion = false;
         self.supports_find_device = false;
@@ -278,6 +283,7 @@ impl ControlsState {
         self.prompt_volume = None;
         self.head_motion = None;
         self.in_ear_detection = None;
+        self.touch_lock_enabled = None;
         self.sleep_detection = None;
         self.preferred_device = None;
     }

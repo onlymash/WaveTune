@@ -27,6 +27,7 @@ pub static STANDARD_GESTURE_ROWS: &[GestureRow] = &[
         allowed_functions: &[0, 1],
         default_function: Some(1),
         label_key: "controls-gesture-single",
+        function_label_key: gesture_function_label_key,
     },
     GestureRow {
         action: crate::protocol::GestureAction::DoubleSqueeze,
@@ -37,6 +38,7 @@ pub static STANDARD_GESTURE_ROWS: &[GestureRow] = &[
         allowed_functions: &[0, 1, 5, 6, 3, 17],
         default_function: Some(6),
         label_key: "controls-gesture-double",
+        function_label_key: gesture_function_label_key,
     },
     GestureRow {
         action: crate::protocol::GestureAction::TripleSqueeze,
@@ -47,6 +49,7 @@ pub static STANDARD_GESTURE_ROWS: &[GestureRow] = &[
         allowed_functions: &[0, 5, 6, 3, 17],
         default_function: Some(5),
         label_key: "controls-gesture-triple",
+        function_label_key: gesture_function_label_key,
     },
     GestureRow {
         action: crate::protocol::GestureAction::Slide,
@@ -57,6 +60,7 @@ pub static STANDARD_GESTURE_ROWS: &[GestureRow] = &[
         allowed_functions: &[0, 7, 10],
         default_function: Some(7),
         label_key: "controls-gesture-slide",
+        function_label_key: gesture_function_label_key,
     },
     GestureRow {
         action: crate::protocol::GestureAction::SqueezeAndHold,
@@ -67,6 +71,7 @@ pub static STANDARD_GESTURE_ROWS: &[GestureRow] = &[
         allowed_functions: &[0, 8, 3, 17],
         default_function: Some(8),
         label_key: "controls-gesture-hold",
+        function_label_key: gesture_function_label_key,
     },
     GestureRow {
         action: crate::protocol::GestureAction::SingleSqueeze,
@@ -77,6 +82,7 @@ pub static STANDARD_GESTURE_ROWS: &[GestureRow] = &[
         allowed_functions: &[0, 29],
         default_function: Some(29),
         label_key: "controls-gesture-call-single",
+        function_label_key: gesture_function_label_key,
     },
     GestureRow {
         action: crate::protocol::GestureAction::DoubleSqueeze,
@@ -87,6 +93,7 @@ pub static STANDARD_GESTURE_ROWS: &[GestureRow] = &[
         allowed_functions: &[0, 28],
         default_function: Some(28),
         label_key: "controls-gesture-call-double",
+        function_label_key: gesture_function_label_key,
     },
 ];
 

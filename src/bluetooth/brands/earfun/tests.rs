@@ -93,6 +93,21 @@ mod tests {
         device.write_all(&pkt.encode()).unwrap();
     }
 
+    fn send_mock_gestures_030b(device: &mut UnixStream) {
+        let gestures_payload = vec![
+            0x00, // Status
+            0x00, 0x02, // L single: Vol Down (2)
+            0x00, 0x01, // R single: Vol Up (1)
+            0x00, 0x04, // L double: Play/Pause (4)
+            0x00, 0x04, // R double: Play/Pause (4)
+            0x00, 0x05, // L triple: Previous (5)
+            0x00, 0x03, // R triple: Next (3)
+            0x00, 0x09, // L long: Ambient (9)
+            0x00, 0x06, // R long: Voice Assistant (6)
+        ];
+        send_mock_response(device, EarFunCommands::GET_TOUCH_ACTION, gestures_payload);
+    }
+
     #[test]
     fn test_earfun_session_initialization() {
         let (mut client, mut device) = UnixStream::pair().unwrap();
@@ -164,6 +179,16 @@ mod tests {
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::GET_AUDIO_CODEC);
             send_mock_response(&mut device, req.command, vec![0x00, 19]); // aptX Lossless
+
+            // 12. Touch gestures 0x030B
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_TOUCH_ACTION);
+            send_mock_gestures_030b(&mut device);
+
+            // 13. Touch lock 0x0335
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_TOUCH_MODE);
+            send_mock_response(&mut device, req.command, vec![0x00, 0x00]); // Disabled
         });
 
         let (snapshot, _) =
@@ -182,6 +207,9 @@ mod tests {
         assert!(snapshot.dual_device.supports_dual_device);
         assert!(snapshot.sound.supports_audio_codec);
         assert_eq!(snapshot.sound.audio_codec, Some(19));
+        assert_eq!(snapshot.controls.key_functions.len(), 8);
+        assert!(snapshot.controls.supports_touch_lock);
+        assert_eq!(snapshot.controls.touch_lock_enabled, Some(false));
 
         let devs = snapshot.dual_device.paired_devices.unwrap();
         assert_eq!(devs.len(), 2);
@@ -258,6 +286,16 @@ mod tests {
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::GET_AUDIO_CODEC);
             send_mock_response(&mut device, req.command, vec![0x00, 8]); // LDAC
+
+            // 11. Touch gestures 0x030B
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_TOUCH_ACTION);
+            send_mock_gestures_030b(&mut device);
+
+            // 12. Touch lock 0x0335
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_TOUCH_MODE);
+            send_mock_response(&mut device, req.command, vec![0x00, 0x01]); // Enabled
         });
 
         let (snapshot, _) =
@@ -269,6 +307,7 @@ mod tests {
         // Case battery reporting 0xFF (255) must be parsed as None (unavailable/unreported), not 255%
         assert!(snapshot.battery.case.is_none());
         assert_eq!(snapshot.sound.audio_codec, Some(8));
+        assert_eq!(snapshot.controls.touch_lock_enabled, Some(true));
 
         device_thread.join().unwrap();
     }
@@ -414,6 +453,18 @@ mod tests {
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::GET_CONNECT_TWO_DEVICES);
             send_mock_response(&mut device, req.command, vec![0x00, 1]); // Enabled
+
+            // 7. Paired devices 0x032C (slots 0..10)
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_CONNECTED_DEVICES);
+            for slot in 0..10 {
+                send_mock_032c(&mut device, slot, b"", [0, 0, slot], false);
+            }
+
+            // 8. Touch gestures 0x030B
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_TOUCH_ACTION);
+            send_mock_gestures_030b(&mut device);
         });
 
         // Test that custom device name does NOT affect identification:
@@ -433,6 +484,9 @@ mod tests {
         assert!(!snapshot.wear.supports_wear_detection);
         assert!(snapshot.sound.game_mode_enabled.unwrap());
         assert!(snapshot.dual_device.dual_device_enabled.unwrap());
+        assert_eq!(snapshot.controls.key_functions.len(), 8);
+        assert!(!snapshot.controls.supports_touch_lock);
+        assert_eq!(snapshot.controls.touch_lock_enabled, None);
 
         device_thread.join().unwrap();
     }
@@ -501,6 +555,16 @@ mod tests {
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::GET_AUDIO_CODEC);
             send_mock_response(&mut device, req.command, vec![0x00, 3]); // aptX Adaptive
+
+            // 11. Touch gestures 0x030B
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_TOUCH_ACTION);
+            send_mock_gestures_030b(&mut device);
+
+            // 12. Touch lock 0x0335
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_TOUCH_MODE);
+            send_mock_response(&mut device, req.command, vec![0x00, 0x00]); // Disabled
         });
 
         // Test that custom device name does NOT affect identification:
@@ -519,6 +583,9 @@ mod tests {
         assert!(snapshot.dual_device.dual_device_enabled.unwrap());
         assert!(snapshot.sound.supports_audio_codec);
         assert_eq!(snapshot.sound.audio_codec, Some(3));
+        assert_eq!(snapshot.controls.key_functions.len(), 8);
+        assert!(snapshot.controls.supports_touch_lock);
+        assert_eq!(snapshot.controls.touch_lock_enabled, Some(false));
 
         device_thread.join().unwrap();
     }
@@ -712,6 +779,64 @@ mod tests {
                 .iter()
                 .any(|u| matches!(u, crate::bluetooth::UiUpdate::DeviceRebooting))
         );
+
+        device_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_earfun_set_gesture() {
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+
+        let device_thread = thread::spawn(move || {
+            // SET_TOUCH_ACTION 0x030A: payload [interaction=0x11 (Long Press), function=9 (Ambient Sound), 0x00, 0x00] for Left earbud
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_TOUCH_ACTION);
+            assert_eq!(req.payload, vec![0x11, 0x09, 0x00, 0x00]);
+        });
+
+        let (tx, _rx) = mpsc::channel();
+        let mut decoder = EarFunFrameDecoder::default();
+        set_touch_action(
+            &mut client,
+            &mut decoder,
+            crate::protocol::core::types::EarSide::Left,
+            crate::protocol::core::types::GestureAction::SqueezeAndHold,
+            9,
+            Some(&tx),
+        )
+        .expect("set touch action should succeed");
+
+        device_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_earfun_set_touch_lock() {
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+
+        let device_thread = thread::spawn(move || {
+            // SET_TOUCH_MODE 0x0334: payload [0x01] (lock enabled)
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_TOUCH_MODE);
+            assert_eq!(req.payload, vec![0x01]);
+        });
+
+        let (tx, _rx) = mpsc::channel();
+        let mut decoder = EarFunFrameDecoder::default();
+        let res = set_touch_lock(&mut client, &mut decoder, true, Some(&tx))
+            .expect("set touch lock should succeed");
+        assert!(res);
 
         device_thread.join().unwrap();
     }

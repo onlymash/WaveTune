@@ -15,40 +15,90 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
+use std::{cell::RefCell, rc::Rc};
+
 use adw::prelude::*;
-use gtk::{Align, Box as GtkBox, CheckButton, Orientation, ToggleButton};
+use gtk::{Align, Box as GtkBox, CheckButton, Orientation, Switch, ToggleButton};
 
 use crate::{
-    compatibility::{GestureRow, STANDARD_GESTURE_ROWS, gesture_function_label_key},
+    compatibility::{GestureRow, STANDARD_GESTURE_ROWS},
     protocol::{EarSide, KeyFunction, NoiseCycleState},
-    ui::components::{ComboRowExtManual, combo_row, preferences_content_row},
+    ui::components::{ComboRowExtManual, combo_row, preferences_content_row, switch_row},
 };
 
 #[derive(Clone)]
 pub(crate) struct GestureSettingsWidgets {
     gesture_group: adw::PreferencesGroup,
     call_gesture_group: adw::PreferencesGroup,
+    touch_lock_row: adw::ActionRow,
+    touch_lock_switch: Switch,
     ear_selector: GtkBox,
     ear_left_btn: ToggleButton,
     ear_right_btn: ToggleButton,
-    gesture_combos: Vec<(GestureRow, adw::ComboRow)>,
+    gesture_combos: Vec<(Rc<RefCell<GestureRow>>, adw::ComboRow)>,
     cycle_section: adw::ActionRow,
     cycle_check_anc: CheckButton,
     cycle_check_transparency: CheckButton,
     cycle_check_off: CheckButton,
+    touch_lock_flag: crate::ui::ReentrancyFlag,
     gesture_combos_flag: crate::ui::ReentrancyFlag,
     noise_cycle_flag: crate::ui::ReentrancyFlag,
 }
 
 impl GestureSettingsWidgets {
-    pub fn set_supported(&self, supports_touch: bool, gesture_rows: &[GestureRow]) {
+    pub fn set_supported(
+        &self,
+        supports_touch: bool,
+        supports_touch_lock: bool,
+        gesture_rows: &[GestureRow],
+    ) {
         self.gesture_group
-            .set_visible(supports_touch && !gesture_rows.is_empty());
+            .set_visible(supports_touch && (!gesture_rows.is_empty() || supports_touch_lock));
         self.call_gesture_group
             .set_visible(supports_touch && gesture_rows.iter().any(|r| r.is_call_control));
-        self.ear_selector.set_visible(supports_touch);
-        self.set_gesture_combos_sensitive(supports_touch);
-        self.set_noise_cycle_sensitive(supports_touch);
+        self.ear_selector
+            .set_visible(supports_touch && !gesture_rows.is_empty());
+        self.touch_lock_row.set_visible(supports_touch_lock);
+        self.touch_lock_switch.set_sensitive(supports_touch_lock);
+
+        self.update_gesture_rows(gesture_rows);
+
+        let locked = self.touch_lock_switch.is_active();
+        self.set_gesture_combos_sensitive(supports_touch && !locked);
+        self.set_noise_cycle_sensitive(supports_touch && !locked);
+    }
+
+    pub fn update_gesture_rows(&self, gesture_rows: &[GestureRow]) {
+        if gesture_rows.is_empty() {
+            return;
+        }
+        let _guard = self.gesture_combos_flag.enter();
+        for (row_cell, combo) in &self.gesture_combos {
+            let action = row_cell.borrow().action;
+            let is_call = row_cell.borrow().is_call_control;
+            if let Some(matched) = gesture_rows
+                .iter()
+                .find(|r| r.action == action && r.is_call_control == is_call)
+            {
+                *row_cell.borrow_mut() = matched.clone();
+                let items: Vec<(u8, String)> = matched
+                    .allowed_functions
+                    .iter()
+                    .map(|&f| (f, crate::t!(matched.function_label_key(f))))
+                    .collect();
+                combo.set_items(&items);
+                combo.set_visible(true);
+            } else {
+                combo.set_visible(false);
+            }
+        }
+    }
+
+    pub fn set_touch_lock(&self, locked: bool) {
+        let _guard = self.touch_lock_flag.enter();
+        self.touch_lock_switch.set_active(locked);
+        self.set_gesture_combos_sensitive(!locked);
+        self.set_noise_cycle_sensitive(!locked);
     }
 
     pub fn update_key_functions(
@@ -57,8 +107,11 @@ impl GestureSettingsWidgets {
         selected_ear: EarSide,
         gesture_rows: &[GestureRow],
     ) {
+        self.update_gesture_rows(gesture_rows);
+
         let _guard = self.gesture_combos_flag.enter();
-        for (row_def, combo) in &self.gesture_combos {
+        for (row_cell, combo) in &self.gesture_combos {
+            let row_def = row_cell.borrow();
             let current_func = key_functions
                 .iter()
                 .find(|k| {
@@ -73,7 +126,9 @@ impl GestureSettingsWidgets {
                 combo.set_selected_id(Some(func as u8));
             }
         }
-        self.set_gesture_combos_sensitive(true);
+        if !self.touch_lock_switch.is_active() {
+            self.set_gesture_combos_sensitive(true);
+        }
 
         // Check if long-press is currently noise control
         let hold_controls_noise = gesture_rows
@@ -112,14 +167,25 @@ impl GestureSettingsWidgets {
     }
 
     pub fn set_gesture_combos_sensitive(&self, sensitive: bool) {
+        let is_sensitive = sensitive && !self.touch_lock_switch.is_active();
         for (_, combo) in &self.gesture_combos {
-            combo.set_sensitive(sensitive);
+            combo.set_sensitive(is_sensitive);
         }
     }
 
     #[cfg(test)]
     pub fn is_gesture_combos_sensitive(&self) -> bool {
         self.gesture_combos.iter().all(|(_, c)| c.is_sensitive())
+    }
+
+    #[cfg(test)]
+    pub fn is_touch_lock_sensitive(&self) -> bool {
+        self.touch_lock_switch.is_sensitive()
+    }
+
+    #[cfg(test)]
+    pub fn is_touch_lock_active(&self) -> bool {
+        self.touch_lock_switch.is_active()
     }
 
     pub fn set_noise_cycle_sensitive(&self, sensitive: bool) {
@@ -136,10 +202,14 @@ impl GestureSettingsWidgets {
     pub fn reset(&self) {
         self.gesture_group.set_visible(false);
         self.call_gesture_group.set_visible(false);
+        self.touch_lock_row.set_visible(false);
+        self.touch_lock_switch.set_active(false);
         self.ear_selector.set_visible(false);
         self.cycle_section.set_visible(false);
         self.ear_left_btn.set_active(true);
         self.ear_right_btn.set_active(false);
+        self.set_gesture_combos_sensitive(false);
+        self.set_noise_cycle_sensitive(false);
     }
 
     pub fn connect_ear_selected<F>(&self, callback: F)
@@ -164,8 +234,8 @@ impl GestureSettingsWidgets {
     where
         F: Fn(GestureRow, u8, adw::ComboRow) + 'static + Clone,
     {
-        for (row_def, combo) in &self.gesture_combos {
-            let row_def = row_def.clone();
+        for (row_cell, combo) in &self.gesture_combos {
+            let row_cell = row_cell.clone();
             let combo = combo.clone();
             let flag = self.gesture_combos_flag.clone();
             let cb = callback.clone();
@@ -175,10 +245,25 @@ impl GestureSettingsWidgets {
                     return;
                 }
                 if let Some(func_id) = c.selected_id() {
-                    cb(row_def.clone(), func_id, c.clone());
+                    let row_def = row_cell.borrow().clone();
+                    cb(row_def, func_id, c.clone());
                 }
             });
         }
+    }
+
+    pub fn connect_touch_lock_toggled<F>(&self, callback: F)
+    where
+        F: Fn(bool) + 'static + Clone,
+    {
+        let flag = self.touch_lock_flag.clone();
+        self.touch_lock_switch.connect_state_set(move |_, state| {
+            if flag.is_updating() {
+                return gtk::glib::Propagation::Proceed;
+            }
+            callback(state);
+            gtk::glib::Propagation::Proceed
+        });
     }
 
     pub fn connect_noise_cycle_toggled<F>(&self, callback: F)
@@ -252,6 +337,15 @@ pub(crate) fn build_gesture_groups() -> (
         .description(&crate::t!("controls-gestures-desc"))
         .build();
 
+    // Touch Lock Row
+    let (touch_lock_row, touch_lock_switch) = switch_row(
+        &crate::t!("controls-touch-lock"),
+        Some(&crate::t!("controls-touch-lock-desc")),
+    );
+    touch_lock_row.set_visible(false);
+    touch_lock_switch.set_sensitive(false);
+    gesture_group.add(&touch_lock_row);
+
     // Ear selector (Left / Right)
     let ear_selector = GtkBox::new(Orientation::Horizontal, 0);
     ear_selector.set_halign(Align::Center);
@@ -278,14 +372,14 @@ pub(crate) fn build_gesture_groups() -> (
         let items: Vec<(u8, String)> = row_def
             .allowed_functions
             .iter()
-            .map(|&f| (f, crate::t!(gesture_function_label_key(f))))
+            .map(|&f| (f, crate::t!(row_def.function_label_key(f))))
             .collect();
         combo.set_items(&items);
         if let Some(def_f) = row_def.default_function {
             combo.set_selected_id(Some(def_f));
         }
         gesture_group.add(&combo);
-        gesture_combos.push((row_def.clone(), combo));
+        gesture_combos.push((Rc::new(RefCell::new(row_def.clone())), combo));
     }
 
     // Noise Cycle Section (shown when squeeze and hold is noise control)
@@ -322,19 +416,21 @@ pub(crate) fn build_gesture_groups() -> (
         let items: Vec<(u8, String)> = row_def
             .allowed_functions
             .iter()
-            .map(|&f| (f, crate::t!(gesture_function_label_key(f))))
+            .map(|&f| (f, crate::t!(row_def.function_label_key(f))))
             .collect();
         combo.set_items(&items);
         if let Some(def_f) = row_def.default_function {
             combo.set_selected_id(Some(def_f));
         }
         call_gesture_group.add(&combo);
-        gesture_combos.push((row_def.clone(), combo));
+        gesture_combos.push((Rc::new(RefCell::new(row_def.clone())), combo));
     }
 
     let widgets = GestureSettingsWidgets {
         gesture_group: gesture_group.clone(),
         call_gesture_group: call_gesture_group.clone(),
+        touch_lock_row,
+        touch_lock_switch,
         ear_selector,
         ear_left_btn,
         ear_right_btn,
@@ -343,6 +439,7 @@ pub(crate) fn build_gesture_groups() -> (
         cycle_check_anc,
         cycle_check_transparency,
         cycle_check_off,
+        touch_lock_flag: crate::ui::ReentrancyFlag::new(),
         gesture_combos_flag: crate::ui::ReentrancyFlag::new(),
         noise_cycle_flag: crate::ui::ReentrancyFlag::new(),
     };

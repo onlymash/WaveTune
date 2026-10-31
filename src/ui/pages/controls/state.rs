@@ -26,6 +26,7 @@ use crate::{
 #[derive(Clone, Copy)]
 pub(crate) struct ControlsFeaturesViewState<'a> {
     pub supports_touch: bool,
+    pub supports_touch_lock: bool,
     pub supports_dual: bool,
     pub supports_wear: bool,
     pub supports_sleep: bool,
@@ -40,9 +41,11 @@ pub(crate) fn update_controls_features(
     widgets: &ControlsWidgets,
     state: &ControlsFeaturesViewState,
 ) {
-    widgets
-        .gestures
-        .set_supported(state.supports_touch, state.gesture_rows);
+    widgets.gestures.set_supported(
+        state.supports_touch,
+        state.supports_touch_lock,
+        state.gesture_rows,
+    );
 
     widgets.features.set_supported(
         state.supports_dual,
@@ -111,6 +114,10 @@ pub(crate) fn update_dual_device(widgets: &ControlsWidgets, enabled: bool) {
 
 pub(crate) fn update_in_ear_detection(widgets: &ControlsWidgets, enabled: bool) {
     widgets.features.set_in_ear_detection(enabled);
+}
+
+pub(crate) fn update_touch_lock(widgets: &ControlsWidgets, enabled: bool) {
+    widgets.gestures.set_touch_lock(enabled);
 }
 
 pub(crate) fn update_sleep_detection(widgets: &ControlsWidgets, enabled: bool) {

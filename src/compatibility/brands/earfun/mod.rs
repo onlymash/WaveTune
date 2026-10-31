@@ -17,6 +17,10 @@
 
 pub mod earfun_catalog;
 pub mod earfun_equalizer;
+pub mod earfun_gestures;
+
+#[cfg(test)]
+mod tests;
 
 #[allow(unused_imports)]
 pub use earfun_catalog::{
@@ -27,4 +31,9 @@ pub use earfun_catalog::{
 pub use earfun_equalizer::{
     EARFUN_AIR_PRO_4_EQ_PRESETS, EARFUN_AIR_S_EQ_PRESETS, EARFUN_TEN_BAND_EQ_PRESETS,
     equalizer_presets_for_product,
+};
+#[allow(unused_imports)]
+pub use earfun_gestures::{
+    EARFUN_AIR_PRO_4_GESTURE_ROWS, EARFUN_AIR_S_GESTURE_ROWS, EARFUN_FREE_PRO_3_GESTURE_ROWS,
+    earfun_gesture_function_label_key, gesture_rows_for_product, is_earfun_product,
 };

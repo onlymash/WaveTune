@@ -29,10 +29,10 @@ use crate::protocol::brands::earfun::{
     EarFunCommands, EarFunFrameDecoder, parse_earfun_ambient_mode, parse_earfun_anc_sub_mode,
     parse_earfun_battery_component, parse_earfun_transparency_sub_mode,
 };
-use crate::protocol::{BatteryState, PairedDeviceAction};
+use crate::protocol::{BatteryState, EarSide, KeyFunction, PairedDeviceAction};
 
 use super::features::{
-    controls::set_in_ear_detection,
+    controls::{query_touch_actions, set_in_ear_detection, set_touch_action, set_touch_lock},
     dual_device::{read_earfun_paired_devices, set_dual_device},
     noise::{earfun_mode_to_protocol_index, set_noise_mode},
     sound::{apply_equalizer_preset, set_audio_codec, set_game_mode},
@@ -276,6 +276,89 @@ impl HeadsetDriver for EarFunDriver {
                 match set_in_ear_detection(stream, &mut self.decoder, enabled, updates) {
                     Ok(actual) => {
                         let _ = updates.send(UiUpdate::InEarDetectionEnabled(actual));
+                    }
+                    Err(error) => {
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: error,
+                        });
+                    }
+                }
+                Ok(())
+            }
+            WorkerCommand::SetGesture {
+                side,
+                button: _,
+                action,
+                function,
+            } => {
+                let _ = updates.send(UiUpdate::Status(crate::t!("controls-gesture-updating")));
+                match set_touch_action(
+                    stream,
+                    &mut self.decoder,
+                    side,
+                    action,
+                    function,
+                    Some(updates),
+                ) {
+                    Ok(()) => {
+                        let mut updated = false;
+                        if let Ok(gestures) =
+                            query_touch_actions(stream, &mut self.decoder, Some(updates))
+                        {
+                            if !gestures.is_empty() {
+                                if let Some(st) = &mut self.snapshot {
+                                    st.controls.key_functions = gestures.clone();
+                                }
+                                let _ = updates.send(UiUpdate::KeyFunctions(gestures));
+                                updated = true;
+                            }
+                        }
+                        if !updated {
+                            if let Some(st) = &mut self.snapshot {
+                                if let Some(existing) =
+                                    st.controls.key_functions.iter_mut().find(|k| {
+                                        (k.side == side || side == EarSide::Both)
+                                            && k.action == action
+                                    })
+                                {
+                                    existing.function = function;
+                                } else {
+                                    st.controls.key_functions.push(KeyFunction {
+                                        side,
+                                        button: 1,
+                                        action,
+                                        function,
+                                    });
+                                }
+                                let _ = updates.send(UiUpdate::KeyFunctions(
+                                    st.controls.key_functions.clone(),
+                                ));
+                            }
+                        }
+                        let _ =
+                            updates.send(UiUpdate::Status(crate::t!("controls-gesture-updated")));
+                    }
+                    Err(error) => {
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-gesture-update-failed", error),
+                        });
+                        if let Some(st) = &self.snapshot {
+                            let _ = updates
+                                .send(UiUpdate::KeyFunctions(st.controls.key_functions.clone()));
+                        }
+                    }
+                }
+                Ok(())
+            }
+            WorkerCommand::SetTouchLock(locked) => {
+                match set_touch_lock(stream, &mut self.decoder, locked, Some(updates)) {
+                    Ok(actual) => {
+                        if let Some(st) = &mut self.snapshot {
+                            st.controls.touch_lock_enabled = Some(actual);
+                        }
+                        let _ = updates.send(UiUpdate::TouchLockEnabled(actual));
                     }
                     Err(error) => {
                         let _ = updates.send(UiUpdate::SettingError {
