@@ -926,54 +926,54 @@ fn ui_components_layout_and_behavior() {
     let (_, controls_widgets) = crate::ui::pages::controls::build_controls_page();
 
     // Initial state: sensitive = false
-    assert!(!controls_widgets.dual_switch.is_sensitive());
-    assert!(!controls_widgets.in_ear_switch.is_sensitive());
-    assert!(!controls_widgets.sleep_switch.is_sensitive());
-    assert!(!controls_widgets.head_switch.is_sensitive());
+    assert!(!controls_widgets.features.is_dual_sensitive());
+    assert!(!controls_widgets.features.is_in_ear_sensitive());
+    assert!(!controls_widgets.features.is_sleep_sensitive());
+    assert!(!controls_widgets.head_motion.is_switch_sensitive());
 
     // Update dual device enabled -> true
     crate::ui::controls_state::update_dual_device(&controls_widgets, true);
-    assert!(controls_widgets.dual_switch.state());
-    assert!(controls_widgets.dual_switch.is_active());
-    assert!(controls_widgets.dual_switch.is_sensitive());
-    assert!(controls_widgets.dual_row.is_sensitive());
+    assert!(controls_widgets.features.is_dual_state());
+    assert!(controls_widgets.features.is_dual_active());
+    assert!(controls_widgets.features.is_dual_sensitive());
+    assert!(controls_widgets.features.is_dual_row_sensitive());
 
     // Update in-ear detection enabled -> true
     crate::ui::controls_state::update_in_ear_detection(&controls_widgets, true);
-    assert!(controls_widgets.in_ear_switch.state());
-    assert!(controls_widgets.in_ear_switch.is_active());
-    assert!(controls_widgets.in_ear_switch.is_sensitive());
+    assert!(controls_widgets.features.is_in_ear_state());
+    assert!(controls_widgets.features.is_in_ear_active());
+    assert!(controls_widgets.features.is_in_ear_sensitive());
 
     // Update sleep detection enabled -> true
     crate::ui::controls_state::update_sleep_detection(&controls_widgets, true);
-    assert!(controls_widgets.sleep_switch.state());
-    assert!(controls_widgets.sleep_switch.is_active());
-    assert!(controls_widgets.sleep_switch.is_sensitive());
+    assert!(controls_widgets.features.is_sleep_state());
+    assert!(controls_widgets.features.is_sleep_active());
+    assert!(controls_widgets.features.is_sleep_sensitive());
 
     // Update head switch enabled -> true
     crate::ui::controls_state::update_head_switch(&controls_widgets, true);
-    assert!(controls_widgets.head_switch.state());
-    assert!(controls_widgets.head_switch.is_active());
-    assert!(controls_widgets.head_switch.is_sensitive());
-    assert!(controls_widgets.head_motion_row.is_sensitive());
+    assert!(controls_widgets.head_motion.is_switch_state());
+    assert!(controls_widgets.head_motion.is_switch_active());
+    assert!(controls_widgets.head_motion.is_switch_sensitive());
+    assert!(controls_widgets.head_motion.is_motion_sensitive());
 
     // Reset controls page
     crate::ui::controls_state::reset_controls_page(&controls_widgets);
-    assert!(!controls_widgets.dual_switch.state());
-    assert!(!controls_widgets.dual_switch.is_active());
-    assert!(!controls_widgets.dual_switch.is_sensitive());
+    assert!(!controls_widgets.features.is_dual_state());
+    assert!(!controls_widgets.features.is_dual_active());
+    assert!(!controls_widgets.features.is_dual_sensitive());
 
-    assert!(!controls_widgets.in_ear_switch.state());
-    assert!(!controls_widgets.in_ear_switch.is_active());
-    assert!(!controls_widgets.in_ear_switch.is_sensitive());
+    assert!(!controls_widgets.features.is_in_ear_state());
+    assert!(!controls_widgets.features.is_in_ear_active());
+    assert!(!controls_widgets.features.is_in_ear_sensitive());
 
-    assert!(!controls_widgets.sleep_switch.state());
-    assert!(!controls_widgets.sleep_switch.is_active());
-    assert!(!controls_widgets.sleep_switch.is_sensitive());
+    assert!(!controls_widgets.features.is_sleep_state());
+    assert!(!controls_widgets.features.is_sleep_active());
+    assert!(!controls_widgets.features.is_sleep_sensitive());
 
-    assert!(!controls_widgets.head_switch.state());
-    assert!(!controls_widgets.head_switch.is_active());
-    assert!(!controls_widgets.head_switch.is_sensitive());
+    assert!(!controls_widgets.head_motion.is_switch_state());
+    assert!(!controls_widgets.head_motion.is_switch_active());
+    assert!(!controls_widgets.head_motion.is_switch_sensitive());
 
     // Verify ComboRow with enable_combo_row_subtitle_wrap wraps long subtitles vertically
     // at dialog width instead of squeezing the selected option label

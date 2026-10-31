@@ -30,7 +30,6 @@ use crate::{
         features::FeatureContext,
     },
     protocol::{EarSide, PairedDevice},
-    ui::components::ComboRowExtManual,
 };
 
 #[derive(Clone)]
@@ -80,103 +79,65 @@ impl ControlsController {
 
         self.component
             .widgets
-            .ear_left_btn
-            .connect_toggled(move |btn| {
-                if btn.is_active() {
-                    selected_ear.set(EarSide::Left);
-                    let st = context.session_state.borrow();
-                    component.render_key_functions(
-                        &st.controls.key_functions,
-                        EarSide::Left,
-                        &st.controls.gesture_rows,
-                    );
-                    component.render_noise_cycle(st.controls.noise_cycle, EarSide::Left);
-                }
+            .gestures
+            .connect_ear_selected(move |side| {
+                selected_ear.set(side);
+                let st = context.session_state.borrow();
+                component.render_key_functions(
+                    &st.controls.key_functions,
+                    side,
+                    &st.controls.gesture_rows,
+                );
+                component.render_noise_cycle(st.controls.noise_cycle, side);
             });
+    }
 
+    fn bind_gesture_combo_events(&self) {
         let selected_ear = self.selected_ear.clone();
         let component = self.component.clone();
         let context = self.context.clone();
 
         self.component
             .widgets
-            .ear_right_btn
-            .connect_toggled(move |btn| {
-                if btn.is_active() {
-                    selected_ear.set(EarSide::Right);
-                    let st = context.session_state.borrow();
-                    component.render_key_functions(
-                        &st.controls.key_functions,
-                        EarSide::Right,
-                        &st.controls.gesture_rows,
-                    );
-                    component.render_noise_cycle(st.controls.noise_cycle, EarSide::Right);
-                }
-            });
-    }
+            .gestures
+            .connect_gesture_selected(move |row_def, func_id, combo| {
+                let side = selected_ear.get();
+                let button = row_def.button;
+                let action = row_def.action;
+                let function = func_id;
 
-    fn bind_gesture_combo_events(&self) {
-        for (row_def, combo) in &self.component.widgets.gesture_combos {
-            let row_def = row_def.clone();
-            let combo = combo.clone();
-            let selected_ear = self.selected_ear.clone();
-            let gesture_combos_flag = self.component.widgets.gesture_combos_flag.clone();
-            let component = self.component.clone();
-            let context = self.context.clone();
-
-            combo.connect_selected_notify(move |c| {
-                if gesture_combos_flag.is_updating() {
-                    return;
-                }
-                if let Some(func_id) = c.selected_id() {
-                    let side = selected_ear.get();
-                    let button = row_def.button;
-                    let action = row_def.action;
-                    let function = func_id;
-
-                    c.set_sensitive(false);
-                    let cmd = WorkerCommand::SetGesture {
-                        side,
-                        button,
-                        action,
-                        function,
-                    };
-                    match context.send_command(cmd) {
-                        Ok(()) => {}
-                        Err(err) => {
-                            context.send_status(crate::t!("controls-gesture-send-failed", err));
-                            let st = context.session_state.borrow();
-                            component.render_key_functions(
-                                &st.controls.key_functions,
-                                selected_ear.get(),
-                                &st.controls.gesture_rows,
-                            );
-                            c.set_sensitive(true);
-                        }
+                combo.set_sensitive(false);
+                let cmd = WorkerCommand::SetGesture {
+                    side,
+                    button,
+                    action,
+                    function,
+                };
+                match context.send_command(cmd) {
+                    Ok(()) => {}
+                    Err(err) => {
+                        context.send_status(crate::t!("controls-gesture-send-failed", err));
+                        let st = context.session_state.borrow();
+                        component.render_key_functions(
+                            &st.controls.key_functions,
+                            selected_ear.get(),
+                            &st.controls.gesture_rows,
+                        );
+                        combo.set_sensitive(true);
                     }
                 }
             });
-        }
     }
 
     fn bind_noise_cycle_events(&self) {
-        for check in [
-            &self.component.widgets.cycle_check_anc,
-            &self.component.widgets.cycle_check_transparency,
-            &self.component.widgets.cycle_check_off,
-        ] {
-            let component = self.component.clone();
-            let selected_ear = self.selected_ear.clone();
-            let noise_cycle_flag = self.component.widgets.noise_cycle_flag.clone();
-            let context = self.context.clone();
+        let component = self.component.clone();
+        let selected_ear = self.selected_ear.clone();
+        let context = self.context.clone();
 
-            check.connect_toggled(move |_| {
-                if noise_cycle_flag.is_updating() {
-                    return;
-                }
-                let anc = component.widgets.cycle_check_anc.is_active();
-                let trans = component.widgets.cycle_check_transparency.is_active();
-                let off = component.widgets.cycle_check_off.is_active();
+        self.component
+            .widgets
+            .gestures
+            .connect_noise_cycle_toggled(move |anc, trans, off| {
                 let count = (anc as u8) + (trans as u8) + (off as u8);
                 if count < 2 {
                     context.send_status(crate::t!("controls-noise-cycle-min-warning"));
@@ -202,12 +163,7 @@ impl ControlsController {
                 };
                 match context.send_command(cmd) {
                     Ok(()) => {
-                        component.widgets.cycle_check_anc.set_sensitive(false);
-                        component
-                            .widgets
-                            .cycle_check_transparency
-                            .set_sensitive(false);
-                        component.widgets.cycle_check_off.set_sensitive(false);
+                        component.widgets.gestures.set_noise_cycle_sensitive(false);
                     }
                     Err(err) => {
                         context.send_status(crate::t!("controls-noise-cycle-send-failed", err));
@@ -216,7 +172,6 @@ impl ControlsController {
                     }
                 }
             });
-        }
     }
 
     fn bind_find_and_fit_events(&self) {
@@ -225,84 +180,77 @@ impl ControlsController {
         let component = self.component.clone();
         let is_finding = self.is_finding_earbuds.clone();
 
-        self.component.widgets.find_btn.connect_clicked(move |_| {
-            if is_finding.get() {
-                component.widgets.find_btn.set_sensitive(false);
-                if let Err(err) = context.send_command(WorkerCommand::FindEarbuds(false)) {
-                    context.send_status(crate::t!("controls-find-send-failed", err));
-                    component.widgets.find_btn.set_sensitive(true);
-                }
-            } else {
-                let in_ear = context.session_state.borrow().wear.any_earbud_in_ear();
-                let context_find = context.clone();
-                let find_btn_find = component.widgets.find_btn.clone();
-                let do_play = move || {
-                    find_btn_find.set_sensitive(false);
-                    if let Err(err) = context_find.send_command(WorkerCommand::FindEarbuds(true)) {
-                        context_find.send_status(crate::t!("controls-find-send-failed", err));
-                        find_btn_find.set_sensitive(true);
+        self.component
+            .widgets
+            .utilities
+            .connect_find_clicked(move || {
+                if is_finding.get() {
+                    component.widgets.utilities.set_find_sensitive(false);
+                    if let Err(err) = context.send_command(WorkerCommand::FindEarbuds(false)) {
+                        context.send_status(crate::t!("controls-find-send-failed", err));
+                        component.widgets.utilities.set_find_sensitive(true);
                     }
-                };
-
-                if in_ear {
-                    let alert = adw::AlertDialog::builder()
-                        .heading(&crate::t!("controls-find-warning-title"))
-                        .body(&crate::t!("controls-find-warning-body"))
-                        .build();
-                    alert.add_response("cancel", &crate::t!("common-cancel"));
-                    alert.add_response("play", &crate::t!("controls-find-play"));
-                    alert.set_response_appearance("play", adw::ResponseAppearance::Destructive);
-                    alert.choose(
-                        Some(&component.widgets.find_btn),
-                        None::<&gtk::gio::Cancellable>,
-                        move |response| {
-                            if response == "play" {
-                                do_play();
-                            }
-                        },
-                    );
                 } else {
-                    do_play();
+                    let in_ear = context.session_state.borrow().wear.any_earbud_in_ear();
+                    let context_find = context.clone();
+                    let utilities_find = component.widgets.utilities.clone();
+                    let do_play = move || {
+                        utilities_find.set_find_sensitive(false);
+                        if let Err(err) =
+                            context_find.send_command(WorkerCommand::FindEarbuds(true))
+                        {
+                            context_find.send_status(crate::t!("controls-find-send-failed", err));
+                            utilities_find.set_find_sensitive(true);
+                        }
+                    };
+
+                    if in_ear {
+                        let alert = adw::AlertDialog::builder()
+                            .heading(&crate::t!("controls-find-warning-title"))
+                            .body(&crate::t!("controls-find-warning-body"))
+                            .build();
+                        alert.add_response("cancel", &crate::t!("common-cancel"));
+                        alert.add_response("play", &crate::t!("controls-find-play"));
+                        alert.set_response_appearance("play", adw::ResponseAppearance::Destructive);
+                        alert.choose(
+                            Some(component.widgets.utilities.find_button()),
+                            None::<&gtk::gio::Cancellable>,
+                            move |response| {
+                                if response == "play" {
+                                    do_play();
+                                }
+                            },
+                        );
+                    } else {
+                        do_play();
+                    }
                 }
-            }
-        });
+            });
 
         // 2. Fit test
         let context = self.context.clone();
         let component = self.component.clone();
 
-        self.component.widgets.fit_btn.connect_clicked(move |_| {
-            component.render_fit_test_running(true);
-            if let Err(err) = context.send_command(WorkerCommand::RunFitTest) {
-                context.send_status(crate::t!("controls-fit-test-send-failed", err));
-                component.render_fit_test_running(false);
-            }
-        });
+        self.component
+            .widgets
+            .utilities
+            .connect_fit_clicked(move || {
+                component.render_fit_test_running(true);
+                if let Err(err) = context.send_command(WorkerCommand::RunFitTest) {
+                    context.send_status(crate::t!("controls-fit-test-send-failed", err));
+                    component.render_fit_test_running(false);
+                }
+            });
     }
 
     fn bind_prompt_volume_events(&self) {
-        let prompt_volume_flag = self.component.widgets.prompt_volume_flag.clone();
         let debounce = self.prompt_volume_debounce_source.clone();
-        let component = self.component.clone();
         let context = self.context.clone();
 
         self.component
             .widgets
-            .prompt_volume_scale
-            .connect_value_changed(move |slider| {
-                let rounded = slider.value().round();
-                if (slider.value() - rounded).abs() > 0.001 {
-                    slider.set_value(rounded);
-                    return;
-                }
-                let value = rounded as u8;
-                component
-                    .widgets
-                    .prompt_volume_label
-                    .set_text(&value.to_string());
-                if prompt_volume_flag.is_updating() {
-                    return;
-                }
+            .features
+            .connect_prompt_volume_changed(move |value| {
                 if let Some(source_id) = debounce.borrow_mut().take() {
                     source_id.remove();
                 }
@@ -326,26 +274,13 @@ impl ControlsController {
     }
 
     fn bind_head_motion_events(&self) {
-        // 1. Head switch
-        let head_motion_flag = self.component.widgets.head_motion_flag.clone();
         let component = self.component.clone();
         let context = self.context.clone();
 
         self.component
             .widgets
-            .head_switch
-            .connect_state_set(move |switch, state| {
-                if head_motion_flag.is_updating() {
-                    return gtk::glib::Propagation::Proceed;
-                }
-                let motion_type = if state {
-                    let sel = component.widgets.head_motion_row.selected_id().unwrap_or(0);
-                    if sel == 0 { 1 } else { sel }
-                } else {
-                    0
-                };
-
-                switch.set_sensitive(false);
+            .head_motion
+            .connect_switch_toggled(move |_state, motion_type| {
                 let cmd = WorkerCommand::SetHeadMotionType(motion_type);
                 match context.send_command(cmd) {
                     Ok(()) => {}
@@ -355,62 +290,42 @@ impl ControlsController {
                         component.render_head_motion(cur);
                     }
                 }
-                gtk::glib::Propagation::Stop
             });
 
-        // 2. Head motion row
-        let head_motion_flag = self.component.widgets.head_motion_flag.clone();
         let component = self.component.clone();
         let context = self.context.clone();
 
         self.component
             .widgets
-            .head_motion_row
-            .connect_selected_notify(move |row| {
-                if head_motion_flag.is_updating() {
-                    return;
-                }
-                if let Some(motion_type) = row.selected_id() {
-                    if component.widgets.head_switch.is_active() && motion_type > 0 {
-                        row.set_sensitive(false);
-                        let cmd = WorkerCommand::SetHeadMotionType(motion_type);
-                        match context.send_command(cmd) {
-                            Ok(()) => {}
-                            Err(err) => {
-                                context.send_status(crate::t!(
-                                    "controls-head-motion-send-failed",
-                                    err
-                                ));
-                                let cur = context.session_state.borrow().controls.head_motion;
-                                component.render_head_motion(cur);
-                            }
-                        }
+            .head_motion
+            .connect_motion_selected(move |motion_type| {
+                let cmd = WorkerCommand::SetHeadMotionType(motion_type);
+                match context.send_command(cmd) {
+                    Ok(()) => {}
+                    Err(err) => {
+                        context.send_status(crate::t!("controls-head-motion-send-failed", err));
+                        let cur = context.session_state.borrow().controls.head_motion;
+                        component.render_head_motion(cur);
                     }
                 }
             });
     }
 
     fn bind_dual_device_events(&self) {
-        let dual_device_flag = self.component.widgets.dual_device_flag.clone();
         let component = self.component.clone();
         let context = self.context.clone();
 
         self.component
             .widgets
-            .dual_switch
-            .connect_state_set(move |switch, state| {
-                if dual_device_flag.is_updating() {
-                    return gtk::glib::Propagation::Proceed;
-                }
-
+            .features
+            .connect_dual_toggled(move |state| {
                 // If user enables dual device while LDAC is active on EarFun:
                 let is_ldac = context.session_state.borrow().sound.current_audio_codec
                     == Some(crate::protocol::brands::earfun::EarFunAudioCodec::Ldac.as_u8());
 
                 if state && is_ldac {
-                    let switch_for_dialog = switch.clone();
-                    let switch_for_action = switch.clone();
-                    let updating_dual_confirm = dual_device_flag.clone();
+                    let switch_for_dialog = component.widgets.features.dual_switch().clone();
+                    let features_for_revert = component.widgets.features.clone();
                     let context_dialog = context.clone();
 
                     let dialog = adw::AlertDialog::builder()
@@ -426,20 +341,18 @@ impl ControlsController {
                         None::<&gtk::gio::Cancellable>,
                         move |response| {
                             if response == "confirm" {
-                                switch_for_action.set_sensitive(false);
+                                features_for_revert.set_dual_sensitive(false);
                                 let _ = context_dialog
                                     .send_command(WorkerCommand::SetDualDeviceConnection(true));
                             } else {
-                                let _guard = updating_dual_confirm.enter();
-                                switch_for_action.set_state(false);
-                                switch_for_action.set_active(false);
+                                features_for_revert.revert_dual_switch();
                             }
                         },
                     );
-                    return gtk::glib::Propagation::Stop;
+                    return;
                 }
 
-                switch.set_sensitive(false);
+                component.widgets.features.set_dual_sensitive(false);
                 let cmd = WorkerCommand::SetDualDeviceConnection(state);
                 match context.send_command(cmd) {
                     Ok(()) => {}
@@ -453,24 +366,17 @@ impl ControlsController {
                         component.render_dual_device(cur);
                     }
                 }
-                gtk::glib::Propagation::Stop
             });
     }
 
     fn bind_detection_events(&self) {
-        // 1. In-ear detection
-        let in_ear_flag = self.component.widgets.in_ear_flag.clone();
         let component = self.component.clone();
         let context = self.context.clone();
 
         self.component
             .widgets
-            .in_ear_switch
-            .connect_state_set(move |switch, state| {
-                if in_ear_flag.is_updating() {
-                    return gtk::glib::Propagation::Proceed;
-                }
-                switch.set_sensitive(false);
+            .features
+            .connect_in_ear_toggled(move |state| {
                 let cmd = WorkerCommand::SetInEarDetection(state);
                 match context.send_command(cmd) {
                     Ok(()) => {}
@@ -480,22 +386,15 @@ impl ControlsController {
                         component.render_in_ear(cur);
                     }
                 }
-                gtk::glib::Propagation::Stop
             });
 
-        // 2. Sleep detection
-        let sleep_flag = self.component.widgets.sleep_flag.clone();
         let component = self.component.clone();
         let context = self.context.clone();
 
         self.component
             .widgets
-            .sleep_switch
-            .connect_state_set(move |switch, state| {
-                if sleep_flag.is_updating() {
-                    return gtk::glib::Propagation::Proceed;
-                }
-                switch.set_sensitive(false);
+            .features
+            .connect_sleep_toggled(move |state| {
                 let cmd = WorkerCommand::SetSleepDetection(state);
                 match context.send_command(cmd) {
                     Ok(()) => {}
@@ -505,42 +404,32 @@ impl ControlsController {
                         component.render_sleep(cur);
                     }
                 }
-                gtk::glib::Propagation::Stop
             });
     }
 
     fn bind_preferred_device_events(&self) {
-        let preferred_flag = self.component.widgets.preferred_flag.clone();
         let component = self.component.clone();
         let context = self.context.clone();
         let cached_devices = self.cached_paired_devices.clone();
 
         self.component
             .widgets
-            .preferred_row
-            .connect_selected_notify(move |row| {
-                if preferred_flag.is_updating() {
-                    return;
-                }
-                if let Some(id) = row.selected_id() {
-                    let target_mac = if id == 0 {
-                        None
-                    } else {
-                        let idx = (id - 1) as usize;
-                        cached_devices.borrow().get(idx).map(|d| d.address)
-                    };
-                    row.set_sensitive(false);
-                    let cmd = WorkerCommand::SetPreferredDevice(target_mac);
-                    match context.send_command(cmd) {
-                        Ok(()) => {}
-                        Err(err) => {
-                            context.send_status(crate::t!(
-                                "controls-preferred-device-send-failed",
-                                err
-                            ));
-                            let pref = context.session_state.borrow().controls.preferred_device;
-                            component.render_preferred_devices(pref, &cached_devices.borrow());
-                        }
+            .features
+            .connect_preferred_selected(move |id| {
+                let target_mac = if id == 0 {
+                    None
+                } else {
+                    let idx = (id - 1) as usize;
+                    cached_devices.borrow().get(idx).map(|d| d.address)
+                };
+                let cmd = WorkerCommand::SetPreferredDevice(target_mac);
+                match context.send_command(cmd) {
+                    Ok(()) => {}
+                    Err(err) => {
+                        context
+                            .send_status(crate::t!("controls-preferred-device-send-failed", err));
+                        let pref = context.session_state.borrow().controls.preferred_device;
+                        component.render_preferred_devices(pref, &cached_devices.borrow());
                     }
                 }
             });
@@ -571,9 +460,10 @@ impl ControlsController {
                     self.selected_ear.get(),
                     &st.controls.gesture_rows,
                 );
-                for (_, combo) in &self.component.widgets.gesture_combos {
-                    combo.set_sensitive(true);
-                }
+                self.component
+                    .widgets
+                    .gestures
+                    .set_gesture_combos_sensitive(true);
                 true
             }
             UiUpdate::NoiseCycle(cycle) => {
@@ -583,12 +473,10 @@ impl ControlsController {
                 }
                 self.component
                     .render_noise_cycle(Some(*cycle), self.selected_ear.get());
-                self.component.widgets.cycle_check_anc.set_sensitive(true);
                 self.component
                     .widgets
-                    .cycle_check_transparency
-                    .set_sensitive(true);
-                self.component.widgets.cycle_check_off.set_sensitive(true);
+                    .gestures
+                    .set_noise_cycle_sensitive(true);
                 true
             }
             UiUpdate::IsFindingEarbuds(finding) => {
@@ -708,7 +596,9 @@ impl ControlsController {
         }
         self.component.reset();
         self.selected_ear.set(EarSide::Left);
-        self.component.widgets.ear_left_btn.set_active(true);
-        self.component.widgets.ear_right_btn.set_active(false);
+        self.component
+            .widgets
+            .gestures
+            .set_ear_selection(EarSide::Left);
     }
 }

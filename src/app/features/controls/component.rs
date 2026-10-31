@@ -15,8 +15,6 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use gtk::prelude::*;
-
 use crate::{
     app::state::ControlsState,
     compatibility::GestureRow,
@@ -132,24 +130,15 @@ impl ControlsComponent {
     }
 
     pub fn re_enable_controls(&self) {
-        for (_, combo) in &self.widgets.gesture_combos {
-            combo.set_sensitive(true);
-        }
-        self.widgets.cycle_check_anc.set_sensitive(true);
-        self.widgets.cycle_check_transparency.set_sensitive(true);
-        self.widgets.cycle_check_off.set_sensitive(true);
-        self.widgets.find_btn.set_sensitive(true);
-        self.widgets.fit_btn.set_sensitive(true);
-        self.widgets.dual_switch.set_sensitive(true);
-        self.widgets.dual_row.set_sensitive(true);
-        self.widgets.in_ear_switch.set_sensitive(true);
-        self.widgets.in_ear_row.set_sensitive(true);
-        self.widgets.sleep_switch.set_sensitive(true);
-        self.widgets.sleep_row.set_sensitive(true);
-        self.widgets.head_switch.set_sensitive(true);
-        self.widgets.head_switch_row.set_sensitive(true);
-        self.widgets.head_motion_row.set_sensitive(true);
-        self.widgets.preferred_row.set_sensitive(true);
-        self.widgets.prompt_volume_scale.set_sensitive(true);
+        self.widgets.gestures.set_gesture_combos_sensitive(true);
+        self.widgets.gestures.set_noise_cycle_sensitive(true);
+        self.widgets.utilities.set_find_sensitive(true);
+        self.widgets.utilities.set_fit_sensitive(true);
+        self.widgets.features.set_dual_sensitive(true);
+        self.widgets.features.set_in_ear_sensitive(true);
+        self.widgets.features.set_sleep_sensitive(true);
+        self.widgets.features.set_preferred_sensitive(true);
+        self.widgets.head_motion.set_switch_sensitive(true);
+        self.widgets.head_motion.set_motion_sensitive(true);
     }
 }

@@ -149,22 +149,24 @@ impl BassEngineWidgets {
 
 ---
 
-### 阶段三：横向推广 —— `ControlsWidgets` 组件化拆分
+### 阶段三：横向推广 —— `ControlsWidgets` 组件化拆分 [已完成]
 **目标**：按照阶段一、二沉淀的模式，对 `ControlsWidgets`（手势配置与偏好设置）进行重构。
 
 #### 详细任务：
-1. **拆解为 3 个独立子组件**：
-   - `FeatureTogglesWidgets`：双设备连接、佩戴检测、自动休眠、提示音量；
-   - `HeadMotionWidgets`：头部动作控制开关与灵敏度下拉框；
-   - `GestureSettingsWidgets`：左右耳切换按钮、各手势触发下拉框、按键循环配置。
+1. **拆解为 4 个独立子组件**：
+   - `FeatureTogglesWidgets`：双设备连接、偏好设备、佩戴检测、自动休眠、提示音量；
+   - `HeadMotionWidgets`：头部动作控制开关与点头/摇头下拉框；
+   - `GestureSettingsWidgets`：左右耳切换按钮、各手势触发下拉框、按键循环配置；
+   - `UtilityWidgets`：查找耳机与贴合度测试。
 2. **拆解 `build_controls_page`**：
    - 分离各个卡片的构建函数；
    - 消除 `gesture_combos: Vec<(GestureRow, adw::ComboRow)>` 的直接裸露，封装手势列表的更新与读取接口。
-3. **重构 `src/ui/pages/controls/state.rs`**。
+3. **重构 `src/ui/pages/controls/state.rs` 与 Controller/Component 交互**。
 
 * **验收标准**：
-  - `ControlsWidgets` 收敛为拥有 3 个子组件的高层结构体；
-  - 手势配置和开关逻辑完全解耦。
+  - `ControlsWidgets` 收敛为拥有 4 个子组件的高层结构体；
+  - 控件字段全部私有化，通过领域语义方法与事件闭包通信；
+  - 所有 111 项单元测试全部通过。
 
 ---
 
