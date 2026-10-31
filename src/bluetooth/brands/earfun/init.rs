@@ -43,8 +43,6 @@ use super::transport::{
     EARFUN_AIR_PRO_4_PRODUCT_ID, EARFUN_AIR_S_PRODUCT_ID, EARFUN_FREE_PRO_3_PRODUCT_ID, request,
 };
 
-pub type EarFunDeviceSnapshot = DeviceSnapshot;
-
 /// Extracts the EarFun Product ID from hardware firmware version string (e.g. "TW600-3091_...").
 ///
 /// In EarFun's architecture:
@@ -70,7 +68,7 @@ pub fn initialize_earfun_session<T: Read + Write>(
     device_address: Option<&str>,
     discovered_product_id: Option<u32>,
     updates: Option<&Sender<UiUpdate>>,
-) -> Result<(EarFunDeviceSnapshot, EarFunFrameDecoder), String> {
+) -> Result<(DeviceSnapshot, EarFunFrameDecoder), String> {
     initialize_earfun_session_with_lap(
         stream,
         device_name,
@@ -88,7 +86,7 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
     discovered_product_id: Option<u32>,
     local_lap: Option<[u8; 3]>,
     updates: Option<&Sender<UiUpdate>>,
-) -> Result<(EarFunDeviceSnapshot, EarFunFrameDecoder), String> {
+) -> Result<(DeviceSnapshot, EarFunFrameDecoder), String> {
     let mut decoder = EarFunFrameDecoder::default();
     let mut detected_features = Vec::new();
     let mut probe_errors = Vec::new();
@@ -167,7 +165,7 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
         .ok()
         .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
 
-        let snapshot = EarFunDeviceSnapshot {
+        let snapshot = DeviceSnapshot {
             identity: DeviceIdentitySnapshot {
                 name: device_name.to_string(),
                 product_id: product_id.unwrap_or(0),
@@ -449,7 +447,7 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
     };
 
     let presets = compatibility::equalizer_presets_for_product(pid).to_vec();
-    let snapshot = EarFunDeviceSnapshot {
+    let snapshot = DeviceSnapshot {
         identity: DeviceIdentitySnapshot {
             name: device_name.to_string(),
             product_id: pid,

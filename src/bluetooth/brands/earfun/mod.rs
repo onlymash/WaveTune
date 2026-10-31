@@ -44,7 +44,7 @@ pub use features::{
 };
 #[allow(unused_imports)]
 pub use init::{
-    EarFunDeviceSnapshot, initialize_earfun_session, initialize_earfun_session_with_lap,
+    initialize_earfun_session, initialize_earfun_session_with_lap,
     parse_earfun_product_id_from_firmware, probe_earfun,
 };
 #[allow(unused_imports)]
@@ -74,9 +74,9 @@ pub mod earfun_session {
     pub use super::{
         EARFUN_AIR_PRO_4_PRODUCT_ID, EARFUN_AIR_S_PRODUCT_ID, EARFUN_FALLBACK_RFCOMM_CHANNEL,
         EARFUN_FREE_PRO_3_PRODUCT_ID, EARFUN_PRIMARY_SPP_NAMES, EARFUN_SECONDARY_SPP_NAMES,
-        EarFunDeviceSnapshot, EarFunDriver, GAIA_SERVICE_UUID, POLL_INTERVAL, REQUEST_TIMEOUT,
-        apply_equalizer_preset, earfun_mode_to_protocol_index, get_local_rfcomm_lap,
-        initialize_earfun_session, initialize_earfun_session_with_lap, open_earfun_rfcomm,
+        EarFunDriver, GAIA_SERVICE_UUID, POLL_INTERVAL, REQUEST_TIMEOUT, apply_equalizer_preset,
+        earfun_mode_to_protocol_index, get_local_rfcomm_lap, initialize_earfun_session,
+        initialize_earfun_session_with_lap, open_earfun_rfcomm,
         parse_earfun_product_id_from_firmware, probe_earfun, protocol_index_to_earfun_mode,
         read_earfun_paired_devices, request, send_command, set_audio_codec, set_dual_device,
         set_game_mode, set_in_ear_detection, set_noise_mode, spawn_earfun_monitor,

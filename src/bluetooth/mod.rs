@@ -31,9 +31,7 @@ pub use crate::app::events::{UiUpdate, WorkerCommand};
 #[allow(unused_imports)]
 pub use brands::oppo as session;
 #[allow(unused_imports)]
-pub use brands::oppo::{
-    OppoDeviceSnapshot, initialize_oppo_session, initialize_session, spawn_oppo_monitor,
-};
+pub use brands::oppo::{initialize_oppo_session, initialize_session, spawn_oppo_monitor};
 pub use discovery::spawn_discovery;
 #[allow(unused_imports)]
 pub use driver::HeadsetDriver;

@@ -56,7 +56,7 @@ vivo、漫步者等多品牌耳机支持奠定基础。
   “发送命令 -> 确认成功 ACK -> 匹配回读验证 -> 失败保留原状态”的安全管道。
 - 已完成品牌隔离架构重构（对齐 EncoDeck 架构）：将协议、设备配置和蓝牙会话划分为通用层与品牌专属层。
   OPPO/OnePlus/realme 专属的编解码（`OppoFrameDecoder`, `OppoAppPacket`）、指令集合（`OppoCommands`）、能力位图
-  （`OppoCapabilityBitmap`）、数据解析（`parse_oppo_*`）、降噪构造（`oppo_noise_mode_*`）及控制会话（`OppoDeviceSnapshot`,
+  （`OppoCapabilityBitmap`）、数据解析（`parse_oppo_*`）、降噪构造（`oppo_noise_mode_*`）及控制会话（`DeviceSnapshot`,
   `initialize_oppo_session`）均收敛至 `brands/oppo/` 命名空间下；通用状态模型抽象入 `protocol::core`；
   引入 `compatibility::registry::builtin_profiles()` 统一聚合多品牌型号目录，为后续支持 Huawei、Xiaomi、Vivo、
   Edifier 等多品牌耳机建立了清晰的可扩展边界。

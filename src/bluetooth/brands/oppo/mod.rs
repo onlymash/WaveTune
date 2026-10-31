@@ -32,9 +32,7 @@ pub use features::{
     },
 };
 #[allow(unused_imports)]
-pub use init::{
-    OppoDeviceSnapshot, initialize_oppo_session, initialize_session, probe_read_only_features,
-};
+pub use init::{initialize_oppo_session, initialize_session, probe_read_only_features};
 #[allow(unused_imports)]
 pub use transport::request;
 #[allow(unused_imports)]

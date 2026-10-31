@@ -40,9 +40,6 @@ use crate::protocol::{
 use super::features::dual_device::read_paired_devices;
 use super::transport::request;
 
-#[allow(dead_code)]
-pub type OppoDeviceSnapshot = DeviceSnapshot;
-
 fn list_separator() -> &'static str {
     match crate::t!("common-list-separator").as_str() {
         " " => " ",
