@@ -156,4 +156,3 @@ pub fn handle_noise_command<T: Read + Write>(
         _ => false,
     }
 }
-

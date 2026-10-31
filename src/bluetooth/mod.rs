@@ -42,17 +42,99 @@ pub use snapshot::*;
 #[allow(unused_imports)]
 pub use worker::SessionRunner;
 
+/// Unified driver enum dispatched across supported headset brands.
+pub enum AnyDriver {
+    EarFun(brands::earfun::EarFunDriver),
+    Oppo(brands::oppo::OppoDriver),
+}
+
+impl HeadsetDriver for AnyDriver {
+    fn brand_name(&self) -> &'static str {
+        match self {
+            AnyDriver::EarFun(d) => d.brand_name(),
+            AnyDriver::Oppo(d) => d.brand_name(),
+        }
+    }
+
+    fn open_rfcomm(&mut self, device: &DeviceChoice) -> std::io::Result<std::fs::File> {
+        match self {
+            AnyDriver::EarFun(d) => d.open_rfcomm(device),
+            AnyDriver::Oppo(d) => d.open_rfcomm(device),
+        }
+    }
+
+    fn initialize<T: std::io::Read + std::io::Write>(
+        &mut self,
+        stream: &mut T,
+        device: &DeviceChoice,
+        updates: Option<&std::sync::mpsc::Sender<UiUpdate>>,
+    ) -> Result<DeviceSnapshot, String> {
+        match self {
+            AnyDriver::EarFun(d) => d.initialize(stream, device, updates),
+            AnyDriver::Oppo(d) => d.initialize(stream, device, updates),
+        }
+    }
+
+    fn handle_command<T: std::io::Read + std::io::Write>(
+        &mut self,
+        stream: &mut T,
+        command: WorkerCommand,
+        updates: &std::sync::mpsc::Sender<UiUpdate>,
+    ) -> Result<(), String> {
+        match self {
+            AnyDriver::EarFun(d) => d.handle_command(stream, command, updates),
+            AnyDriver::Oppo(d) => d.handle_command(stream, command, updates),
+        }
+    }
+
+    fn handle_incoming_bytes<T: std::io::Read + std::io::Write>(
+        &mut self,
+        stream: &mut T,
+        bytes: &[u8],
+        updates: &std::sync::mpsc::Sender<UiUpdate>,
+    ) -> Result<(), String> {
+        match self {
+            AnyDriver::EarFun(d) => d.handle_incoming_bytes(stream, bytes, updates),
+            AnyDriver::Oppo(d) => d.handle_incoming_bytes(stream, bytes, updates),
+        }
+    }
+
+    fn poll_interval(&self) -> Option<std::time::Duration> {
+        match self {
+            AnyDriver::EarFun(d) => d.poll_interval(),
+            AnyDriver::Oppo(d) => d.poll_interval(),
+        }
+    }
+
+    fn periodic_tick<T: std::io::Read + std::io::Write>(
+        &mut self,
+        stream: &mut T,
+        updates: &std::sync::mpsc::Sender<UiUpdate>,
+    ) -> Result<(), String> {
+        match self {
+            AnyDriver::EarFun(d) => d.periodic_tick(stream, updates),
+            AnyDriver::Oppo(d) => d.periodic_tick(stream, updates),
+        }
+    }
+}
+
+/// Factory function to create brand-specific headset drivers.
+pub fn create_driver(brand: DeviceBrand) -> AnyDriver {
+    match brand {
+        DeviceBrand::EarFun => AnyDriver::EarFun(brands::earfun::EarFunDriver::new()),
+        DeviceBrand::OnePlus | DeviceBrand::Oppo | DeviceBrand::Realme => {
+            AnyDriver::Oppo(brands::oppo::OppoDriver::new())
+        }
+    }
+}
+
 pub fn spawn_monitor(
     device: DeviceChoice,
     updates: std::sync::mpsc::Sender<UiUpdate>,
     commands: std::sync::mpsc::Receiver<WorkerCommand>,
 ) -> std::io::Result<std::thread::JoinHandle<()>> {
-    match device.brand {
-        DeviceBrand::EarFun => brands::earfun::spawn_earfun_monitor(device, updates, commands),
-        DeviceBrand::OnePlus | DeviceBrand::Oppo | DeviceBrand::Realme => {
-            brands::oppo::spawn_oppo_monitor(device, updates, commands)
-        }
-    }
+    let driver = create_driver(device.brand);
+    SessionRunner::spawn(device, driver, updates, commands)
 }
 
 #[derive(Clone)]

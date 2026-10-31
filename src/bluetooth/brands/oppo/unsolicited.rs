@@ -217,4 +217,3 @@ pub fn merge_wear_state(current: &mut WearState, update: WearState) {
         current.case_open = update.case_open;
     }
 }
-

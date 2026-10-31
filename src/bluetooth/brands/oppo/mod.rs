@@ -50,6 +50,7 @@ use crate::{
     bluetooth::{DeviceChoice, worker::SessionRunner},
 };
 
+#[allow(dead_code)]
 pub fn spawn_oppo_monitor(
     device: DeviceChoice,
     updates: Sender<UiUpdate>,

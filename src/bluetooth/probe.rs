@@ -17,8 +17,9 @@
 
 use crate::protocol::{BatteryState, WearState};
 
-use super::brands::oppo::{initialize_oppo_session, open_oppo_rfcomm};
+use super::create_driver;
 use super::discovery::find_devices;
+use super::driver::HeadsetDriver;
 use super::snapshot::DeviceSnapshot;
 
 pub fn probe() -> Result<(), String> {
@@ -31,16 +32,13 @@ pub fn probe() -> Result<(), String> {
         });
     }
     let device = devices.remove(0);
-    match device.brand {
-        crate::bluetooth::DeviceBrand::EarFun => super::brands::earfun::probe_earfun(&device),
-        _ => {
-            let mut stream = open_oppo_rfcomm(&device)
-                .map_err(|error| crate::t!("channel-unable-to-open-rfcomm", error))?;
-            let (snapshot, _) = initialize_oppo_session(&mut stream, &device.name, None)?;
-            print_snapshot(&snapshot);
-            Ok(())
-        }
-    }
+    let mut driver = create_driver(device.brand);
+    let mut stream = driver
+        .open_rfcomm(&device)
+        .map_err(|error| crate::t!("channel-unable-to-open-rfcomm", error))?;
+    let snapshot = driver.initialize(&mut stream, &device, None)?;
+    print_snapshot(&snapshot);
+    Ok(())
 }
 
 pub(crate) fn print_snapshot(snapshot: &DeviceSnapshot) {
