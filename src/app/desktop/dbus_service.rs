@@ -21,7 +21,7 @@ use gtk::{gio, glib, prelude::*};
 
 use crate::{
     compatibility::{self, NoiseMode, NoiseModeKind},
-    protocol::{BatteryPart, BatteryState, WearState, noise_mode_write_payload_for},
+    protocol::{BatteryPart, BatteryState, WearState},
     ui::home_state::{noise_mode_icon_name, noise_options_title_for},
 };
 
@@ -270,7 +270,6 @@ pub(crate) fn build_snapshot(input: &DesktopSnapshotInput) -> QuickSettingsSnaps
         if let Some(mode) = compatibility::noise_mode_for(input.modes, index)
             && mode.parent.is_none()
             && compatibility::noise_mode_supported_for(index, input.supported_indices, input.modes)
-            && noise_mode_write_payload_for(index, input.modes).is_some()
         {
             let label = crate::t!(mode.kind.as_str());
             let icon = noise_mode_icon_name(mode.kind).to_string();
@@ -320,7 +319,6 @@ pub(crate) fn build_snapshot(input: &DesktopSnapshotInput) -> QuickSettingsSnaps
                         input.supported_indices,
                         input.modes,
                     )
-                    && noise_mode_write_payload_for(mode.index, input.modes).is_some()
             })
             .collect();
         if visible_submodes.len() > 1 {
@@ -377,7 +375,6 @@ pub(crate) fn resolve_toggle_target(
                 m.parent.is_none()
                     && m.kind == NoiseModeKind::Off
                     && compatibility::noise_mode_supported_for(idx, supported_indices, modes)
-                    && noise_mode_write_payload_for(idx, modes).is_some()
             })
         });
 
@@ -392,7 +389,7 @@ pub(crate) fn resolve_toggle_target(
 
     if let Some(saved) = last_non_off_mode
         && compatibility::noise_mode_supported_for(saved, supported_indices, modes)
-        && noise_mode_write_payload_for(saved, modes).is_some()
+        && compatibility::noise_mode_for(modes, saved).is_some()
     {
         return Some(saved);
     }
@@ -404,7 +401,6 @@ pub(crate) fn resolve_toggle_target(
                 m.parent.is_none()
                     && m.kind != NoiseModeKind::Off
                     && compatibility::noise_mode_supported_for(idx, supported_indices, modes)
-                    && noise_mode_write_payload_for(idx, modes).is_some()
             })
         })
 }
@@ -413,7 +409,7 @@ pub(crate) fn is_non_off_writable_mode(index: u8, modes: &[NoiseMode]) -> bool {
     let group_non_off = compatibility::noise_mode_group_for(modes, index)
         .and_then(|grp| compatibility::noise_mode_for(modes, grp))
         .is_some_and(|m| m.kind != NoiseModeKind::Off);
-    group_non_off && noise_mode_write_payload_for(index, modes).is_some()
+    group_non_off && compatibility::noise_mode_for(modes, index).is_some()
 }
 
 type SetModeCallback = Rc<dyn Fn(u8) -> Result<(), String>>;

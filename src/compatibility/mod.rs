@@ -82,6 +82,7 @@ impl NoiseModeKind {
         }
     }
 
+    #[allow(dead_code)]
     pub const fn key(&self) -> &'static str {
         self.as_str()
     }
@@ -690,6 +691,12 @@ mod tests {
         assert!(profile.supports_voice_command());
         assert!(profile.supports_head_motion());
         assert!(profile.supports_hi_res());
+        assert!(noise_mode_readback_matches_for(0, 3, profile.noise_modes));
+        assert!(noise_mode_readback_matches_for(1, 7, profile.noise_modes));
+        assert!(noise_mode_readback_matches_for(2, 8, profile.noise_modes));
+        assert!(noise_mode_readback_matches_for(4, 4, profile.noise_modes));
+        assert!(!noise_mode_readback_matches_for(4, 6, profile.noise_modes));
+        assert!(noise_mode_readback_matches_for(11, 13, profile.noise_modes));
     }
 
     #[test]
@@ -700,6 +707,13 @@ mod tests {
         assert!(indices.contains(&1));
         assert!(indices.contains(&11));
         assert!(indices.contains(&14));
+
+        let (res_indices, res_from_api) =
+            resolve_noise_mode_indices_for_product(0x06ec10, Some(&[4, 7, 13]));
+        assert!(res_from_api);
+        assert_eq!(res_indices, vec![4, 7, 13]);
+        assert!(noise_mode_supported_for_product(0x06ec10, 1, &[4, 7, 13]));
+        assert!(!noise_mode_supported_for_product(0x06ec10, 2, &[4, 7, 13]));
     }
 
     #[test]

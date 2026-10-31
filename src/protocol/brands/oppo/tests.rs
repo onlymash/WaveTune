@@ -165,74 +165,24 @@ fn parses_noise_control_bitmap_indices() {
 }
 
 #[test]
-fn creates_write_payloads_for_every_enabled_x4_compatibility_mode() {
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 0),
-        Some(vec![1, 1, 1])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 1),
-        Some(vec![1, 1, 2])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 2),
-        Some(vec![1, 1, 4])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 3),
-        Some(vec![1, 1, 0x08])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 4),
-        Some(vec![1, 1, 0x10])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 5),
-        Some(vec![1, 1, 0x20])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 6),
-        Some(vec![1, 1, 0x40])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 7),
-        Some(vec![1, 1, 0x80])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 8),
-        Some(vec![1, 1, 0, 1])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 11),
-        Some(vec![1, 1, 0, 8])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 12),
-        Some(vec![1, 1, 0, 0x10])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 13),
-        Some(vec![1, 1, 0, 0x20])
-    );
-    assert_eq!(
-        oppo_noise_mode_write_payload_for_product(0x06ec10, 14),
-        Some(vec![1, 1, 0, 0x40])
-    );
-    assert_eq!(oppo_noise_mode_write_payload_for_product(0x06ec10, 9), None);
-    assert!(oppo_noise_mode_readback_matches_for_product(0x06ec10, 0, 3));
-    assert!(oppo_noise_mode_readback_matches_for_product(0x06ec10, 1, 7));
-    assert!(oppo_noise_mode_readback_matches_for_product(0x06ec10, 2, 8));
-    assert!(oppo_noise_mode_readback_matches_for_product(0x06ec10, 4, 4));
-    assert!(!oppo_noise_mode_readback_matches_for_product(
-        0x06ec10, 4, 6
-    ));
-    assert!(oppo_noise_mode_readback_matches_for_product(
-        0x06ec10, 11, 13
-    ));
+fn creates_write_payloads_for_every_enabled_noise_index() {
+    assert_eq!(encode_oppo_noise_mode(0), vec![1, 1, 1]);
+    assert_eq!(encode_oppo_noise_mode(1), vec![1, 1, 2]);
+    assert_eq!(encode_oppo_noise_mode(2), vec![1, 1, 4]);
+    assert_eq!(encode_oppo_noise_mode(3), vec![1, 1, 0x08]);
+    assert_eq!(encode_oppo_noise_mode(4), vec![1, 1, 0x10]);
+    assert_eq!(encode_oppo_noise_mode(5), vec![1, 1, 0x20]);
+    assert_eq!(encode_oppo_noise_mode(6), vec![1, 1, 0x40]);
+    assert_eq!(encode_oppo_noise_mode(7), vec![1, 1, 0x80]);
+    assert_eq!(encode_oppo_noise_mode(8), vec![1, 1, 0, 1]);
+    assert_eq!(encode_oppo_noise_mode(11), vec![1, 1, 0, 8]);
+    assert_eq!(encode_oppo_noise_mode(12), vec![1, 1, 0, 0x10]);
+    assert_eq!(encode_oppo_noise_mode(13), vec![1, 1, 0, 0x20]);
+    assert_eq!(encode_oppo_noise_mode(14), vec![1, 1, 0, 0x40]);
 }
 
 #[test]
-fn parses_api_noise_mode_support_and_falls_back_for_empty_x4_response() {
+fn parses_api_noise_mode_support() {
     assert_eq!(
         parse_oppo_supported_noise_modes_response(&[0, 3, 0, 0x90, 0x20]),
         Some(vec![4, 7, 13])
@@ -254,40 +204,6 @@ fn parses_api_noise_mode_support_and_falls_back_for_empty_x4_response() {
         parse_oppo_supported_noise_modes_response(&[0, 1, 0, 0x40]),
         None
     );
-
-    assert_eq!(
-        resolve_oppo_noise_mode_indices_for_product(0x06ec10, Some(&[4, 7, 13])),
-        (vec![4, 7, 13], true)
-    );
-    assert!(oppo_noise_mode_is_supported_for_product(
-        0x06ec10,
-        1,
-        &[4, 7, 13]
-    ));
-    assert!(oppo_noise_mode_is_supported_for_product(
-        0x06ec10,
-        11,
-        &[13]
-    ));
-    assert!(!oppo_noise_mode_is_supported_for_product(
-        0x06ec10,
-        2,
-        &[4, 7, 13]
-    ));
-    assert!(!oppo_noise_mode_is_supported_for_product(
-        0x06ec10,
-        5,
-        &[4, 7, 13]
-    ));
-    assert_eq!(
-        resolve_oppo_noise_mode_indices_for_product(0x06ec10, Some(&[99])),
-        (vec![], true)
-    );
-    let (fallback, from_api) = resolve_oppo_noise_mode_indices_for_product(0x06ec10, Some(&[]));
-    assert!(!from_api);
-    assert!(fallback.contains(&1));
-    assert!(fallback.contains(&11));
-    assert!(fallback.contains(&14));
 }
 
 #[test]

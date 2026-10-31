@@ -20,7 +20,6 @@ use gtk::{Align, Box as GtkBox, Button, Label, Orientation};
 
 use crate::{
     compatibility::{self, NoiseMode, NoiseModeKind},
-    protocol::noise_mode_write_payload_for,
     ui::{
         ReentrancyFlag,
         components::{ComboRowExtManual, combo_row, preferences_content_row},
@@ -143,7 +142,7 @@ impl QuickNoiseWidgets {
                 any_noise_mode_supported = true;
             }
             let sensitive =
-                enabled && visible && noise_mode_write_payload_for(index, modes).is_some();
+                enabled && visible && compatibility::noise_mode_for(modes, index).is_some();
             control.button.set_sensitive(sensitive);
             control.label.set_sensitive(sensitive);
             if current_group == Some(index) {

@@ -35,15 +35,9 @@ pub use oppo_frame::{
     FRAME_START, FrameDecoder, OPPO_FRAME_START, OppoFrameDecoder, encode_frame, encode_oppo_frame,
 };
 pub use oppo_noise::{
-    noise_mode_is_supported_for_product, noise_mode_readback_matches_for,
-    noise_mode_readback_matches_for_product, noise_mode_write_payload_for,
-    noise_mode_write_payload_for_product, oppo_noise_mode_is_supported_for_product,
-    oppo_noise_mode_readback_matches_for, oppo_noise_mode_readback_matches_for_product,
-    oppo_noise_mode_write_payload_for, oppo_noise_mode_write_payload_for_product,
-    parse_noise_mode_event, parse_noise_mode_response, parse_oppo_noise_mode_event,
-    parse_oppo_noise_mode_response, parse_oppo_supported_noise_modes_response,
-    parse_supported_noise_modes_response, resolve_noise_mode_indices_for_product,
-    resolve_oppo_noise_mode_indices_for_product,
+    encode_noise_mode, encode_oppo_noise_mode, parse_noise_mode_event, parse_noise_mode_response,
+    parse_oppo_noise_mode_event, parse_oppo_noise_mode_response,
+    parse_oppo_supported_noise_modes_response, parse_supported_noise_modes_response,
 };
 pub use oppo_parsers::{
     FEATURE_BASS_ENGINE, FEATURE_HI_RES, encode_custom_equalizer_command, encode_find_earbuds,

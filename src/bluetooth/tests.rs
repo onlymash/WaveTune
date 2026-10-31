@@ -24,8 +24,8 @@ use super::session::{
 };
 use super::*;
 use crate::protocol::{
-    AppPacket, FrameDecoder, PairedDeviceAction, WearState, encode_frame,
-    noise_mode_write_payload_for, parse_paired_devices_response,
+    AppPacket, FrameDecoder, PairedDeviceAction, WearState, encode_frame, encode_noise_mode,
+    parse_paired_devices_response,
 };
 use std::sync::mpsc;
 use std::{
@@ -563,10 +563,7 @@ fn noise_write_uses_ack_and_readback_for_all_profile_modes() {
             .unwrap();
         let device_thread = thread::spawn(move || {
             let setting = read_mock_request(&mut device);
-            assert_eq!(
-                setting.payload,
-                noise_mode_write_payload_for(requested, modes).unwrap()
-            );
+            assert_eq!(setting.payload, encode_noise_mode(requested));
             send_mock_response(&mut device, &setting, vec![0]);
 
             let query = read_mock_request(&mut device);

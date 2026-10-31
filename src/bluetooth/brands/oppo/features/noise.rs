@@ -24,10 +24,7 @@ use std::{
 
 use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
 use crate::compatibility::{self, NoiseMode};
-use crate::protocol::{
-    FrameDecoder, WearState, noise_mode_readback_matches_for, noise_mode_write_payload_for,
-    parse_noise_mode_response,
-};
+use crate::protocol::{FrameDecoder, WearState, encode_noise_mode, parse_noise_mode_response};
 
 use crate::bluetooth::brands::oppo::transport::request;
 use crate::bluetooth::brands::oppo::unsolicited::merge_wear_state;
@@ -60,21 +57,30 @@ pub fn set_noise_mode<T: Read + Write>(
                 protocol_index
             ));
         }
-        let payload = noise_mode_write_payload_for(protocol_index, modes)
-            .ok_or_else(|| crate::t!("noise-mode-not-enabled-in-profile", protocol_index))?;
+        if compatibility::noise_mode_for(modes, protocol_index).is_none() {
+            return Err(crate::t!(
+                "noise-mode-not-enabled-in-profile",
+                protocol_index
+            ));
+        }
+        let payload = encode_noise_mode(protocol_index);
         request(stream, decoder, 0x0404, 0, payload, Some(&deferred_tx))?;
 
         let result = request(stream, decoder, 0x010c, 0, vec![1, 1], Some(&deferred_tx))?;
         let mut actual = parse_noise_mode_response(&result.payload)
             .ok_or_else(|| crate::t!("noise-mode-readback-unrecognized"))?;
-        if !noise_mode_readback_matches_for(protocol_index, actual, modes) {
+        if !compatibility::noise_mode_readback_matches_for(protocol_index, actual, modes) {
             for delay_ms in [250, 500] {
                 thread::sleep(Duration::from_millis(delay_ms));
                 if let Ok(retry) =
                     request(stream, decoder, 0x010c, 0, vec![1, 1], Some(&deferred_tx))
                 {
                     if let Some(retry_val) = parse_noise_mode_response(&retry.payload) {
-                        if noise_mode_readback_matches_for(protocol_index, retry_val, modes) {
+                        if compatibility::noise_mode_readback_matches_for(
+                            protocol_index,
+                            retry_val,
+                            modes,
+                        ) {
                             actual = retry_val;
                             break;
                         }
@@ -82,7 +88,7 @@ pub fn set_noise_mode<T: Read + Write>(
                 }
             }
         }
-        if !noise_mode_readback_matches_for(protocol_index, actual, modes) {
+        if !compatibility::noise_mode_readback_matches_for(protocol_index, actual, modes) {
             return Err(crate::t!(
                 "noise-mode-readback-mismatch",
                 actual,

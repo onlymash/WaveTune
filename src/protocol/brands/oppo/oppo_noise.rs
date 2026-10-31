@@ -17,8 +17,6 @@
 
 //! OPPO/OnePlus/realme noise mode parsing and command encoding.
 
-use crate::compatibility;
-
 pub fn parse_oppo_noise_mode_response(payload: &[u8]) -> Option<u8> {
     if payload.first() != Some(&0) || payload.get(1) != Some(&1) || payload.len() < 4 {
         return None;
@@ -56,25 +54,6 @@ pub fn parse_oppo_supported_noise_modes_response(payload: &[u8]) -> Option<Vec<u
 
 pub use parse_oppo_supported_noise_modes_response as parse_supported_noise_modes_response;
 
-pub fn resolve_oppo_noise_mode_indices_for_product(
-    product_id: u32,
-    api_indices: Option<&[u8]>,
-) -> (Vec<u8>, bool) {
-    compatibility::resolve_noise_mode_indices_for_product(product_id, api_indices)
-}
-
-pub use resolve_oppo_noise_mode_indices_for_product as resolve_noise_mode_indices_for_product;
-
-pub fn oppo_noise_mode_is_supported_for_product(
-    product_id: u32,
-    index: u8,
-    supported_indices: &[u8],
-) -> bool {
-    compatibility::noise_mode_supported_for_product(product_id, index, supported_indices)
-}
-
-pub use oppo_noise_mode_is_supported_for_product as noise_mode_is_supported_for_product;
-
 pub fn parse_oppo_noise_mode_event(payload: &[u8]) -> Option<u8> {
     if payload.first() != Some(&3) || payload.get(1) != Some(&1) || payload.get(2) != Some(&1) {
         return None;
@@ -84,52 +63,15 @@ pub fn parse_oppo_noise_mode_event(payload: &[u8]) -> Option<u8> {
 
 pub use parse_oppo_noise_mode_event as parse_noise_mode_event;
 
-pub fn oppo_noise_mode_write_payload_for_product(
-    product_id: u32,
-    protocol_index: u8,
-) -> Option<Vec<u8>> {
-    let profile = compatibility::profile_for_product_id(product_id)?;
-    oppo_noise_mode_write_payload_for(protocol_index, profile.noise_modes)
-}
-
-pub use oppo_noise_mode_write_payload_for_product as noise_mode_write_payload_for_product;
-
-pub fn oppo_noise_mode_write_payload_for(
-    protocol_index: u8,
-    modes: &[compatibility::NoiseMode],
-) -> Option<Vec<u8>> {
-    compatibility::noise_mode_for(modes, protocol_index)?;
+pub fn encode_oppo_noise_mode(protocol_index: u8) -> Vec<u8> {
     let byte_count = usize::from(protocol_index / 8) + 1;
     let mut payload = vec![1, 1];
     payload.resize(2 + byte_count, 0);
     payload[2 + usize::from(protocol_index / 8)] = 1 << (protocol_index % 8);
-    Some(payload)
+    payload
 }
 
-pub use oppo_noise_mode_write_payload_for as noise_mode_write_payload_for;
-
-pub fn oppo_noise_mode_readback_matches_for_product(
-    product_id: u32,
-    requested: u8,
-    actual: u8,
-) -> bool {
-    let Some(profile) = compatibility::profile_for_product_id(product_id) else {
-        return requested == actual;
-    };
-    oppo_noise_mode_readback_matches_for(requested, actual, profile.noise_modes)
-}
-
-pub use oppo_noise_mode_readback_matches_for_product as noise_mode_readback_matches_for_product;
-
-pub fn oppo_noise_mode_readback_matches_for(
-    requested: u8,
-    actual: u8,
-    modes: &[compatibility::NoiseMode],
-) -> bool {
-    compatibility::noise_mode_readback_matches_for(requested, actual, modes)
-}
-
-pub use oppo_noise_mode_readback_matches_for as noise_mode_readback_matches_for;
+pub use encode_oppo_noise_mode as encode_noise_mode;
 
 fn bitmap_index(bitmap: &[u8]) -> Option<u8> {
     bitmap.iter().enumerate().find_map(|(byte_index, byte)| {
