@@ -27,7 +27,8 @@ use crate::bluetooth::brands::earfun::transport::{
     EARFUN_AIR_PRO_4_PRODUCT_ID, EARFUN_AIR_S_PRODUCT_ID, drain_stream, send_command,
 };
 use crate::protocol::brands::earfun::{
-    EarFunAudioCodec, EarFunCommands, EarFunFrameDecoder, EarFunPacket, encode_earfun_eq_band,
+    EarFunAudioCodec, EarFunCommands, EarFunFrameDecoder, EarFunPacket, GaiaEqBand,
+    encode_earfun_eq_band,
 };
 
 pub fn set_game_mode<T: Read + Write>(
@@ -111,7 +112,13 @@ pub fn apply_equalizer_preset<T: Read + Write>(
             } else {
                 dummy_gains[i - 6]
             };
-            let payload = encode_earfun_eq_band(band_id, frequencies[i], q_factors[i], gain);
+            let band = GaiaEqBand {
+                band_id,
+                frequency: frequencies[i],
+                q_factor: q_factors[i],
+                gain_db: gain,
+            };
+            let payload = encode_earfun_eq_band(&band);
             let pkt = EarFunPacket::new_v3(EarFunCommands::SET_EQUALIZER_BAND, payload);
             joined_frames.extend_from_slice(&pkt.encode());
         }
@@ -137,7 +144,13 @@ pub fn apply_equalizer_preset<T: Read + Write>(
 
         for i in 0..10 {
             let band_id = 0xA1 + i as u8;
-            let payload = encode_earfun_eq_band(band_id, frequencies[i], q_factor, gains[i]);
+            let band = GaiaEqBand {
+                band_id,
+                frequency: frequencies[i],
+                q_factor,
+                gain_db: gains[i],
+            };
+            let payload = encode_earfun_eq_band(&band);
             let pkt = EarFunPacket::new_v3(EarFunCommands::SET_EQUALIZER_BAND, payload);
             joined_frames.extend_from_slice(&pkt.encode());
         }

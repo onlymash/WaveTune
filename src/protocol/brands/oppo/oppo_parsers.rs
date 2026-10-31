@@ -19,9 +19,9 @@
 
 use super::oppo_types::OppoProtocolError;
 use crate::protocol::core::types::{
-    BassEngineLevel, BatteryPart, BatteryState, CustomEqualizer, EarSide, FirmwareVersions,
-    FitQuality, FitTestResult, GestureAction, KeyFunction, PairedDevice, PairedDeviceAddress,
-    WearPart, WearState,
+    BassEngineLevel, BatteryPart, BatteryState, CustomEqualizer, CustomEqualizerAction,
+    CustomEqualizerParams, EarSide, FirmwareVersions, FitQuality, FitTestResult, GestureAction,
+    KeyFunction, NoiseCycleSetting, PairedDevice, PairedDeviceAddress, WearPart, WearState,
 };
 
 pub const FEATURE_HI_RES: u8 = 24;
@@ -394,30 +394,27 @@ pub fn parse_oppo_custom_equalizer_list(
 pub use parse_oppo_custom_equalizer_list as parse_custom_equalizer_list;
 
 pub fn encode_oppo_custom_equalizer_command(
-    action: u8,
-    id: u8,
-    name: &str,
-    min_gain: i8,
-    max_gain: i8,
-    bands: &[(u16, i8)],
+    action: CustomEqualizerAction,
+    params: &CustomEqualizerParams<'_>,
 ) -> Vec<u8> {
-    let name_bytes = name.as_bytes();
+    let name_bytes = params.name.as_bytes();
     let name_len = name_bytes.len().min(255);
-    let mut payload = Vec::with_capacity(6 + name_len + bands.len() * 3);
-    payload.push(action);
-    payload.push(min_gain as u8);
-    payload.push(max_gain as u8);
-    payload.push(id);
+    let mut payload = Vec::with_capacity(6 + name_len + params.bands.len() * 3);
+    payload.push(action as u8);
+    payload.push(params.min_gain as u8);
+    payload.push(params.max_gain as u8);
+    payload.push(params.id);
     payload.push(name_len as u8);
     payload.extend_from_slice(&name_bytes[..name_len]);
-    payload.push(bands.len().min(255) as u8);
-    for &(freq, gain) in bands {
+    payload.push(params.bands.len().min(255) as u8);
+    for &(freq, gain) in params.bands {
         payload.extend_from_slice(&freq.to_le_bytes());
-        payload.push(gain.clamp(min_gain, max_gain) as u8);
+        payload.push(gain.clamp(params.min_gain, params.max_gain) as u8);
     }
     payload
 }
 
+pub use encode_oppo_custom_equalizer_command as encode_oppo_custom_equalizer;
 pub use encode_oppo_custom_equalizer_command as encode_custom_equalizer_command;
 
 pub fn parse_oppo_touch_controls_response(
@@ -538,13 +535,14 @@ pub fn parse_oppo_noise_cycle_response(payload: &[u8]) -> Result<(u8, u32), Oppo
 
 pub use parse_oppo_noise_cycle_response as parse_noise_cycle_response;
 
-pub fn encode_oppo_set_key_function(
-    side: EarSide,
-    button: u8,
-    action: GestureAction,
-    function: u8,
-) -> Vec<u8> {
-    vec![0x01, side as u8, button, action as u8, function]
+pub fn encode_oppo_set_key_function(key_function: &KeyFunction) -> Vec<u8> {
+    vec![
+        0x01,
+        key_function.side as u8,
+        key_function.button,
+        key_function.action as u8,
+        key_function.function,
+    ]
 }
 
 pub use encode_oppo_set_key_function as encode_set_key_function;
@@ -573,17 +571,17 @@ pub fn encode_oppo_set_head_motion_type(motion_type: u8) -> Vec<u8> {
 
 pub use encode_oppo_set_head_motion_type as encode_set_head_motion_type;
 
-pub fn encode_oppo_set_noise_cycle(side: EarSide, mask: u32, is_shared: bool) -> Vec<u8> {
-    let cycle_type = if is_shared {
+pub fn encode_oppo_set_noise_cycle(setting: &NoiseCycleSetting) -> Vec<u8> {
+    let cycle_type = if setting.is_shared {
         0x01
-    } else if side == EarSide::Left {
+    } else if setting.side == EarSide::Left {
         0x03
     } else {
         0x04
     };
     let mut payload = vec![0x02, cycle_type];
     // Minimal bytes representing mask
-    let bytes = mask.to_le_bytes();
+    let bytes = setting.mask.to_le_bytes();
     let len = if bytes[3] != 0 {
         4
     } else if bytes[2] != 0 {

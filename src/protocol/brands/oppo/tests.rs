@@ -17,8 +17,8 @@
 
 use super::*;
 use crate::protocol::core::types::{
-    BatteryPart, BatteryState, FirmwareVersions, PairedDevice, PairedDeviceAction,
-    PairedDeviceAddress, WearPart, WearState,
+    BatteryPart, BatteryState, CustomEqualizerAction, CustomEqualizerParams, FirmwareVersions,
+    NoiseCycleSetting, PairedDevice, PairedDeviceAction, PairedDeviceAddress, WearPart, WearState,
 };
 
 #[test]
@@ -527,7 +527,14 @@ fn custom_equalizer_encode_matches_reference() {
         (8000, 0),
         (16000, 0),
     ];
-    let encoded = encode_oppo_custom_equalizer_command(0x01, 0, "自定义1", -6, 6, &bands);
+    let params = CustomEqualizerParams {
+        id: 0,
+        name: "自定义1",
+        min_gain: -6,
+        max_gain: 6,
+        bands: &bands,
+    };
+    let encoded = encode_oppo_custom_equalizer_command(CustomEqualizerAction::Create, &params);
     let expected = [
         0x01, 0xFA, 0x06, 0x00, 0x0A, 0xE8, 0x87, 0xAA, 0xE5, 0xAE, 0x9A, 0xE4, 0xB9, 0x89, 0x31,
         0x0A, 0x1F, 0x00, 0x00, 0x3E, 0x00, 0x00, 0x7D, 0x00, 0x00, 0xFA, 0x00, 0x00, 0xF4, 0x01,
@@ -593,7 +600,13 @@ fn touch_controls_parse_and_encode() {
     );
     assert!(controls[1].is_call_control());
 
-    let encoded = encode_oppo_set_key_function(EarSide::Right, 1, GestureAction::TripleSqueeze, 5);
+    let key_function = KeyFunction {
+        side: EarSide::Right,
+        button: 1,
+        action: GestureAction::TripleSqueeze,
+        function: 5,
+    };
+    let encoded = encode_oppo_set_key_function(&key_function);
     assert_eq!(encoded, [0x01, 0x02, 0x01, 0x03, 0x05]);
 }
 
@@ -657,10 +670,18 @@ fn noise_cycle_and_priority_device_parsers_and_encoders() {
     assert_eq!(cycle_type, 1);
     assert_eq!(mask, 7);
 
-    let enc_shared = encode_oppo_set_noise_cycle(EarSide::Both, 7, true);
+    let enc_shared = encode_oppo_set_noise_cycle(&NoiseCycleSetting {
+        side: EarSide::Both,
+        mask: 7,
+        is_shared: true,
+    });
     assert_eq!(enc_shared, [0x02, 0x01, 0x07]);
 
-    let enc_right = encode_oppo_set_noise_cycle(EarSide::Right, 0x0103, false);
+    let enc_right = encode_oppo_set_noise_cycle(&NoiseCycleSetting {
+        side: EarSide::Right,
+        mask: 0x0103,
+        is_shared: false,
+    });
     assert_eq!(enc_right, [0x02, 0x04, 0x03, 0x01]);
 
     // Priority device: 0x8132 [st=0, 02, flag=1, mac6 reverse ordered]

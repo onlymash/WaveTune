@@ -23,10 +23,11 @@ use std::{
 use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
 use crate::bluetooth::brands::oppo::transport::request;
 use crate::protocol::{
-    EarSide, FrameDecoder, KeyFunction, NoiseCycleState, WearState, encode_find_earbuds,
-    encode_fit_test, encode_set_head_motion_type, encode_set_key_function, encode_set_noise_cycle,
-    encode_set_prompt_volume, parse_feature_flags_response, parse_head_motion_type_response,
-    parse_noise_cycle_response, parse_prompt_volume_response, parse_touch_controls_response,
+    EarSide, FrameDecoder, KeyFunction, NoiseCycleSetting, NoiseCycleState, WearState,
+    encode_find_earbuds, encode_fit_test, encode_set_head_motion_type, encode_set_key_function,
+    encode_set_noise_cycle, encode_set_prompt_volume, parse_feature_flags_response,
+    parse_head_motion_type_response, parse_noise_cycle_response, parse_prompt_volume_response,
+    parse_touch_controls_response,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -68,7 +69,13 @@ pub fn handle_controls_command<T: Read + Write>(
                 return true;
             }
             let _ = updates.send(UiUpdate::Status(crate::t!("controls-gesture-updating")));
-            let payload = encode_set_key_function(*side, *button, *action, *function);
+            let key_function = KeyFunction {
+                side: *side,
+                button: *button,
+                action: *action,
+                function: *function,
+            };
+            let payload = encode_set_key_function(&key_function);
             match request(stream, decoder, 0x0401, 0, payload, Some(updates)) {
                 Ok(_) => {
                     let mut updated = false;
@@ -125,7 +132,12 @@ pub fn handle_controls_command<T: Read + Write>(
                 return true;
             }
             let _ = updates.send(UiUpdate::Status(crate::t!("controls-noise-cycle-updating")));
-            let payload = encode_set_noise_cycle(*side, *mask, *is_shared);
+            let setting = NoiseCycleSetting {
+                side: *side,
+                mask: *mask,
+                is_shared: *is_shared,
+            };
+            let payload = encode_set_noise_cycle(&setting);
             match request(stream, decoder, 0x0404, 0, payload, Some(updates)) {
                 Ok(_) => {
                     let cycle_type = if *is_shared {

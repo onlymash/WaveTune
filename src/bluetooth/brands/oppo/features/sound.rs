@@ -25,9 +25,10 @@ use std::{
 use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
 use crate::bluetooth::brands::oppo::transport::request;
 use crate::protocol::{
-    BassEngineLevel, CustomEqualizer, FEATURE_BASS_ENGINE, FEATURE_HI_RES, FrameDecoder,
-    encode_custom_equalizer_command, parse_bass_engine_response, parse_custom_equalizer_list,
-    parse_equalizer_response, parse_feature_flags_response, parse_spatial_audio_response,
+    BassEngineLevel, CustomEqualizer, CustomEqualizerAction, CustomEqualizerParams,
+    FEATURE_BASS_ENGINE, FEATURE_HI_RES, FrameDecoder, encode_custom_equalizer_command,
+    parse_bass_engine_response, parse_custom_equalizer_list, parse_equalizer_response,
+    parse_feature_flags_response, parse_spatial_audio_response,
 };
 
 pub fn set_equalizer<T: Read + Write>(
@@ -275,9 +276,8 @@ pub fn handle_sound_command<T: Read + Write>(
                 .find(|p| p.id == *id)
                 .cloned();
             if let Some(p) = preset {
-                let payload = encode_custom_equalizer_command(
-                    0x02, p.id, &p.name, p.min_gain, p.max_gain, &p.bands,
-                );
+                let payload =
+                    encode_custom_equalizer_command(CustomEqualizerAction::Update, &(&p).into());
                 match request(stream, decoder, 0x0418, 0, payload, Some(updates)) {
                     Ok(_) => {
                         if let Ok(res) = request(stream, decoder, 0x0122, 0, vec![], Some(updates))
@@ -310,7 +310,14 @@ pub fn handle_sound_command<T: Read + Write>(
                 return true;
             }
             let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-adding")));
-            let payload = encode_custom_equalizer_command(0x01, 0, name, -6, 6, bands);
+            let params = CustomEqualizerParams {
+                id: 0,
+                name,
+                min_gain: -6,
+                max_gain: 6,
+                bands,
+            };
+            let payload = encode_custom_equalizer_command(CustomEqualizerAction::Create, &params);
             match request(stream, decoder, 0x0418, 0, payload, Some(updates)) {
                 Ok(_) => {
                     if let Ok(res) = request(stream, decoder, 0x0122, 0, vec![], Some(updates)) {
@@ -344,8 +351,14 @@ pub fn handle_sound_command<T: Read + Write>(
                 .find(|p| p.id == *id)
                 .map(|p| (p.min_gain, p.max_gain))
                 .unwrap_or((-6, 6));
-            let payload =
-                encode_custom_equalizer_command(0x02, *id, name, min_gain, max_gain, bands);
+            let params = CustomEqualizerParams {
+                id: *id,
+                name,
+                min_gain,
+                max_gain,
+                bands,
+            };
+            let payload = encode_custom_equalizer_command(CustomEqualizerAction::Update, &params);
             match request(stream, decoder, 0x0418, 0, payload, Some(updates)) {
                 Ok(_) => {
                     if let Ok(res) = request(stream, decoder, 0x0122, 0, vec![], Some(updates)) {
@@ -379,8 +392,14 @@ pub fn handle_sound_command<T: Read + Write>(
                 .find(|p| p.id == *id)
                 .map(|p| (p.name.clone(), p.min_gain, p.max_gain, p.bands.clone()))
                 .unwrap_or_else(|| (String::new(), -6, 6, Vec::new()));
-            let payload =
-                encode_custom_equalizer_command(0x03, *id, &name, min_gain, max_gain, &bands);
+            let params = CustomEqualizerParams {
+                id: *id,
+                name: &name,
+                min_gain,
+                max_gain,
+                bands: &bands,
+            };
+            let payload = encode_custom_equalizer_command(CustomEqualizerAction::Delete, &params);
             match request(stream, decoder, 0x0418, 0, payload, Some(updates)) {
                 Ok(_) => {
                     if let Ok(res) = request(stream, decoder, 0x0122, 0, vec![], Some(updates)) {

@@ -134,6 +134,34 @@ pub const DEFAULT_MIN_GAIN: i8 = -6;
 pub const DEFAULT_MAX_GAIN: i8 = 6;
 pub const MAX_CUSTOM_PRESETS: usize = 3;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CustomEqualizerAction {
+    Create = 1,
+    Update = 2,
+    Delete = 3,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CustomEqualizerParams<'a> {
+    pub id: u8,
+    pub name: &'a str,
+    pub min_gain: i8,
+    pub max_gain: i8,
+    pub bands: &'a [(u16, i8)],
+}
+
+impl<'a> From<&'a CustomEqualizer> for CustomEqualizerParams<'a> {
+    fn from(eq: &'a CustomEqualizer) -> Self {
+        Self {
+            id: eq.id,
+            name: &eq.name,
+            min_gain: eq.min_gain,
+            max_gain: eq.max_gain,
+            bands: &eq.bands,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CustomEqualizer {
     pub id: u8,
@@ -206,6 +234,13 @@ impl KeyFunction {
 pub struct NoiseCycleState {
     pub left_mask: u32,
     pub right_mask: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoiseCycleSetting {
+    pub side: EarSide,
+    pub mask: u32,
+    pub is_shared: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

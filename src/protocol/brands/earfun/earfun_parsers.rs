@@ -168,19 +168,28 @@ pub fn parse_earfun_paired_device_entry(
     }))
 }
 
+/// Represents a GAIA equalizer band configuration.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GaiaEqBand {
+    pub band_id: u8,
+    pub frequency: u16,
+    pub q_factor: u16,
+    pub gain_db: f64,
+}
+
 /// Encode 10-band equalizer band command (0x0E01).
 /// band_id: 0xA1..0xAA
 /// gain_db: -10..+10 (float/double)
-pub fn encode_earfun_eq_band(band_id: u8, frequency: u16, q_factor: u16, gain_val: f64) -> Vec<u8> {
+pub fn encode_earfun_eq_band(band: &GaiaEqBand) -> Vec<u8> {
     // Gaia uses factor 60 to convert dB to raw, EarFun projects +-6dB over slider scale 10.
     // factor = 60 * 0.6 = 36.0
-    let gain_raw = (gain_val * 36.0).round() as i16;
+    let gain_raw = (band.gain_db * 36.0).round() as i16;
     let mut payload = Vec::with_capacity(9);
-    payload.push(band_id);
+    payload.push(band.band_id);
     payload.push(0xFF);
     payload.push(0x98);
-    payload.extend_from_slice(&frequency.to_be_bytes());
+    payload.extend_from_slice(&band.frequency.to_be_bytes());
     payload.extend_from_slice(&gain_raw.to_be_bytes());
-    payload.extend_from_slice(&q_factor.to_be_bytes());
+    payload.extend_from_slice(&band.q_factor.to_be_bytes());
     payload
 }
