@@ -131,3 +131,16 @@ pub(crate) struct FeatureContext {
 4. **严禁固件写入**：
    本软件严禁包含任何 OTA、固件刷写或可能导致硬件损坏的操作。
 
+---
+
+## 六、 多品牌驱动扩展规范 (Multi-Brand Driver Architecture)
+
+底层蓝牙通信遵循统一的驱动抽象规范：
+1. **通用驱动抽象 (`HeadsetDriver`)**：
+   各品牌实现统一的驱动接口，隔离底层会话细节；
+2. **通用会话执行器 (`SessionRunner`)**：
+   统一管理底层 RFCOMM 线程、超时、异常捕获及 UI 状态推送，彻底杜绝跨品牌重复实现 Worker 循环；
+3. **统一分发工厂 (`create_driver`)**：
+   通过 `AnyDriver` 实现品牌静态分发，新品牌接入流程与代码模板详见 [`docs/NEW_BRAND_INTEGRATION_GUIDE.md`](NEW_BRAND_INTEGRATION_GUIDE.md)。
+
+

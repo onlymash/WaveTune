@@ -61,4 +61,3 @@ pub fn handle_unsolicited(packet: &EarFunPacket, updates: Option<&Sender<UiUpdat
         _ => {}
     }
 }
-
