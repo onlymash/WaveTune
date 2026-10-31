@@ -129,6 +129,8 @@ control service; the device may accept only one control connection at a time.
   modules independent of GTK and BlueZ.
 - `docs/OPPO_BLUETOOTH_API.md`: recorded private-protocol facts and provenance.
 - `docs/IMPLEMENTATION_PLAN.md`: product scope, implementation phases, and acceptance criteria.
+- `docs/ARCHITECTURE_GUIDELINES.md`: core architecture guidelines, MVI pattern, and vertical slice design.
+- `docs/UI_COMPONENT_GUIDELINES.md`: architectural guidelines and specifications for GTK4/Libadwaita UI components.
 - `packaging/`: Arch/AUR PKGBUILD generator and publisher (`arch/generate.sh` and `arch/publish.sh`,
   which generate and publish standalone git-ignored AUR repositories in `arch/wavetune` and
   `arch/wavetune-git` from `Cargo.toml` and git metadata), Debian control template (`debian/`), the
