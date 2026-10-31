@@ -15,39 +15,23 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use adw::prelude::*;
-
 use crate::{
     app::state::HeadsetSessionState,
-    ui::{
-        HomeWidgetRefs, PrimaryNoiseControl, ReentrancyFlag,
-        home_state::{self, NoiseControlsViewState},
-    },
+    ui::pages::home::noise::{NoiseControlsViewState, QuickNoiseWidgets},
 };
 
 #[derive(Clone)]
 pub(crate) struct NoiseComponent {
-    pub noise_option_row: adw::ComboRow,
-    pub primary_noise_controls: Vec<PrimaryNoiseControl>,
-    pub noise_option_flag: ReentrancyFlag,
-    widget_refs: HomeWidgetRefs,
+    pub widgets: QuickNoiseWidgets,
 }
 
 impl NoiseComponent {
-    pub fn new(widget_refs: HomeWidgetRefs) -> Self {
-        Self {
-            noise_option_row: widget_refs.noise_option_row.clone(),
-            primary_noise_controls: widget_refs.primary_noise_controls.clone(),
-            noise_option_flag: widget_refs.noise_option_flag.clone(),
-            widget_refs,
-        }
+    pub fn new(widgets: QuickNoiseWidgets) -> Self {
+        Self { widgets }
     }
 
     pub fn set_controls_sensitive(&self, sensitive: bool) {
-        for control in &self.primary_noise_controls {
-            control.button.set_sensitive(sensitive);
-        }
-        self.noise_option_row.set_sensitive(sensitive);
+        self.widgets.set_controls_sensitive(sensitive);
     }
 
     pub fn render(&self, session: &HeadsetSessionState) {
@@ -60,6 +44,6 @@ impl NoiseComponent {
             current_mode: session.noise.current_mode,
             modes: &session.noise.modes,
         };
-        home_state::update_noise_controls(&self.widget_refs, &view_state);
+        self.widgets.render(&view_state);
     }
 }

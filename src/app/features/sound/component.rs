@@ -15,47 +15,40 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use adw::prelude::*;
-
 use crate::{
     app::state::SoundState,
     protocol::CustomEqualizer,
     ui::{
-        HomeWidgetRefs, SoundWidgets,
-        home_state::{
-            HomeSoundFeaturesViewState, reset_sound_controls, update_equalizer,
-            update_equalizer_items, update_game_mode, update_sound_features, update_spatial_audio,
-        },
+        SoundWidgets,
+        pages::home::sound::{HomeSoundFeaturesViewState, QuickSoundWidgets},
         sound_state::{self, SoundPageFeaturesViewState},
     },
 };
 
 #[derive(Clone)]
 pub(crate) struct SoundComponent {
-    pub home_widgets: HomeWidgetRefs,
+    pub quick: QuickSoundWidgets,
     pub sound_widgets: SoundWidgets,
 }
 
 impl SoundComponent {
-    pub fn new(home_widgets: HomeWidgetRefs, sound_widgets: SoundWidgets) -> Self {
+    pub fn new(quick: QuickSoundWidgets, sound_widgets: SoundWidgets) -> Self {
         Self {
-            home_widgets,
+            quick,
             sound_widgets,
         }
     }
 
     pub fn render_features(&self, state: &SoundState) {
-        update_sound_features(
-            &self.home_widgets,
-            &HomeSoundFeaturesViewState {
+        self.quick
+            .update_sound_features(&HomeSoundFeaturesViewState {
                 supports_equalizer: state.supports_eq,
                 supports_spatial_audio: state.supports_spatial,
                 supports_head_tracking: state.supports_head_tracking,
                 supports_game_mode: state.supports_game_mode,
                 presets: &state.presets,
                 custom_equalizers: &state.custom_equalizers,
-            },
-        );
+            });
         sound_state::update_sound_page_features(
             &self.sound_widgets,
             &SoundPageFeaturesViewState {
@@ -74,8 +67,8 @@ impl SoundComponent {
     }
 
     pub fn render_equalizer(&self, state: &SoundState) {
-        update_equalizer(&self.home_widgets, state.current_eq_preset);
-        self.home_widgets.eq_row.set_sensitive(state.supports_eq);
+        self.quick.update_equalizer(state.current_eq_preset);
+        self.quick.set_eq_sensitive(state.supports_eq);
         sound_state::update_sound_page_equalizer(&self.sound_widgets, state.current_eq_preset);
     }
 
@@ -90,8 +83,7 @@ impl SoundComponent {
         FEdit: Fn(&CustomEqualizer, &gtk::Widget) + Clone + 'static,
         FDelete: Fn(u8, &gtk::Widget) + Clone + 'static,
     {
-        update_equalizer_items(
-            &self.home_widgets,
+        self.quick.update_equalizer_items(
             state.supports_eq,
             &state.presets,
             &state.custom_equalizers,
@@ -108,18 +100,14 @@ impl SoundComponent {
     }
 
     pub fn render_spatial(&self, state: &SoundState) {
-        update_spatial_audio(&self.home_widgets, state.current_spatial_mode);
-        self.home_widgets
-            .spatial_row
-            .set_sensitive(state.supports_spatial);
+        self.quick.update_spatial_audio(state.current_spatial_mode);
+        self.quick.set_spatial_sensitive(state.supports_spatial);
         sound_state::update_sound_page_spatial(&self.sound_widgets, state.current_spatial_mode);
     }
 
     pub fn render_game_mode(&self, state: &SoundState) {
-        update_game_mode(&self.home_widgets, state.current_game_mode);
-        self.home_widgets
-            .game_mode_switch
-            .set_sensitive(state.supports_game_mode);
+        self.quick.update_game_mode(state.current_game_mode);
+        self.quick.set_game_mode_sensitive(state.supports_game_mode);
     }
 
     pub fn render_bass(&self, state: &SoundState) {
@@ -153,7 +141,7 @@ impl SoundComponent {
     }
 
     pub fn reset(&self) {
-        reset_sound_controls(&self.home_widgets);
+        self.quick.reset();
         sound_state::reset_sound_page(&self.sound_widgets);
     }
 }

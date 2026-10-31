@@ -15,17 +15,12 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use adw::prelude::*;
-
 use super::component::NoiseComponent;
-use crate::{
-    app::{
-        desktop::is_non_off_writable_mode,
-        events::{SettingDomain, UiUpdate, WorkerCommand},
-        features::FeatureContext,
-        state::HeadsetSessionState,
-    },
-    ui::components::ComboRowExtManual,
+use crate::app::{
+    desktop::is_non_off_writable_mode,
+    events::{SettingDomain, UiUpdate, WorkerCommand},
+    features::FeatureContext,
+    state::HeadsetSessionState,
 };
 
 #[derive(Clone)]
@@ -69,37 +64,30 @@ impl NoiseController {
     }
 
     pub fn bind_events(&self) {
-        // 1. Primary buttons
-        for control in &self.component.primary_noise_controls {
-            let protocol_index = control.index;
-            let button = control.button.clone();
-            let this = self.clone();
-            button.connect_clicked(move |_| {
-                let _ = this.send_mode(protocol_index);
-            });
-        }
-
-        // 2. Noise option combobox row
-        let noise_flag = self.component.noise_option_flag.clone();
         let this = self.clone();
         self.component
-            .noise_option_row
-            .connect_selected_notify(move |row| {
-                if noise_flag.is_updating() {
-                    return;
-                }
-                let Some(mode) = row.selected_id() else {
-                    return;
-                };
-                if let Err(msg) = this.send_mode(mode) {
-                    this.context
-                        .send_setting_error(SettingDomain::NoiseMode, msg);
-                }
+            .widgets
+            .connect_mode_clicked(move |protocol_index| {
+                let _ = this.send_mode(protocol_index);
             });
+
+        let this = self.clone();
+        self.component.widgets.connect_option_selected(move |mode| {
+            if let Err(msg) = this.send_mode(mode) {
+                this.context
+                    .send_setting_error(SettingDomain::NoiseMode, msg);
+            }
+        });
     }
 
     pub fn on_update(&self, update: &UiUpdate) -> bool {
         match update {
+            UiUpdate::ProductId { product_id, .. } => {
+                let profile = crate::compatibility::profile_for_product_id(*product_id);
+                let supports_noise = profile.is_some_and(|p| p.supports_noise_control());
+                self.component.widgets.set_visible(supports_noise);
+                true
+            }
             UiUpdate::NoiseMode(index) => {
                 {
                     let mut st = self.context.session_state.borrow_mut();

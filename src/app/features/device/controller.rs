@@ -78,31 +78,26 @@ impl DeviceController {
     }
 
     pub fn bind_events(&self) {
-        let refresh_button = self.component.home.refresh_devices.clone();
+        let refresh_button = self.component.header.refresh_button().clone();
         let updates_tx = self.context.updates_tx.clone();
         let scanning = Rc::clone(&self.scanning);
-        self.component
-            .home
-            .refresh_devices
-            .connect_clicked(move |_| {
-                start_device_discovery(
-                    updates_tx.clone(),
-                    refresh_button.clone(),
-                    Rc::clone(&scanning),
-                    true,
-                );
-            });
+        self.component.header.connect_refresh_clicked(move || {
+            start_device_discovery(
+                updates_tx.clone(),
+                refresh_button.clone(),
+                Rc::clone(&scanning),
+                true,
+            );
+        });
 
         let component = self.component.clone();
         let current_artwork_path = Rc::clone(&self.current_artwork_path);
         adw::StyleManager::default().connect_dark_notify(move |manager| {
-            if component.home.active_turntable.borrow().is_none()
-                && !component.home.scene_view.has_scene()
-            {
+            if !component.hero.has_turntable() && !component.hero.has_scene() {
                 if let Some(path) = current_artwork_path.borrow().as_deref() {
                     if crate::resources::is_generic_artwork(path) {
                         let new_path = crate::resources::generic_artwork_path(manager.is_dark());
-                        component.home.model_picture.set_filename(Some(&new_path));
+                        component.hero.set_picture_filename(Some(&new_path));
                     }
                 }
             }
@@ -110,14 +105,14 @@ impl DeviceController {
 
         start_device_discovery(
             self.context.updates_tx.clone(),
-            self.component.home.refresh_devices.clone(),
+            self.component.header.refresh_button().clone(),
             Rc::clone(&self.scanning),
             false,
         );
 
         {
             let updates_tx = self.context.updates_tx.clone();
-            let refresh_button = self.component.home.refresh_devices.clone();
+            let refresh_button = self.component.header.refresh_button().clone();
             let scanning = Rc::clone(&self.scanning);
             gtk::glib::timeout_add_local(Duration::from_secs(15), move || {
                 start_device_discovery(
@@ -173,7 +168,7 @@ impl DeviceController {
     pub fn render_paired(&self) {
         self.component.render_paired_devices(
             &self.paired_devices.borrow(),
-            &self.paired_device_controls_enabled.borrow(),
+            &self.paired_device_controls_enabled,
             &self.paired_action_pending,
             &self.context.worker_commands,
             &self.context.updates_tx,
@@ -198,10 +193,10 @@ impl DeviceController {
             }
             UiUpdate::Devices(result) => {
                 self.scanning.set(false);
-                self.component.home.refresh_devices.set_sensitive(true);
+                self.component.header.set_refresh_sensitive(true);
                 self.component
-                    .home
-                    .refresh_devices
+                    .header
+                    .refresh_button()
                     .set_tooltip_text(Some(&crate::t!("device-refresh-list")));
                 match result {
                     Ok(devices) => {
@@ -330,7 +325,6 @@ impl DeviceController {
                 let profile = crate::compatibility::profile_for_product_id(*product_id);
                 let supports_wear = profile.is_none_or(|p| p.supports_wear_detection());
                 let supports_dual = profile.is_some_and(|p| p.supports_dual_device());
-                let supports_noise = profile.is_some_and(|p| p.supports_noise_control());
 
                 {
                     let mut st = self.context.session_state.borrow_mut();
@@ -343,11 +337,7 @@ impl DeviceController {
                         .wear
                         .set_text(&crate::t!("wear-status-not-supported"));
                 }
-                self.component
-                    .home
-                    .paired_devices_section
-                    .set_visible(supports_dual);
-                self.component.home.mode_group.set_visible(supports_noise);
+                self.component.paired.set_visible(supports_dual);
                 self.component.device.product_id.set_text(&crate::t!(
                     "device-product-id",
                     format!("{:06X}", product_id)
@@ -403,6 +393,17 @@ impl DeviceController {
                     .dual_device
                     .controls_enabled = result.clone();
                 *self.paired_device_controls_enabled.borrow_mut() = result.clone();
+                self.render_paired();
+                true
+            }
+            UiUpdate::DualDeviceConnectionEnabled(enabled) => {
+                let status = Ok(*enabled);
+                self.context
+                    .session_state
+                    .borrow_mut()
+                    .dual_device
+                    .controls_enabled = status.clone();
+                *self.paired_device_controls_enabled.borrow_mut() = status;
                 self.render_paired();
                 true
             }

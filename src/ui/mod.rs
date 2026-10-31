@@ -16,7 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use adw::prelude::*;
-use gtk::{Box as GtkBox, Label, Stack};
+use gtk::{Label, Stack};
 
 pub(crate) mod components;
 pub(crate) mod dialogs;
@@ -26,62 +26,13 @@ pub(crate) mod scene3d;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use components::BatteryIndicator;
 pub(crate) use pages::controls::ControlsWidgets;
 pub(crate) use pages::controls::state as controls_state;
+pub(crate) use pages::home::HomeWidgets;
 pub(crate) use pages::home::state as home_state;
-pub(crate) use pages::home::state::HomeWidgetRefs;
 pub(crate) use pages::sound::SoundWidgets;
 pub(crate) use pages::sound::state as sound_state;
 pub(crate) use reentrancy::ReentrancyFlag;
-
-#[derive(Clone)]
-pub(crate) struct PrimaryNoiseControl {
-    pub(crate) index: u8,
-    pub(crate) container: GtkBox,
-    pub(crate) button: gtk::Button,
-    pub(crate) label: Label,
-}
-
-#[derive(Clone)]
-pub(crate) struct HomeWidgets {
-    pub(crate) home_columns: components::AdaptiveColumns,
-    pub(crate) model_stack: Stack,
-    pub(crate) model_picture: gtk::Picture,
-    pub(crate) scene_view: scene3d::DeviceSceneView,
-    pub(crate) model_placeholder: gtk::Image,
-    pub(crate) model_firmware: Label,
-    pub(crate) model_card: GtkBox,
-    pub(crate) active_turntable: std::rc::Rc<
-        std::cell::RefCell<Option<std::rc::Rc<crate::resources::turntable::TurntableModel>>>,
-    >,
-    pub(crate) current_frame: std::rc::Rc<std::cell::Cell<usize>>,
-    pub(crate) turntable_state: std::rc::Rc<std::cell::RefCell<home_state::TurntableState>>,
-    pub(crate) device_name: Label,
-    pub(crate) connection_tag: Label,
-    pub(crate) device_menu_button: gtk::MenuButton,
-    pub(crate) device_popover: gtk::Popover,
-    pub(crate) device_list: gtk::ListBox,
-    pub(crate) device_list_empty: Label,
-    pub(crate) refresh_devices: gtk::Button,
-    pub(crate) left_battery: BatteryIndicator,
-    pub(crate) right_battery: BatteryIndicator,
-    pub(crate) case_battery: BatteryIndicator,
-    pub(crate) mode_group: adw::PreferencesGroup,
-    pub(crate) noise_option_row: adw::ComboRow,
-    pub(crate) paired_devices_section: GtkBox,
-    pub(crate) paired_devices: gtk::ListBox,
-    pub(crate) primary_noise_controls: Vec<PrimaryNoiseControl>,
-    pub(crate) sound_card_section: GtkBox,
-    pub(crate) eq_row: adw::ComboRow,
-    pub(crate) spatial_row: adw::ComboRow,
-    pub(crate) game_mode_section: adw::ActionRow,
-    pub(crate) game_mode_switch: gtk::Switch,
-    pub(crate) noise_option_flag: ReentrancyFlag,
-    pub(crate) eq_flag: ReentrancyFlag,
-    pub(crate) spatial_flag: ReentrancyFlag,
-    pub(crate) game_mode_flag: ReentrancyFlag,
-}
 
 #[derive(Clone)]
 pub(crate) struct DeviceWidgets {
@@ -258,7 +209,7 @@ pub fn build(
     let home_title = crate::t!("nav-home");
     let content_title = adw::WindowTitle::new(&home_title, "");
     content_header.set_title_widget(Some(&content_title));
-    content_header.pack_end(&widgets.device_menu_button);
+    content_header.pack_end(widgets.header.menu_button());
 
     content_toolbar.add_top_bar(&content_header);
 

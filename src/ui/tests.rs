@@ -59,10 +59,9 @@ fn noise_control_circular_buttons_and_combobox_row() {
     use adw::prelude::*;
 
     let (_, widgets) = crate::ui::pages::home::build_home_page();
-    let widget_refs = crate::ui::home_state::widgets_ref(&widgets);
 
     // Verify first row buttons have circular and noise-mode-button CSS classes and are top-aligned
-    for control in &widget_refs.primary_noise_controls {
+    for control in widgets.noise.primary_noise_controls() {
         assert!(control.button.has_css_class("circular"));
         assert!(control.button.has_css_class("noise-mode-button"));
         assert!(control.label.has_css_class("noise-mode-label"));
@@ -72,15 +71,15 @@ fn noise_control_circular_buttons_and_combobox_row() {
     }
 
     // Verify second row is a modern ComboRow (initially hidden)
-    assert!(!widget_refs.noise_option_row.is_visible());
+    assert!(!widgets.noise.noise_option_row().is_visible());
 
     // Verify mode_group card is initially hidden when no device/noise modes are loaded
-    assert!(!widget_refs.mode_group.is_visible());
+    assert!(!widgets.noise.mode_group().is_visible());
 
     // Verify model_firmware label is present in model card, initially hidden and styled
-    assert!(!widget_refs.model_firmware.is_visible());
-    assert!(widget_refs.model_firmware.has_css_class("dim-label"));
-    assert!(widget_refs.model_firmware.has_css_class("caption"));
+    assert!(!widgets.hero.model_firmware().is_visible());
+    assert!(widgets.hero.model_firmware().has_css_class("dim-label"));
+    assert!(widgets.hero.model_firmware().has_css_class("caption"));
 
     let modes = compatibility::profile_for_product_id(0x06ec10)
         .unwrap()
@@ -102,8 +101,8 @@ fn noise_control_circular_buttons_and_combobox_row() {
 
     // 1. Off mode (index 0): no submodes, noise_option_row remains hidden, mode_group is visible
     crate::ui::home_state::update_noise_controls(
-        &widget_refs,
-        &crate::ui::home_state::NoiseControlsViewState {
+        &widgets,
+        &crate::ui::pages::home::noise::NoiseControlsViewState {
             supported_indices: &supported_indices,
             support_note: "",
             capability_enabled: true,
@@ -113,10 +112,11 @@ fn noise_control_circular_buttons_and_combobox_row() {
             modes,
         },
     );
-    assert!(widget_refs.mode_group.is_visible());
-    assert!(!widget_refs.noise_option_row.is_visible());
-    let off_ctrl = widget_refs
-        .primary_noise_controls
+    assert!(widgets.noise.mode_group().is_visible());
+    assert!(!widgets.noise.noise_option_row().is_visible());
+    let off_ctrl = widgets
+        .noise
+        .primary_noise_controls()
         .iter()
         .find(|c| c.index == 0)
         .unwrap();
@@ -126,8 +126,8 @@ fn noise_control_circular_buttons_and_combobox_row() {
     // 2. Noise Cancellation mode with Smart submode (index 7, parent 1):
     // primary button 1 should be suggested-action, and noise_option_row visible with active index 7
     crate::ui::home_state::update_noise_controls(
-        &widget_refs,
-        &crate::ui::home_state::NoiseControlsViewState {
+        &widgets,
+        &crate::ui::pages::home::noise::NoiseControlsViewState {
             supported_indices: &supported_indices,
             support_note: "",
             capability_enabled: true,
@@ -137,25 +137,26 @@ fn noise_control_circular_buttons_and_combobox_row() {
             modes,
         },
     );
-    assert!(widget_refs.noise_option_row.is_visible());
-    let anc_ctrl = widget_refs
-        .primary_noise_controls
+    assert!(widgets.noise.noise_option_row().is_visible());
+    let anc_ctrl = widgets
+        .noise
+        .primary_noise_controls()
         .iter()
         .find(|c| c.index == 1)
         .unwrap();
     assert!(anc_ctrl.button.has_css_class("suggested-action"));
     assert!(!anc_ctrl.label.has_css_class("accent"));
     assert!(!off_ctrl.button.has_css_class("suggested-action"));
-    assert_eq!(widget_refs.noise_option_row.selected_id(), Some(7));
+    assert_eq!(widgets.noise.noise_option_row().selected_id(), Some(7));
     assert_eq!(
-        widget_refs.noise_option_row.title().as_str(),
+        widgets.noise.noise_option_row().title().as_str(),
         &crate::t!("noise-mode-level")
     );
 
     // 3. Unsupported headset (empty noise modes): mode_group card must be hidden
     crate::ui::home_state::update_noise_controls(
-        &widget_refs,
-        &crate::ui::home_state::NoiseControlsViewState {
+        &widgets,
+        &crate::ui::pages::home::noise::NoiseControlsViewState {
             supported_indices: &[],
             support_note: "",
             capability_enabled: false,
@@ -165,8 +166,8 @@ fn noise_control_circular_buttons_and_combobox_row() {
             modes: &[],
         },
     );
-    assert!(!widget_refs.mode_group.is_visible());
-    assert!(!widget_refs.noise_option_row.is_visible());
+    assert!(!widgets.noise.mode_group().is_visible());
+    assert!(!widgets.noise.noise_option_row().is_visible());
 }
 
 #[test]
@@ -256,8 +257,8 @@ fn ui_components_layout_and_behavior() {
     );
 
     let (home_page, widgets) = crate::ui::pages::home::build_home_page();
-    widgets.paired_devices_section.set_visible(true);
-    widgets.sound_card_section.set_visible(true);
+    widgets.paired.set_visible(true);
+    widgets.sound.set_visible(true);
 
     let cols = crate::ui::components::AdaptiveColumns::new();
     assert!(!cols.is_single_column());
@@ -667,7 +668,10 @@ fn ui_components_layout_and_behavior() {
     );
 
     // Verify single-column model_card height matches the 240px request
-    let (_, sc_nat, _, _) = widgets.model_card.measure(gtk::Orientation::Vertical, 500);
+    let (_, sc_nat, _, _) = widgets
+        .hero
+        .model_card()
+        .measure(gtk::Orientation::Vertical, 500);
     assert!(
         (sc_nat - 240).abs() <= 20,
         "single-column model_card natural height {sc_nat} should match request 240 (plus padding)"
@@ -678,7 +682,10 @@ fn ui_components_layout_and_behavior() {
     for _ in 0..10 {
         ctx.iteration(false);
     }
-    let (_, tc_nat, _, _) = widgets.model_card.measure(gtk::Orientation::Vertical, 800);
+    let (_, tc_nat, _, _) = widgets
+        .hero
+        .model_card()
+        .measure(gtk::Orientation::Vertical, 800);
     assert!(
         tc_nat <= 500,
         "two-column model_card natural height {tc_nat} must be clamped to at most 480 (plus padding)"
@@ -686,16 +693,17 @@ fn ui_components_layout_and_behavior() {
 
     // Verify device_menu_button and popover setup
     let (btn_min_w, _, _, _) = widgets
-        .device_menu_button
+        .header
+        .menu_button()
         .measure(gtk::Orientation::Horizontal, -1);
     assert!(
         btn_min_w <= 60,
         "device_menu_button minimum width {btn_min_w} should be compact"
     );
-    assert!(widgets.device_popover.child().is_some());
+    assert!(widgets.header.popover().child().is_some());
 
     // Verify model_card is contained within an adw::PreferencesRow inside device_group
-    let model_parent = widgets.model_card.parent();
+    let model_parent = widgets.hero.model_card().parent();
     assert!(
         model_parent
             .as_ref()
@@ -705,12 +713,15 @@ fn ui_components_layout_and_behavior() {
     );
 
     // Verify ComboRow can shrink cleanly with long item text
-    widgets.eq_row.set_items(&[(
+    widgets.sound.eq_row().set_items(&[(
         0,
         "OPPO Enco X3 Wireless Noise Cancelling Headset (00:11:22:33:44:55)",
     )]);
-    widgets.eq_row.set_selected(0);
-    let (combo_min_w, _, _, _) = widgets.eq_row.measure(gtk::Orientation::Horizontal, -1);
+    widgets.sound.eq_row().set_selected(0);
+    let (combo_min_w, _, _, _) = widgets
+        .sound
+        .eq_row()
+        .measure(gtk::Orientation::Horizontal, -1);
     assert!(
         combo_min_w <= 300,
         "eq_row minimum width {combo_min_w} should allow responsive layout"
@@ -718,7 +729,6 @@ fn ui_components_layout_and_behavior() {
 
     // Verify ComboRow includes custom equalizers and preserves selection
     {
-        let widget_refs = crate::ui::home_state::widgets_ref(&widgets);
         let standard_presets = [
             crate::compatibility::EqualizerPreset {
                 index: 0,
@@ -749,31 +759,31 @@ fn ui_components_layout_and_behavior() {
         ];
 
         crate::ui::home_state::update_equalizer_items(
-            &widget_refs,
+            &widgets,
             true,
             &standard_presets,
             &custom_eqs,
             Some(11),
         );
 
-        assert!(widgets.eq_row.is_visible());
-        assert!(widgets.eq_row.is_sensitive());
+        assert!(widgets.sound.eq_row().is_visible());
+        assert!(widgets.sound.eq_row().is_sensitive());
         assert_eq!(
-            widgets.eq_row.selected_id(),
+            widgets.sound.eq_row().selected_id(),
             Some(11),
             "Custom EQ 11 should be selected"
         );
 
-        widgets.eq_row.set_selected_id(Some(10));
+        widgets.sound.eq_row().set_selected_id(Some(10));
         assert_eq!(
-            widgets.eq_row.selected_id(),
+            widgets.sound.eq_row().selected_id(),
             Some(10),
             "Custom EQ 10 should be selectable"
         );
 
-        widgets.eq_row.set_selected_id(Some(0));
+        widgets.sound.eq_row().set_selected_id(Some(0));
         assert_eq!(
-            widgets.eq_row.selected_id(),
+            widgets.sound.eq_row().selected_id(),
             Some(0),
             "Standard preset 0 should be selectable"
         );
@@ -828,14 +838,14 @@ fn ui_components_layout_and_behavior() {
 
     // 5. Stack scrolling with home_page test
     let (hp, w) = crate::ui::pages::home::build_home_page();
-    let first = w.sound_card_section.first_child().unwrap();
+    let first = w.sound.sound_card_section().first_child().unwrap();
     let pref_group = first.downcast_ref::<adw::PreferencesGroup>().unwrap();
     assert_eq!(
         pref_group.title().as_str(),
         &crate::t!("sound-quality-and-effects")
     );
-    w.paired_devices_section.set_visible(true);
-    w.sound_card_section.set_visible(true);
+    w.paired.set_visible(true);
+    w.sound.set_visible(true);
     w.home_columns.set_single_column(true);
 
     let stack = gtk::Stack::new();

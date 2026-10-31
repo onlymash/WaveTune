@@ -31,7 +31,6 @@ use super::{
 };
 use crate::ui::{
     ConnectionStateWidgets, ControlsWidgets, DeviceWidgets, HomeWidgets, SoundWidgets,
-    home_state::widgets_ref,
 };
 
 pub(crate) struct AppUiWidgets {
@@ -93,11 +92,10 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
 
     let cached_paired_devices = Rc::new(RefCell::new(Vec::new()));
 
-    let home_refs = widgets_ref(&home);
-    let noise_component = NoiseComponent::new(home_refs.clone());
+    let noise_component = NoiseComponent::new(home.noise);
     let noise_controller = NoiseController::new(noise_component, context.clone());
 
-    let sound_component = SoundComponent::new(home_refs.clone(), sound);
+    let sound_component = SoundComponent::new(home.sound, sound);
     let sound_controller = SoundController::new(sound_component, context.clone());
 
     let controls_component = ControlsComponent::new(controls);
@@ -107,7 +105,14 @@ pub(crate) fn wire_bluetooth_controls(ctx: AppControllerContext) {
         Rc::clone(&cached_paired_devices),
     );
 
-    let device_component = DeviceComponent::new(home_refs, device, connection_state);
+    let device_component = DeviceComponent::new(
+        home.header,
+        home.battery,
+        home.hero,
+        home.paired,
+        device,
+        connection_state,
+    );
     let device_controller =
         DeviceController::new(device_component, context.clone(), cached_paired_devices);
 

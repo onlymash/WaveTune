@@ -131,129 +131,148 @@ pub fn show_paired_device_dialog(
 
     page.add(&props_group);
 
-    let actions_group = adw::PreferencesGroup::builder().separate_rows(true).build();
-
-    let can_control = matches!(controls_enabled, Ok(true));
-
-    let connect_title = if device.connected {
-        crate::t!("dual-device-disconnect")
-    } else {
-        crate::t!("dual-device-connect")
-    };
-    let connect_row = adw::ButtonRow::builder().title(&connect_title).build();
-
-    let can_toggle_connect = can_control && !action_pending.get() && !device.is_current_host;
-    connect_row.set_sensitive(can_toggle_connect);
-
     if device.is_current_host {
-        connect_row.set_tooltip_text(Some(&crate::t!("dual-device-this-host-cannot-disconnect")));
-    } else if let Err(error) = controls_enabled {
-        connect_row.set_tooltip_text(Some(&crate::t!("dual-device-state-unavailable", error)));
-    } else if !can_control {
-        connect_row.set_tooltip_text(Some(&crate::t!("dual-device-please-enable")));
-    }
+        let host_info_group = adw::PreferencesGroup::new();
+        let host_row = adw::ActionRow::builder()
+            .title(&crate::t!("dual-device-this-host"))
+            .subtitle(&crate::t!("dual-device-this-host-cannot-disconnect"))
+            .build();
+        let host_icon = gtk::Image::builder()
+            .icon_name("dialog-information-symbolic")
+            .build();
+        host_row.add_prefix(&host_icon);
+        host_info_group.add(&host_row);
+        page.add(&host_info_group);
+    } else {
+        let actions_group = adw::PreferencesGroup::builder().separate_rows(true).build();
 
-    if can_toggle_connect {
-        let address = device.address;
-        let action = if device.connected {
-            PairedDeviceAction::Disconnect
+        let can_control = matches!(controls_enabled, Ok(true));
+
+        if !can_control {
+            if let Err(error) = controls_enabled {
+                actions_group.set_description(Some(error));
+            } else {
+                actions_group.set_description(Some(&crate::t!("dual-device-please-enable")));
+            }
+        } else if device.connected {
+            actions_group.set_description(Some(&crate::t!("dual-device-cannot-delete-connected")));
+        }
+
+        let connect_title = if device.connected {
+            crate::t!("dual-device-disconnect")
         } else {
-            PairedDeviceAction::Connect
+            crate::t!("dual-device-connect")
         };
-        let action_pending = Rc::clone(action_pending);
-        let worker_commands = Rc::clone(worker_commands);
-        let updates = updates.clone();
-        let dialog_weak = dialog.downgrade();
+        let connect_row = adw::ButtonRow::builder().title(&connect_title).build();
 
-        connect_row.connect_activated(move |row| {
-            if action_pending.replace(true) {
-                return;
-            }
-            row.set_sensitive(false);
-            let command_result = worker_commands
-                .borrow()
-                .as_ref()
-                .map(|sender| sender.send(WorkerCommand::SetPairedDevice { address, action }));
-            match command_result {
-                Some(Ok(())) => {}
-                Some(Err(_)) => {
-                    let _ = updates.send(UiUpdate::Status(crate::t!(
-                        "dual-device-send-connect-failed"
-                    )));
-                    let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+        let can_toggle_connect = can_control && !action_pending.get();
+        connect_row.set_sensitive(can_toggle_connect);
+
+        if let Err(error) = controls_enabled {
+            connect_row.set_tooltip_text(Some(&crate::t!("dual-device-state-unavailable", error)));
+        } else if !can_control {
+            connect_row.set_tooltip_text(Some(&crate::t!("dual-device-please-enable")));
+        }
+
+        if can_toggle_connect {
+            let address = device.address;
+            let action = if device.connected {
+                PairedDeviceAction::Disconnect
+            } else {
+                PairedDeviceAction::Connect
+            };
+            let action_pending = Rc::clone(action_pending);
+            let worker_commands = Rc::clone(worker_commands);
+            let updates = updates.clone();
+            let dialog_weak = dialog.downgrade();
+
+            connect_row.connect_activated(move |row| {
+                if action_pending.replace(true) {
+                    return;
                 }
-                None => {
-                    let _ = updates.send(UiUpdate::Status(crate::t!("channel-not-connected")));
-                    let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+                row.set_sensitive(false);
+                let command_result = worker_commands
+                    .borrow()
+                    .as_ref()
+                    .map(|sender| sender.send(WorkerCommand::SetPairedDevice { address, action }));
+                match command_result {
+                    Some(Ok(())) => {}
+                    Some(Err(_)) => {
+                        let _ = updates.send(UiUpdate::Status(crate::t!(
+                            "dual-device-send-connect-failed"
+                        )));
+                        let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+                    }
+                    None => {
+                        let _ = updates.send(UiUpdate::Status(crate::t!("channel-not-connected")));
+                        let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+                    }
                 }
-            }
-            if let Some(dialog) = dialog_weak.upgrade() {
-                dialog.close();
-            }
-        });
-    }
-    actions_group.add(&connect_row);
-
-    let delete_row = adw::ButtonRow::builder()
-        .title(&crate::t!("dual-device-forget"))
-        .build();
-    delete_row.add_css_class("destructive-action");
-
-    let can_delete =
-        can_control && !action_pending.get() && !device.connected && !device.is_current_host;
-    delete_row.set_sensitive(can_delete);
-
-    if device.is_current_host {
-        delete_row.set_tooltip_text(Some(&crate::t!("dual-device-this-host-cannot-disconnect")));
-    } else if device.connected {
-        delete_row.set_tooltip_text(Some(&crate::t!("dual-device-cannot-delete-connected")));
-    } else if let Err(error) = controls_enabled {
-        delete_row.set_tooltip_text(Some(&crate::t!("dual-device-state-unavailable", error)));
-    } else if !can_control {
-        delete_row.set_tooltip_text(Some(&crate::t!("dual-device-please-enable")));
-    } else {
-        delete_row.set_tooltip_text(Some(&crate::t!("dual-device-remove-tooltip")));
-    }
-
-    if can_delete {
-        let address = device.address;
-        let action_pending = Rc::clone(action_pending);
-        let worker_commands = Rc::clone(worker_commands);
-        let updates = updates.clone();
-        let dialog_weak = dialog.downgrade();
-
-        delete_row.connect_activated(move |row| {
-            if action_pending.replace(true) {
-                return;
-            }
-            row.set_sensitive(false);
-            let command_result = worker_commands.borrow().as_ref().map(|sender| {
-                sender.send(WorkerCommand::SetPairedDevice {
-                    address,
-                    action: PairedDeviceAction::Remove,
-                })
+                if let Some(dialog) = dialog_weak.upgrade() {
+                    dialog.close();
+                }
             });
-            match command_result {
-                Some(Ok(())) => {}
-                Some(Err(_)) => {
-                    let _ = updates.send(UiUpdate::Status(crate::t!(
-                        "dual-device-send-delete-failed"
-                    )));
-                    let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
-                }
-                None => {
-                    let _ = updates.send(UiUpdate::Status(crate::t!("channel-not-connected")));
-                    let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
-                }
-            }
-            if let Some(dialog) = dialog_weak.upgrade() {
-                dialog.close();
-            }
-        });
-    }
-    actions_group.add(&delete_row);
+        }
+        actions_group.add(&connect_row);
 
-    page.add(&actions_group);
+        let delete_row = adw::ButtonRow::builder()
+            .title(&crate::t!("dual-device-forget"))
+            .build();
+        delete_row.add_css_class("destructive-action");
+
+        let can_delete = can_control && !action_pending.get() && !device.connected;
+        delete_row.set_sensitive(can_delete);
+
+        if device.connected {
+            delete_row.set_tooltip_text(Some(&crate::t!("dual-device-cannot-delete-connected")));
+        } else if let Err(error) = controls_enabled {
+            delete_row.set_tooltip_text(Some(&crate::t!("dual-device-state-unavailable", error)));
+        } else if !can_control {
+            delete_row.set_tooltip_text(Some(&crate::t!("dual-device-please-enable")));
+        } else {
+            delete_row.set_tooltip_text(Some(&crate::t!("dual-device-remove-tooltip")));
+        }
+
+        if can_delete {
+            let address = device.address;
+            let action_pending = Rc::clone(action_pending);
+            let worker_commands = Rc::clone(worker_commands);
+            let updates = updates.clone();
+            let dialog_weak = dialog.downgrade();
+
+            delete_row.connect_activated(move |row| {
+                if action_pending.replace(true) {
+                    return;
+                }
+                row.set_sensitive(false);
+                let command_result = worker_commands.borrow().as_ref().map(|sender| {
+                    sender.send(WorkerCommand::SetPairedDevice {
+                        address,
+                        action: PairedDeviceAction::Remove,
+                    })
+                });
+                match command_result {
+                    Some(Ok(())) => {}
+                    Some(Err(_)) => {
+                        let _ = updates.send(UiUpdate::Status(crate::t!(
+                            "dual-device-send-delete-failed"
+                        )));
+                        let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+                    }
+                    None => {
+                        let _ = updates.send(UiUpdate::Status(crate::t!("channel-not-connected")));
+                        let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+                    }
+                }
+                if let Some(dialog) = dialog_weak.upgrade() {
+                    dialog.close();
+                }
+            });
+        }
+        actions_group.add(&delete_row);
+
+        page.add(&actions_group);
+    }
     toolbar_view.set_content(Some(&page));
     dialog.set_child(Some(&toolbar_view));
     dialog.present(Some(parent));

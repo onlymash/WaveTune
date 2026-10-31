@@ -26,7 +26,6 @@ use crate::{
         features::FeatureContext,
     },
     protocol::CustomEqualizer,
-    ui::components::ComboRowExtManual,
 };
 
 #[derive(Clone)]
@@ -56,52 +55,41 @@ impl SoundController {
 
     fn bind_equalizer_events(&self) {
         // 1. Home EQ ComboRow
-        let eq_flag = self.component.home_widgets.eq_flag.clone();
         let sound_widgets = self.component.sound_widgets.clone();
         let context = self.context.clone();
+        let quick = self.component.quick.clone();
 
-        self.component
-            .home_widgets
-            .eq_row
-            .connect_selected_notify(move |row| {
-                if eq_flag.is_updating() {
-                    return;
+        self.component.quick.connect_eq_selected(move |preset_id| {
+            quick.set_eq_sensitive(false);
+
+            let is_custom = {
+                let st = context.session_state.borrow();
+                st.sound.custom_equalizers.iter().any(|c| c.id == preset_id)
+            };
+            let cmd = if is_custom {
+                WorkerCommand::SelectCustomEqualizer(preset_id)
+            } else {
+                WorkerCommand::SetEqualizer(preset_id)
+            };
+
+            match context.send_command(cmd) {
+                Ok(()) => {
+                    crate::ui::sound_state::update_sound_page_equalizer(
+                        &sound_widgets,
+                        Some(preset_id),
+                    );
                 }
-                let Some(preset_id) = row.selected_id() else {
-                    return;
-                };
-                row.set_sensitive(false);
-
-                let is_custom = {
-                    let st = context.session_state.borrow();
-                    st.sound.custom_equalizers.iter().any(|c| c.id == preset_id)
-                };
-                let cmd = if is_custom {
-                    WorkerCommand::SelectCustomEqualizer(preset_id)
-                } else {
-                    WorkerCommand::SetEqualizer(preset_id)
-                };
-
-                match context.send_command(cmd) {
-                    Ok(()) => {
-                        crate::ui::sound_state::update_sound_page_equalizer(
-                            &sound_widgets,
-                            Some(preset_id),
-                        );
-                    }
-                    Err(error) => {
-                        context.send_status(crate::t!("equalizer-send-failed", error));
-                        row.set_sensitive(true);
-                        let _guard = eq_flag.enter();
-                        let cur = context.session_state.borrow().sound.current_eq_preset;
-                        row.set_selected_id(cur);
-                    }
+                Err(error) => {
+                    context.send_status(crate::t!("equalizer-send-failed", error));
+                    quick.set_eq_sensitive(true);
+                    let cur = context.session_state.borrow().sound.current_eq_preset;
+                    quick.update_equalizer(cur);
                 }
-            });
+            }
+        });
 
         // 2. Sound page preset radios
-        let widgets_eq_row = self.component.home_widgets.eq_row.clone();
-        let widgets_eq_flag = self.component.home_widgets.eq_flag.clone();
+        let quick = self.component.quick.clone();
         let sound_widgets = self.component.sound_widgets.clone();
         let context = self.context.clone();
 
@@ -112,9 +100,8 @@ impl SoundController {
                 let cmd = WorkerCommand::SetEqualizer(preset_index);
                 match context.send_command(cmd) {
                     Ok(()) => {
-                        let _guard = widgets_eq_flag.enter();
-                        widgets_eq_row.set_selected_id(Some(preset_index));
-                        widgets_eq_row.set_sensitive(false);
+                        quick.update_equalizer(Some(preset_index));
+                        quick.set_eq_sensitive(false);
                     }
                     Err(error) => {
                         context.send_status(crate::t!("equalizer-send-failed", error));
@@ -127,42 +114,29 @@ impl SoundController {
 
     fn bind_spatial_events(&self) {
         // 1. Home Spatial ComboRow
-        let spatial_flag = self.component.home_widgets.spatial_flag.clone();
         let sound_widgets = self.component.sound_widgets.clone();
         let context = self.context.clone();
+        let quick = self.component.quick.clone();
 
-        self.component
-            .home_widgets
-            .spatial_row
-            .connect_selected_notify(move |row| {
-                if spatial_flag.is_updating() {
-                    return;
-                }
-                let Some(mode) = row.selected_id() else {
-                    return;
-                };
-                row.set_sensitive(false);
+        self.component.quick.connect_spatial_selected(move |mode| {
+            quick.set_spatial_sensitive(false);
 
-                let cmd = WorkerCommand::SetSpatialAudio(mode);
-                match context.send_command(cmd) {
-                    Ok(()) => {
-                        crate::ui::sound_state::update_sound_page_spatial(
-                            &sound_widgets,
-                            Some(mode),
-                        );
-                    }
-                    Err(error) => {
-                        context.send_setting_error(
-                            SettingDomain::SpatialAudio,
-                            crate::t!("spatial-audio-send-failed", error),
-                        );
-                    }
+            let cmd = WorkerCommand::SetSpatialAudio(mode);
+            match context.send_command(cmd) {
+                Ok(()) => {
+                    crate::ui::sound_state::update_sound_page_spatial(&sound_widgets, Some(mode));
                 }
-            });
+                Err(error) => {
+                    context.send_setting_error(
+                        SettingDomain::SpatialAudio,
+                        crate::t!("spatial-audio-send-failed", error),
+                    );
+                }
+            }
+        });
 
         // 2. Sound page spatial radios
-        let widgets_spatial_row = self.component.home_widgets.spatial_row.clone();
-        let widgets_spatial_flag = self.component.home_widgets.spatial_flag.clone();
+        let quick = self.component.quick.clone();
         let sound_widgets = self.component.sound_widgets.clone();
         let context = self.context.clone();
 
@@ -173,9 +147,8 @@ impl SoundController {
                 let cmd = WorkerCommand::SetSpatialAudio(mode);
                 match context.send_command(cmd) {
                     Ok(()) => {
-                        let _guard = widgets_spatial_flag.enter();
-                        widgets_spatial_row.set_selected_id(Some(mode));
-                        widgets_spatial_row.set_sensitive(false);
+                        quick.update_spatial_audio(Some(mode));
+                        quick.set_spatial_sensitive(false);
                     }
                     Err(error) => {
                         context.send_setting_error(
@@ -190,18 +163,11 @@ impl SoundController {
     }
 
     fn bind_game_mode_events(&self) {
-        let game_mode_flag = self.component.home_widgets.game_mode_flag.clone();
         let context = self.context.clone();
 
         self.component
-            .home_widgets
-            .game_mode_switch
-            .connect_state_set(move |switch, state| {
-                if game_mode_flag.is_updating() {
-                    return gtk::glib::Propagation::Proceed;
-                }
-                switch.set_sensitive(false);
-
+            .quick
+            .connect_game_mode_toggled(move |state| {
                 let cmd = WorkerCommand::SetGameMode(state);
                 match context.send_command(cmd) {
                     Ok(()) => {}
@@ -212,7 +178,6 @@ impl SoundController {
                         );
                     }
                 }
-                gtk::glib::Propagation::Stop
             });
     }
 
@@ -527,16 +492,14 @@ impl SoundController {
 
     fn render_custom_equalizers(&self) {
         let context = self.context.clone();
-        let widgets_eq_row = self.component.home_widgets.eq_row.clone();
-        let widgets_eq_flag = self.component.home_widgets.eq_flag.clone();
+        let quick = self.component.quick.clone();
 
         let on_select = move |id: u8| {
             let cmd = WorkerCommand::SelectCustomEqualizer(id);
             match context.send_command(cmd) {
                 Ok(()) => {
-                    let _guard = widgets_eq_flag.enter();
-                    widgets_eq_row.set_selected_id(Some(id));
-                    widgets_eq_row.set_sensitive(false);
+                    quick.update_equalizer(Some(id));
+                    quick.set_eq_sensitive(false);
                 }
                 Err(error) => {
                     context.send_status(crate::t!("equalizer-send-failed", error));

@@ -939,7 +939,10 @@ fn monitor_device(
                         ) {
                             if let Ok(actual) = parse_feature_flags_response(&res.payload, 17) {
                                 current_dual_device = Some(actual);
+                                snapshot.paired_device_controls_enabled = Ok(actual);
                                 let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(actual));
+                                let _ =
+                                    updates.send(UiUpdate::PairedDeviceControlsEnabled(Ok(actual)));
                             }
                         }
                         let _ =
@@ -2294,6 +2297,7 @@ fn handle_unsolicited<T: Write>(
                 let _ = updates.send(UiUpdate::InEarDetectionEnabled(val != 0));
             } else if feature_id == 17 {
                 let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(val != 0));
+                let _ = updates.send(UiUpdate::PairedDeviceControlsEnabled(Ok(val != 0)));
             } else if feature_id == 0x3a {
                 let _ = updates.send(UiUpdate::SleepDetectionEnabled(val != 0));
             } else if feature_id == 27 {

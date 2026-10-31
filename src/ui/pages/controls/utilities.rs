@@ -190,4 +190,3 @@ pub(crate) fn build_utilities_group() -> (adw::PreferencesGroup, UtilityWidgets)
 
     (utility_group, widgets)
 }
-
