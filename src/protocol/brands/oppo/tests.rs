@@ -487,7 +487,7 @@ fn custom_equalizer_parse_matches_reference_capture() {
 
 #[test]
 fn touch_controls_parse_and_encode() {
-    use crate::protocol::brands::oppo::oppo_parsers::{
+    use crate::protocol::brands::oppo::oppo_controls::{
         encode_oppo_set_key_function, parse_oppo_touch_controls_response,
     };
     use crate::protocol::core::types::{EarSide, GestureAction, KeyFunction};
@@ -528,7 +528,7 @@ fn touch_controls_parse_and_encode() {
 
 #[test]
 fn fit_test_event_parse_and_encode() {
-    use crate::protocol::brands::oppo::oppo_parsers::{
+    use crate::protocol::brands::oppo::oppo_controls::{
         encode_oppo_fit_test, parse_oppo_fit_test_event,
     };
     use crate::protocol::core::types::FitQuality;
@@ -551,7 +551,7 @@ fn fit_test_event_parse_and_encode() {
 
 #[test]
 fn prompt_volume_and_head_motion_parsers_and_encoders() {
-    use crate::protocol::brands::oppo::oppo_parsers::{
+    use crate::protocol::brands::oppo::oppo_controls::{
         encode_oppo_find_earbuds, encode_oppo_set_head_motion_type, encode_oppo_set_prompt_volume,
         parse_oppo_head_motion_type_response, parse_oppo_prompt_volume_response,
     };
@@ -574,9 +574,11 @@ fn prompt_volume_and_head_motion_parsers_and_encoders() {
 
 #[test]
 fn noise_cycle_and_priority_device_parsers_and_encoders() {
-    use crate::protocol::brands::oppo::oppo_parsers::{
-        encode_oppo_set_noise_cycle, encode_oppo_set_priority_device,
-        parse_oppo_noise_cycle_response, parse_oppo_priority_device_response,
+    use crate::protocol::brands::oppo::oppo_controls::{
+        encode_oppo_set_noise_cycle, parse_oppo_noise_cycle_response,
+    };
+    use crate::protocol::brands::oppo::oppo_device::{
+        encode_oppo_set_priority_device, parse_oppo_priority_device_response,
     };
     use crate::protocol::core::types::EarSide;
 
