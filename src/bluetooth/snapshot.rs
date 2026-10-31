@@ -24,7 +24,7 @@ use crate::{
 };
 
 /// Unified device snapshot partitioned into domain feature slices.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct DeviceSnapshot {
     pub identity: DeviceIdentitySnapshot,
     pub battery: BatteryState,
@@ -36,7 +36,7 @@ pub struct DeviceSnapshot {
     pub diagnostics: ProbeDiagnostics,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct DeviceIdentitySnapshot {
     pub name: String,
     pub model: String,

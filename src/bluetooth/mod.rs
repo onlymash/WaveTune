@@ -19,11 +19,13 @@ use bluer::Address;
 
 pub mod brands;
 pub(super) mod discovery;
+pub mod driver;
 mod probe;
 pub mod snapshot;
 #[cfg(test)]
 mod tests;
 pub(super) mod transport;
+pub mod worker;
 
 pub use crate::app::events::{UiUpdate, WorkerCommand};
 #[allow(unused_imports)]
@@ -33,8 +35,12 @@ pub use brands::oppo::{
     OppoDeviceSnapshot, initialize_oppo_session, initialize_session, spawn_oppo_monitor,
 };
 pub use discovery::spawn_discovery;
+#[allow(unused_imports)]
+pub use driver::HeadsetDriver;
 pub use probe::probe;
 pub use snapshot::*;
+#[allow(unused_imports)]
+pub use worker::SessionRunner;
 
 pub fn spawn_monitor(
     device: DeviceChoice,

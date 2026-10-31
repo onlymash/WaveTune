@@ -596,7 +596,7 @@ mod tests {
         });
 
         let mut decoder = EarFunFrameDecoder::default();
-        let devices = read_earfun_paired_devices(&mut client, &mut decoder, None).unwrap();
+        let devices = read_earfun_paired_devices(&mut client, &mut decoder, None, None).unwrap();
         assert_eq!(devices.len(), 2);
         assert_eq!(devices[0].name, "Pixel-Phone");
         assert!(devices[0].connected);
