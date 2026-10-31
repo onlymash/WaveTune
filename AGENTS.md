@@ -21,6 +21,7 @@ Before changing behavior, read:
 - [`docs/OPPO_BLUETOOTH_API.md`](docs/OPPO_BLUETOOTH_API.md) for OPPO/OnePlus/realme protocol details.
 - [`docs/EARFUN_BLUETOOTH_API.md`](docs/EARFUN_BLUETOOTH_API.md) for EarFun GAIA V3 protocol details.
 - [`docs/ARCHITECTURE_GUIDELINES.md`](docs/ARCHITECTURE_GUIDELINES.md) for core MVI architecture and vertical slice patterns.
+- [`docs/PROTOCOL_COMPATIBILITY_REFACTORING_PLAN.md`](docs/PROTOCOL_COMPATIBILITY_REFACTORING_PLAN.md) for protocol and compatibility architecture specifications.
 - [`docs/NEW_BRAND_INTEGRATION_GUIDE.md`](docs/NEW_BRAND_INTEGRATION_GUIDE.md) for new brand integration SOP.
 - [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for scope and roadmap.
 
@@ -132,21 +133,23 @@ control service; the device may accept only one control connection at a time.
 - `src/app/desktop/`: system tray (StatusNotifierItem) and GNOME Quick Settings D-Bus service.
 - `src/app/features/`: vertical feature slices for UI components and controllers (`noise/`, `sound/`, `controls/`, `device/`).
 - `src/ui/`: GTK window composition, home/sound/controls/device pages, shared components, and view-state updates. Keep protocol logic out of these modules.
-- `src/bluetooth/`: BlueZ discovery and candidate filtering (`discovery.rs`), generic RFCOMM transport (`transport.rs`), unified `--probe` output (`probe.rs`), driver trait abstraction (`driver.rs`), common worker thread execution loop (`worker.rs`), domain snapshots (`snapshot.rs`), unified driver factory (`create_driver` in `mod.rs`), and modular brand drivers under `brands/` (`brands/oppo/`, `brands/earfun/`).
-- `src/compatibility/`: multi-brand catalog architecture. Generic profile types and lookup in `mod.rs`, aggregate registry in `registry.rs`, and brand-specific catalogs under `brands/` (`brands/oppo/`, `brands/earfun/`).
-- `src/protocol/`: generic models (`core/types.rs`) and brand-specific protocol codecs under `brands/` (`brands/oppo/`, `brands/earfun/`). Keep these modules independent of GTK and BlueZ.
+- `src/bluetooth/`: BlueZ discovery and candidate filtering (`discovery.rs`), generic RFCOMM transport (`transport.rs`), unified `--probe` output (`probe.rs`), driver trait abstraction (`driver.rs`), common worker thread execution loop (`worker.rs`), domain snapshots (`snapshot.rs`), unified driver factory (`create_driver` in `mod.rs`), and modular brand drivers under `brands/` (`brands/oppo/`, `brands/earfun/`). Brand drivers use feature execution contexts (such as `OppoFeatureContext`) and domain sub-states to keep command dispatch signatures concise and free of clippy parameter warnings.
+- `src/compatibility/`: multi-brand catalog architecture. Generic profile types and lookup in `mod.rs`, aggregate registry in `registry.rs`, and brand-specific catalogs, equalizer presets, gesture tables, and test suites strictly scoped under `brands/` (`brands/oppo/`, `brands/earfun/`).
+- `src/protocol/`: generic models and DTOs (`core/types.rs`) and brand-specific protocol codecs under `brands/` (`brands/oppo/`, `brands/earfun/`). OPPO protocol codecs are organized into domain-specific modules (`oppo_sound.rs`, `oppo_controls.rs`, `oppo_device.rs`, `oppo_noise.rs`, `oppo_frame.rs`, `oppo_packet.rs`). Protocol codecs are pure, stateless wire decoders and encoders with zero dependency on `src/compatibility`, `src/bluetooth`, or GTK.
 - `docs/OPPO_BLUETOOTH_API.md`: recorded private-protocol facts and provenance for OPPO/OnePlus/realme.
 - `docs/EARFUN_BLUETOOTH_API.md`: recorded private-protocol facts and GAIA V3 specs for EarFun.
 - `docs/ARCHITECTURE_GUIDELINES.md`: core architecture guidelines, MVI pattern, and vertical slice design.
+- `docs/PROTOCOL_COMPATIBILITY_REFACTORING_PLAN.md`: protocol and compatibility architecture specifications.
 - `docs/NEW_BRAND_INTEGRATION_GUIDE.md`: standardized guide and code templates for integrating new headset brands.
 - `docs/UI_COMPONENT_GUIDELINES.md`: architectural guidelines and specifications for GTK4/Libadwaita UI components.
 - `packaging/`: Arch/AUR PKGBUILD generator and publisher (`arch/generate.sh` and `arch/publish.sh`), Debian control template (`debian/`), the shared file layout (`install.sh`), and `package.sh`, which builds packages into `target/dist/`.
 
-Keep protocol parsing independent of GTK. Keep Bluetooth I/O off the GTK main thread and pass typed updates to the UI. Prefer extending existing typed state/event structures over embedding protocol byte handling in widgets.
+Keep protocol parsing independent of GTK, BlueZ, and device profile catalogs. Protocol codecs must be pure, stateless functions using structured parameter objects (DTOs) for complex settings. Keep Bluetooth I/O off the GTK main thread and pass typed updates to the UI. Prefer extending existing typed state/event structures over embedding protocol byte handling in widgets.
 
 ## Bluetooth and protocol safety
 
 - Treat all vendor protocols (OPPO family, EarFun GAIA V3, etc.) as unofficial and model-/firmware-specific. Consult the API notes before adding commands or changing parsing behavior.
+- Keep protocol codecs pure and stateless; never introduce dependencies on compatibility catalogs or profiles in protocol modules. Encapsulate complex or multi-argument settings into typed DTOs.
 - The API notes distinguish device-tested information from client-derived and community-derived facts. Preserve that evidence distinction in code comments, docs, and compatibility claims.
 - Keep unknown product IDs strictly read-only.
 - Never implement OTA or firmware flashing.

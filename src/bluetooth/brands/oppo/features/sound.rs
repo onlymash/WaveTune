@@ -23,12 +23,13 @@ use std::{
 };
 
 use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
+use crate::bluetooth::brands::oppo::features::{OppoFeatureContext, OppoSoundState};
 use crate::bluetooth::brands::oppo::transport::request;
 use crate::protocol::{
-    BassEngineLevel, CustomEqualizer, CustomEqualizerAction, CustomEqualizerParams,
-    FEATURE_BASS_ENGINE, FEATURE_HI_RES, FrameDecoder, encode_custom_equalizer_command,
-    parse_bass_engine_response, parse_custom_equalizer_list, parse_equalizer_response,
-    parse_feature_flags_response, parse_spatial_audio_response,
+    BassEngineLevel, CustomEqualizerAction, CustomEqualizerParams, FEATURE_BASS_ENGINE,
+    FEATURE_HI_RES, FrameDecoder, encode_custom_equalizer_command, parse_bass_engine_response,
+    parse_custom_equalizer_list, parse_equalizer_response, parse_feature_flags_response,
+    parse_spatial_audio_response,
 };
 
 pub fn set_equalizer<T: Read + Write>(
@@ -221,40 +222,32 @@ pub fn set_feature_toggle<T: Read + Write>(
     Ok(actual)
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle_sound_command<T: Read + Write>(
-    stream: &mut T,
-    decoder: &mut FrameDecoder,
+    ctx: &mut OppoFeatureContext<'_, T>,
     command: &WorkerCommand,
-    read_only: bool,
-    supports_equalizer: bool,
-    supports_custom_equalizer: bool,
-    current_custom_equalizers: &mut Vec<CustomEqualizer>,
-    supports_spatial_audio: bool,
-    supports_game_mode: bool,
-    game_mode_feature_id: u8,
-    supports_bass_engine: bool,
-    bass_engine_level: &mut Option<BassEngineLevel>,
-    supports_hi_res: bool,
-    updates: &Sender<UiUpdate>,
+    state: &mut OppoSoundState,
 ) -> bool {
     match command {
         WorkerCommand::SetEqualizer(preset) => {
-            if read_only || !supports_equalizer {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_equalizer() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::Equalizer,
                     message: crate::t!("equalizer-blocked"),
                 });
                 return true;
             }
-            let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-waiting-confirm")));
-            match set_equalizer(stream, decoder, *preset, updates) {
+            let _ = ctx
+                .updates
+                .send(UiUpdate::Status(crate::t!("equalizer-waiting-confirm")));
+            match set_equalizer(ctx.stream, ctx.decoder, *preset, ctx.updates) {
                 Ok(actual) => {
-                    let _ = updates.send(UiUpdate::Equalizer(actual));
-                    let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-applied")));
+                    let _ = ctx.updates.send(UiUpdate::Equalizer(actual));
+                    let _ = ctx
+                        .updates
+                        .send(UiUpdate::Status(crate::t!("equalizer-applied")));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Equalizer,
                         message: crate::t!("equalizer-switch-failed", error),
                     });
@@ -263,36 +256,53 @@ pub fn handle_sound_command<T: Read + Write>(
             true
         }
         WorkerCommand::SelectCustomEqualizer(id) => {
-            if read_only || !supports_custom_equalizer {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_custom_equalizer() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::Equalizer,
                     message: crate::t!("equalizer-custom-blocked"),
                 });
                 return true;
             }
-            let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-switching")));
-            let preset = current_custom_equalizers
+            let _ = ctx
+                .updates
+                .send(UiUpdate::Status(crate::t!("equalizer-custom-switching")));
+            let preset = state
+                .custom_equalizers
                 .iter()
                 .find(|p| p.id == *id)
                 .cloned();
             if let Some(p) = preset {
                 let payload =
                     encode_custom_equalizer_command(CustomEqualizerAction::Update, &(&p).into());
-                match request(stream, decoder, 0x0418, 0, payload, Some(updates)) {
+                match request(
+                    ctx.stream,
+                    ctx.decoder,
+                    0x0418,
+                    0,
+                    payload,
+                    Some(ctx.updates),
+                ) {
                     Ok(_) => {
-                        if let Ok(res) = request(stream, decoder, 0x0122, 0, vec![], Some(updates))
-                        {
+                        if let Ok(res) = request(
+                            ctx.stream,
+                            ctx.decoder,
+                            0x0122,
+                            0,
+                            vec![],
+                            Some(ctx.updates),
+                        ) {
                             if let Ok(list) = parse_custom_equalizer_list(&res.payload, true) {
-                                *current_custom_equalizers = list.clone();
-                                let _ = updates.send(UiUpdate::CustomEqualizers(list));
+                                state.custom_equalizers = list.clone();
+                                let _ = ctx.updates.send(UiUpdate::CustomEqualizers(list));
                             }
                         }
-                        let _ = updates.send(UiUpdate::Equalizer(*id));
-                        let _ =
-                            updates.send(UiUpdate::Status(crate::t!("equalizer-custom-applied")));
+                        let _ = ctx.updates.send(UiUpdate::Equalizer(*id));
+                        let _ = ctx
+                            .updates
+                            .send(UiUpdate::Status(crate::t!("equalizer-custom-applied")));
                     }
                     Err(error) => {
-                        let _ = updates.send(UiUpdate::SettingError {
+                        let _ = ctx.updates.send(UiUpdate::SettingError {
                             domain: SettingDomain::Equalizer,
                             message: crate::t!("equalizer-custom-switch-failed", error),
                         });
@@ -302,14 +312,16 @@ pub fn handle_sound_command<T: Read + Write>(
             true
         }
         WorkerCommand::AddCustomEqualizer { name, bands } => {
-            if read_only || !supports_custom_equalizer {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_custom_equalizer() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::Equalizer,
                     message: crate::t!("equalizer-custom-blocked"),
                 });
                 return true;
             }
-            let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-adding")));
+            let _ = ctx
+                .updates
+                .send(UiUpdate::Status(crate::t!("equalizer-custom-adding")));
             let params = CustomEqualizerParams {
                 id: 0,
                 name,
@@ -318,18 +330,34 @@ pub fn handle_sound_command<T: Read + Write>(
                 bands,
             };
             let payload = encode_custom_equalizer_command(CustomEqualizerAction::Create, &params);
-            match request(stream, decoder, 0x0418, 0, payload, Some(updates)) {
+            match request(
+                ctx.stream,
+                ctx.decoder,
+                0x0418,
+                0,
+                payload,
+                Some(ctx.updates),
+            ) {
                 Ok(_) => {
-                    if let Ok(res) = request(stream, decoder, 0x0122, 0, vec![], Some(updates)) {
+                    if let Ok(res) = request(
+                        ctx.stream,
+                        ctx.decoder,
+                        0x0122,
+                        0,
+                        vec![],
+                        Some(ctx.updates),
+                    ) {
                         if let Ok(list) = parse_custom_equalizer_list(&res.payload, true) {
-                            *current_custom_equalizers = list.clone();
-                            let _ = updates.send(UiUpdate::CustomEqualizers(list));
+                            state.custom_equalizers = list.clone();
+                            let _ = ctx.updates.send(UiUpdate::CustomEqualizers(list));
                         }
                     }
-                    let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-added")));
+                    let _ = ctx
+                        .updates
+                        .send(UiUpdate::Status(crate::t!("equalizer-custom-added")));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Equalizer,
                         message: crate::t!("equalizer-custom-add-failed", error),
                     });
@@ -338,15 +366,18 @@ pub fn handle_sound_command<T: Read + Write>(
             true
         }
         WorkerCommand::SaveCustomEqualizer { id, name, bands } => {
-            if read_only || !supports_custom_equalizer {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_custom_equalizer() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::Equalizer,
                     message: crate::t!("equalizer-custom-blocked"),
                 });
                 return true;
             }
-            let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-saving")));
-            let (min_gain, max_gain) = current_custom_equalizers
+            let _ = ctx
+                .updates
+                .send(UiUpdate::Status(crate::t!("equalizer-custom-saving")));
+            let (min_gain, max_gain) = state
+                .custom_equalizers
                 .iter()
                 .find(|p| p.id == *id)
                 .map(|p| (p.min_gain, p.max_gain))
@@ -359,18 +390,34 @@ pub fn handle_sound_command<T: Read + Write>(
                 bands,
             };
             let payload = encode_custom_equalizer_command(CustomEqualizerAction::Update, &params);
-            match request(stream, decoder, 0x0418, 0, payload, Some(updates)) {
+            match request(
+                ctx.stream,
+                ctx.decoder,
+                0x0418,
+                0,
+                payload,
+                Some(ctx.updates),
+            ) {
                 Ok(_) => {
-                    if let Ok(res) = request(stream, decoder, 0x0122, 0, vec![], Some(updates)) {
+                    if let Ok(res) = request(
+                        ctx.stream,
+                        ctx.decoder,
+                        0x0122,
+                        0,
+                        vec![],
+                        Some(ctx.updates),
+                    ) {
                         if let Ok(list) = parse_custom_equalizer_list(&res.payload, true) {
-                            *current_custom_equalizers = list.clone();
-                            let _ = updates.send(UiUpdate::CustomEqualizers(list));
+                            state.custom_equalizers = list.clone();
+                            let _ = ctx.updates.send(UiUpdate::CustomEqualizers(list));
                         }
                     }
-                    let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-saved")));
+                    let _ = ctx
+                        .updates
+                        .send(UiUpdate::Status(crate::t!("equalizer-custom-saved")));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Equalizer,
                         message: crate::t!("equalizer-custom-save-failed", error),
                     });
@@ -379,15 +426,18 @@ pub fn handle_sound_command<T: Read + Write>(
             true
         }
         WorkerCommand::DeleteCustomEqualizer(id) => {
-            if read_only || !supports_custom_equalizer {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_custom_equalizer() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::Equalizer,
                     message: crate::t!("equalizer-custom-blocked"),
                 });
                 return true;
             }
-            let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-deleting")));
-            let (name, min_gain, max_gain, bands) = current_custom_equalizers
+            let _ = ctx
+                .updates
+                .send(UiUpdate::Status(crate::t!("equalizer-custom-deleting")));
+            let (name, min_gain, max_gain, bands) = state
+                .custom_equalizers
                 .iter()
                 .find(|p| p.id == *id)
                 .map(|p| (p.name.clone(), p.min_gain, p.max_gain, p.bands.clone()))
@@ -400,18 +450,34 @@ pub fn handle_sound_command<T: Read + Write>(
                 bands: &bands,
             };
             let payload = encode_custom_equalizer_command(CustomEqualizerAction::Delete, &params);
-            match request(stream, decoder, 0x0418, 0, payload, Some(updates)) {
+            match request(
+                ctx.stream,
+                ctx.decoder,
+                0x0418,
+                0,
+                payload,
+                Some(ctx.updates),
+            ) {
                 Ok(_) => {
-                    if let Ok(res) = request(stream, decoder, 0x0122, 0, vec![], Some(updates)) {
+                    if let Ok(res) = request(
+                        ctx.stream,
+                        ctx.decoder,
+                        0x0122,
+                        0,
+                        vec![],
+                        Some(ctx.updates),
+                    ) {
                         if let Ok(list) = parse_custom_equalizer_list(&res.payload, true) {
-                            *current_custom_equalizers = list.clone();
-                            let _ = updates.send(UiUpdate::CustomEqualizers(list));
+                            state.custom_equalizers = list.clone();
+                            let _ = ctx.updates.send(UiUpdate::CustomEqualizers(list));
                         }
                     }
-                    let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-deleted")));
+                    let _ = ctx
+                        .updates
+                        .send(UiUpdate::Status(crate::t!("equalizer-custom-deleted")));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Equalizer,
                         message: crate::t!("equalizer-custom-delete-failed", error),
                     });
@@ -420,21 +486,25 @@ pub fn handle_sound_command<T: Read + Write>(
             true
         }
         WorkerCommand::SetSpatialAudio(mode) => {
-            if read_only || !supports_spatial_audio {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_spatial_audio() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::SpatialAudio,
                     message: crate::t!("spatial-audio-blocked"),
                 });
                 return true;
             }
-            let _ = updates.send(UiUpdate::Status(crate::t!("spatial-audio-waiting-confirm")));
-            match set_spatial_audio(stream, decoder, *mode, updates) {
+            let _ = ctx
+                .updates
+                .send(UiUpdate::Status(crate::t!("spatial-audio-waiting-confirm")));
+            match set_spatial_audio(ctx.stream, ctx.decoder, *mode, ctx.updates) {
                 Ok(actual) => {
-                    let _ = updates.send(UiUpdate::SpatialAudio(actual));
-                    let _ = updates.send(UiUpdate::Status(crate::t!("spatial-audio-applied")));
+                    let _ = ctx.updates.send(UiUpdate::SpatialAudio(actual));
+                    let _ = ctx
+                        .updates
+                        .send(UiUpdate::Status(crate::t!("spatial-audio-applied")));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::SpatialAudio,
                         message: crate::t!("spatial-audio-switch-failed", error),
                     });
@@ -443,25 +513,33 @@ pub fn handle_sound_command<T: Read + Write>(
             true
         }
         WorkerCommand::SetGameMode(enabled) => {
-            if read_only || !supports_game_mode {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_game_mode() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::GameMode,
                     message: crate::t!("game-mode-blocked"),
                 });
                 return true;
             }
-            let _ = updates.send(UiUpdate::Status(crate::t!("game-mode-waiting-confirm")));
-            match set_game_mode(stream, decoder, game_mode_feature_id, *enabled, updates) {
+            let _ = ctx
+                .updates
+                .send(UiUpdate::Status(crate::t!("game-mode-waiting-confirm")));
+            match set_game_mode(
+                ctx.stream,
+                ctx.decoder,
+                state.game_mode_feature_id,
+                *enabled,
+                ctx.updates,
+            ) {
                 Ok(actual) => {
-                    let _ = updates.send(UiUpdate::GameMode(actual));
-                    let _ = updates.send(UiUpdate::Status(if actual {
+                    let _ = ctx.updates.send(UiUpdate::GameMode(actual));
+                    let _ = ctx.updates.send(UiUpdate::Status(if actual {
                         crate::t!("game-mode-state-enabled")
                     } else {
                         crate::t!("game-mode-state-disabled")
                     }));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::GameMode,
                         message: crate::t!("game-mode-switch-failed", error),
                     });
@@ -470,25 +548,27 @@ pub fn handle_sound_command<T: Read + Write>(
             true
         }
         WorkerCommand::SetBassEngineEnabled(enabled) => {
-            if read_only || !supports_bass_engine {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_bass_engine() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::BassEngine,
                     message: crate::t!("bass-engine-blocked"),
                 });
                 return true;
             }
-            let _ = updates.send(UiUpdate::Status(crate::t!("bass-engine-waiting-confirm")));
-            match set_bass_engine_enabled(stream, decoder, *enabled, updates) {
+            let _ = ctx
+                .updates
+                .send(UiUpdate::Status(crate::t!("bass-engine-waiting-confirm")));
+            match set_bass_engine_enabled(ctx.stream, ctx.decoder, *enabled, ctx.updates) {
                 Ok(actual) => {
-                    let _ = updates.send(UiUpdate::BassEngineEnabled(actual));
-                    let _ = updates.send(UiUpdate::Status(if actual {
+                    let _ = ctx.updates.send(UiUpdate::BassEngineEnabled(actual));
+                    let _ = ctx.updates.send(UiUpdate::Status(if actual {
                         crate::t!("bass-engine-state-enabled")
                     } else {
                         crate::t!("bass-engine-state-disabled")
                     }));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::BassEngine,
                         message: crate::t!("bass-engine-switch-failed", error),
                     });
@@ -497,31 +577,32 @@ pub fn handle_sound_command<T: Read + Write>(
             true
         }
         WorkerCommand::SetBassEngineLevel(level) => {
-            if read_only || !supports_bass_engine {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_bass_engine() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::BassEngine,
                     message: crate::t!("bass-engine-level-blocked"),
                 });
                 return true;
             }
-            let (min, max) = bass_engine_level
+            let (min, max) = state
+                .bass_engine_level
                 .as_ref()
                 .map(|b| (b.min, b.max))
                 .unwrap_or((-5, 5));
-            let _ = updates.send(UiUpdate::Status(crate::t!(
+            let _ = ctx.updates.send(UiUpdate::Status(crate::t!(
                 "bass-engine-level-waiting-confirm"
             )));
-            match set_bass_engine_level(stream, decoder, min, max, *level, updates) {
+            match set_bass_engine_level(ctx.stream, ctx.decoder, min, max, *level, ctx.updates) {
                 Ok(actual) => {
-                    *bass_engine_level = Some(actual);
-                    let _ = updates.send(UiUpdate::BassEngineLevel(actual));
-                    let _ = updates.send(UiUpdate::Status(crate::t!(
+                    state.bass_engine_level = Some(actual.clone());
+                    let _ = ctx.updates.send(UiUpdate::BassEngineLevel(actual.clone()));
+                    let _ = ctx.updates.send(UiUpdate::Status(crate::t!(
                         "bass-engine-level-applied",
                         actual.current
                     )));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::BassEngine,
                         message: crate::t!("bass-engine-level-switch-failed", error),
                     });
@@ -530,25 +611,27 @@ pub fn handle_sound_command<T: Read + Write>(
             true
         }
         WorkerCommand::SetHiRes(enabled) => {
-            if read_only || !supports_hi_res {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_hi_res() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::HiRes,
                     message: crate::t!("hi-res-blocked"),
                 });
                 return true;
             }
-            let _ = updates.send(UiUpdate::Status(crate::t!("hi-res-waiting-confirm")));
-            match set_hi_res(stream, decoder, *enabled, updates) {
+            let _ = ctx
+                .updates
+                .send(UiUpdate::Status(crate::t!("hi-res-waiting-confirm")));
+            match set_hi_res(ctx.stream, ctx.decoder, *enabled, ctx.updates) {
                 Ok(actual) => {
-                    let _ = updates.send(UiUpdate::HiRes(actual));
-                    let _ = updates.send(UiUpdate::Status(if actual {
+                    let _ = ctx.updates.send(UiUpdate::HiRes(actual));
+                    let _ = ctx.updates.send(UiUpdate::Status(if actual {
                         crate::t!("hi-res-state-enabled")
                     } else {
                         crate::t!("hi-res-state-disabled")
                     }));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::HiRes,
                         message: crate::t!("hi-res-switch-failed", error),
                     });

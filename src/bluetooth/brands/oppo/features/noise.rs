@@ -26,6 +26,7 @@ use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
 use crate::compatibility::{self, NoiseMode};
 use crate::protocol::{FrameDecoder, WearState, encode_noise_mode, parse_noise_mode_response};
 
+use crate::bluetooth::brands::oppo::features::OppoFeatureContext;
 use crate::bluetooth::brands::oppo::transport::request;
 use crate::bluetooth::brands::oppo::unsolicited::merge_wear_state;
 
@@ -108,54 +109,49 @@ pub fn set_noise_mode<T: Read + Write>(
     result
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle_noise_command<T: Read + Write>(
-    stream: &mut T,
-    decoder: &mut FrameDecoder,
+    ctx: &mut OppoFeatureContext<'_, T>,
     command: &WorkerCommand,
-    read_only: bool,
-    supported_indices: &[u8],
-    modes: &[NoiseMode],
-    wear: &mut WearState,
-    supports_wear_detection: bool,
-    updates: &Sender<UiUpdate>,
 ) -> bool {
     match command {
         WorkerCommand::SetNoiseMode(protocol_index) => {
-            if read_only {
-                let _ = updates.send(UiUpdate::SettingError {
+            let modes = ctx.noise_modes();
+            if ctx.read_only {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::NoiseMode,
                     message: crate::t!("noise-mode-blocked"),
                 });
                 return true;
             }
-            let _ = updates.send(UiUpdate::Status(crate::t!("noise-mode-waiting-confirm")));
+            let _ = ctx
+                .updates
+                .send(UiUpdate::Status(crate::t!("noise-mode-waiting-confirm")));
             let result = set_noise_mode(
-                stream,
-                decoder,
-                supported_indices,
+                ctx.stream,
+                ctx.decoder,
+                ctx.supported_indices,
                 modes,
-                wear,
-                supports_wear_detection,
+                ctx.wear,
+                ctx.supports_wear_detection,
                 *protocol_index,
-                updates,
+                ctx.updates,
             );
             match result {
                 Ok(actual) => {
-                    let _ = updates.send(UiUpdate::NoiseMode(actual));
-                    let _ = updates.send(UiUpdate::Status(crate::t!(
+                    let _ = ctx.updates.send(UiUpdate::NoiseMode(actual));
+                    let _ = ctx.updates.send(UiUpdate::Status(crate::t!(
                         "noise-mode-confirmed-and-readback"
                     )));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::NoiseMode,
                         message: error,
                     });
                 }
             }
-            let _ = updates.send(UiUpdate::NoiseControlsEnabled(
-                !read_only && !modes.is_empty(),
+            let _ = ctx.updates.send(UiUpdate::NoiseControlsEnabled(
+                !ctx.read_only && !modes.is_empty(),
             ));
             true
         }

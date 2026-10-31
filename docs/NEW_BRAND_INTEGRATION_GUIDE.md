@@ -50,23 +50,45 @@ flowchart TD
 
 ### 步骤 1：协议编解码层实现 (`src/protocol/brands/<brand>/`)
 
-本层只关注二进制协议的封包、拆包与解析，**严禁引入任何 GTK、BlueZ 或 I/O 依赖**。
+本层只关注二进制协议的封包、拆包与解析，必须遵循**纯无状态函数**与**参数对象化**设计：
+- **严格禁止依赖其他层**：严禁引入任何 `crate::compatibility`、`crate::bluetooth` 或 GTK 依赖；
+- **纯函数设计**：输入字节/DTO $\to$ 输出结构体/字节，禁止在协议中判断特定机型是否支持某功能；
+- **参数对象化 (DTO)**：多于 3 个参数的复杂指令编解码必须封装为强类型 DTO，禁止散装参数。
 
-#### 1. 目录结构
+#### 1. 垂直领域目录结构
+遵循与业务领域对齐的垂直拆分，单文件代码规模控制在 200 行左右：
 ```text
 src/protocol/brands/<brand>/
-├── mod.rs               # 导出公共协议类型
-├── packet.rs            # 数据包结构定义、序列化与反序列化
-├── frame.rs             # 帧同步头、转义处理与 FrameDecoder 增量解码器
-├── commands.rs          # 命令字常量或枚举
-└── parsers.rs           # 电量、固件、佩戴、降噪等响应包解析函数
+├── mod.rs               # 导出公共协议类型，保持接口整洁
+├── codec.rs             # 帧同步头、转义处理、校验和与 FrameDecoder 增量解码器
+├── commands.rs          # 命令字常量、事件 ID 与协议枚举
+├── noise.rs             # 降噪与通透模式纯编解码
+├── sound.rs             # EQ、自定义 EQ、空间音频、游戏模式等编解码（使用 DTO）
+├── controls.rs          # 按键手势、贴合度检测、提示音量、头部动作等编解码
+├── device.rs            # 电池电量、固件版本、机身颜色、配对设备列表等解析
+└── tests.rs             # 协议纯编解码单元测试（Mock 报文输入输出比对）
 ```
 
-#### 2. FrameDecoder 规范模板
+#### 2. DTO 封装规范示例
+当协议控制需要多个字段（如自定义 EQ、按键设置、频段增益）时，在 `src/protocol/core/types.rs` 或协议模块内定义 DTO：
+```rust
+// 强类型 DTO 封装复杂参数，拒绝散装参数
+pub struct CustomEqualizerParams<'a> {
+    pub id: u8,
+    pub name: &'a str,
+    pub min_gain: i8,
+    pub max_gain: i8,
+    pub bands: &'a [i8],
+}
+
+pub fn encode_custom_equalizer(action: CustomEqualizerAction, params: &CustomEqualizerParams<'_>) -> Vec<u8>;
+```
+
+#### 3. FrameDecoder 规范模板
 耳机通过 RFCOMM Socket 传输的数据是流式字节，必须实现增量解析器以应对粘包与半包：
 
 ```rust
-// src/protocol/brands/<brand>/frame.rs
+// src/protocol/brands/<brand>/codec.rs
 #[derive(Default)]
 pub struct CustomFrameDecoder {
     buffer: Vec<u8>,
@@ -103,18 +125,22 @@ impl CustomFrameDecoder {
 ### 步骤 2：型号与能力目录层 (`src/compatibility/brands/<brand>/`)
 
 声明该品牌受支持的具体型号与其功能开关。未在此声明的设备将作为未知型号，由系统强制锁定为**只读模式**以保护硬件安全。
+所有品牌私有的数据与单测必须内聚在该目录下，不得污染顶级 `src/compatibility/mod.rs`。
 
 #### 1. 目录结构
 ```text
 src/compatibility/brands/<brand>/
-├── mod.rs
-└── catalog.rs           # 声明具体型号的 DeviceProfile
+├── mod.rs               # 导出该品牌 Profiles、EQ 表、手势表
+├── catalog.rs           # 声明具体型号的 DeviceProfile
+├── equalizer.rs         # 品牌专属的硬件 EQ / 软件 EQ 预设表（可选）
+├── gestures.rs          # 品牌专属的手势行定义（可选）
+└── tests.rs             # 品牌所有型号能力的覆盖度断言与回归测试
 ```
 
 #### 2. DeviceProfile 声明模板
 ```rust
 // src/compatibility/brands/<brand>/catalog.rs
-use crate::compatibility::{DeviceFeatures, DeviceProfile, NoiseMode, NoiseModeKind};
+use crate::compatibility::{features, DeviceProfile, NoiseMode, NoiseModeKind};
 
 pub const BRAND_MODEL_1_PID: u32 = 0x123456;
 
@@ -126,12 +152,13 @@ static MODEL_1_NOISE_MODES: &[NoiseMode] = &[
 
 pub static BRAND_PROFILES: &[DeviceProfile] = &[
     DeviceProfile {
-        product_id: BRAND_MODEL_1_PID,
+        product_id: Some(BRAND_MODEL_1_PID),
         model: "Example Earbuds Pro",
-        features: DeviceFeatures::NOISE_CONTROL
-            .union(DeviceFeatures::EQUALIZER)
-            .union(DeviceFeatures::WEAR_DETECTION)
-            .union(DeviceFeatures::DUAL_DEVICE),
+        features: &[
+            features::DUAL_DEVICE,
+            features::WEAR_DETECTION,
+            features::EQUALIZER,
+        ],
         noise_modes: MODEL_1_NOISE_MODES,
     },
 ];
@@ -139,11 +166,27 @@ pub static BRAND_PROFILES: &[DeviceProfile] = &[
 
 并在 `src/compatibility/registry.rs` 的全局型号查询中加入新品牌列表。
 
+#### 3. 品牌测试隔离 (`tests.rs`)
+该品牌所有型号的能力断言与全量遍历测试必须放在 `src/compatibility/brands/<brand>/tests.rs`：
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn brand_models_coverage_and_capabilities() {
+        for profile in BRAND_PROFILES {
+            // 断言噪声模式 parent 索引闭包、特性组合合法性等
+        }
+    }
+}
+```
+
 ---
 
 ### 步骤 3：蓝牙驱动实现层 (`src/bluetooth/brands/<brand>/`)
 
-按垂直切片实现新品牌的 `HeadsetDriver`。
+按垂直切片实现新品牌的 `HeadsetDriver`，并通过执行上下文与领域子状态模式消除参数膨胀。
 
 #### 1. 标准切片结构
 ```text
@@ -154,35 +197,55 @@ src/bluetooth/brands/<brand>/
 ├── transport.rs         # RFCOMM 连接建立、Candidate UUIDs、单指令 request()
 ├── unsolicited.rs       # 处理设备主动广播通知（如开盖、出入耳、电量广播）
 └── features/            # 垂直功能写管道（单一职责）
-    ├── mod.rs
+    ├── mod.rs           # 定义 BrandFeatureContext 及领域子状态结构体
     ├── noise.rs         # 降噪写指令、佩戴检查门控、回读确认
-    ├── sound.rs         # EQ 调节、游戏模式、编解码器配置
-    ├── controls.rs      # 手势定制、入耳检测开关
+    ├── sound.rs         # EQ 调节、游戏模式、低音、编解码器配置
+    ├── controls.rs      # 手势定制、入耳检测开关、提示音量等
     └── dual_device.rs   # 双设备多点连接管理与设备列表读写
 ```
 
-#### 2. HeadsetDriver 驱动实现模板
+#### 2. 特性上下文与领域子状态模式 (`features/mod.rs`)
+严禁在驱动处理函数中传递 10~20 个分散参数。必须定义上下文与子状态：
+```rust
+// src/bluetooth/brands/<brand>/features/mod.rs
+pub struct BrandFeatureContext<'a, T: Read + Write> {
+    pub stream: &'a mut T,
+    pub decoder: &'a mut CustomFrameDecoder,
+    pub updates: &'a Sender<UiUpdate>,
+    pub read_only: bool,
+    pub profile: Option<&'static DeviceProfile>,
+}
+
+#[derive(Default)]
+pub struct BrandControlsState {
+    pub key_functions: Vec<KeyFunction>,
+    pub in_ear_detection: Option<bool>,
+}
+
+#[derive(Default)]
+pub struct BrandSoundState {
+    pub custom_equalizers: Vec<CustomEqualizer>,
+}
+```
+
+#### 3. HeadsetDriver 驱动实现模板
+每个特性处理函数的参数严格控制在 2～3 个，避免 `clippy::too_many_arguments`：
 ```rust
 // src/bluetooth/brands/<brand>/driver.rs
 use std::{fs::File, io::{Read, Write}, sync::mpsc::Sender, time::Duration};
 use crate::{
     app::events::{UiUpdate, WorkerCommand},
     bluetooth::{DeviceChoice, DeviceSnapshot, driver::HeadsetDriver},
+    compatibility::DeviceProfile,
 };
+use super::features::{BrandControlsState, BrandFeatureContext, BrandSoundState};
 
 pub struct BrandDriver {
     decoder: CustomFrameDecoder,
-    snapshot: Option<DeviceSnapshot>,
-    // 仅保存必要的运行时驱动状态（如佩戴状态门控、子模式缓存）
-}
-
-impl BrandDriver {
-    pub fn new() -> Self {
-        Self {
-            decoder: CustomFrameDecoder::default(),
-            snapshot: None,
-        }
-    }
+    read_only: bool,
+    profile: Option<&'static DeviceProfile>,
+    pub sound: BrandSoundState,
+    pub controls: BrandControlsState,
 }
 
 impl HeadsetDriver for BrandDriver {
@@ -202,7 +265,8 @@ impl HeadsetDriver for BrandDriver {
     ) -> Result<DeviceSnapshot, String> {
         let (snapshot, decoder) = super::init::initialize_brand_session(stream, device, updates)?;
         self.decoder = decoder;
-        self.snapshot = Some(snapshot.clone());
+        self.read_only = snapshot.identity.read_only;
+        // 初始化领域子状态
         Ok(snapshot)
     }
 
@@ -212,17 +276,26 @@ impl HeadsetDriver for BrandDriver {
         command: WorkerCommand,
         updates: &Sender<UiUpdate>,
     ) -> Result<(), String> {
-        // 委托给对应的 features::* 切片处理，每个切片遵循单一指令写管道
-        match command {
-            WorkerCommand::SetNoiseMode(idx) => {
-                super::features::noise::handle_set_noise_mode(stream, &mut self.decoder, idx, updates)
-            }
-            WorkerCommand::SetEqualizer(preset) => {
-                super::features::sound::handle_set_equalizer(stream, &mut self.decoder, preset, updates)
-            }
-            // 其它指令...
-            _ => Ok(()),
+        let mut ctx = BrandFeatureContext {
+            stream,
+            decoder: &mut self.decoder,
+            updates,
+            read_only: self.read_only,
+            profile: self.profile,
+        };
+
+        // 委托给对应的 features::* 切片处理，参数数量控制在 2~3 个
+        if super::features::noise::handle_noise_command(&mut ctx, &command) {
+            return Ok(());
         }
+        if super::features::sound::handle_sound_command(&mut ctx, &command, &mut self.sound) {
+            return Ok(());
+        }
+        if super::features::controls::handle_controls_command(&mut ctx, &command, &mut self.controls) {
+            return Ok(());
+        }
+
+        Ok(())
     }
 
     fn handle_incoming_bytes<T: Read + Write>(
@@ -238,11 +311,11 @@ impl HeadsetDriver for BrandDriver {
         Ok(())
     }
 
-    // 可选：如果耳机协议不支持广播电量，可设置周期性轮询
     fn poll_interval(&self) -> Option<Duration> {
         None
     }
 }
+```
 ```
 
 ---
@@ -305,6 +378,16 @@ pub fn create_driver(brand: DeviceBrand) -> AnyDriver {
   - 双设备管理中所读取的配对设备 MAC，仅在内存快照中供用户界面操作使用，会话断开后立即丢弃，严禁落盘。
 - [ ] **严禁任何固件写操作**：
   - 绝对严禁实现固件升级（OTA）、擦写存储器或未公开工程调试命令。
+- [ ] **协议纯净性与零反向依赖**：
+  - 协议层必须为纯无状态编解码器，检查 `rg "compatibility" src/protocol/brands/<brand>/` 命中数必须为 0；
+  - 协议层严禁导入 `DeviceProfile` 或在编解码时做硬件机型支持性逻辑判定；
+  - 多参数编解码必须封装为强类型 DTO（如 `CustomEqualizerParams`、`NoiseCycleSetting` 等）。
+- [ ] **参数收敛与无参数爆炸**：
+  - 驱动层命令派发必须采用 `<Brand>FeatureContext` 与领域子状态模式；
+  - 指令处理函数参数控制在 2～3 个，严禁引入 `#[allow(clippy::too_many_arguments)]`。
+- [ ] **兼容层隔离与单测归位**：
+  - 品牌专属手势、EQ 预设及全型号测试必须放置于 `src/compatibility/brands/<brand>/` 下；
+  - 严禁将品牌私有型号覆盖断言直接写在顶级 `src/compatibility/mod.rs`。
 - [ ] **国际化覆盖**：
   - UI 抛出的状态提示必须在 `locales/` 的 Fluent 文件中定义，控制台调试信息保持纯英文。
 - [ ] **测试覆盖与代码格式**：

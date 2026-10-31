@@ -21,6 +21,7 @@ use std::{
 };
 
 use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
+use crate::bluetooth::brands::oppo::features::{OppoDualDeviceState, OppoFeatureContext};
 use crate::bluetooth::brands::oppo::transport::request;
 use crate::protocol::{
     FrameDecoder, PairedDevice, PairedDeviceAction, PairedDeviceAddress,
@@ -118,42 +119,34 @@ pub fn read_paired_devices<T: Read + Write>(
         .map_err(|error| crate::t!("dual-device-list-invalid", error))
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn handle_dual_device_command<T: Read + Write>(
-    stream: &mut T,
-    decoder: &mut FrameDecoder,
+    ctx: &mut OppoFeatureContext<'_, T>,
     command: &WorkerCommand,
-    read_only: bool,
-    supports_dual_device: bool,
-    controls_enabled: &mut Result<bool, String>,
-    current_dual_device: &mut Option<bool>,
-    paired_devices: &mut Result<Vec<PairedDevice>, String>,
-    current_preferred_device: &mut Option<PairedDeviceAddress>,
-    updates: &Sender<UiUpdate>,
+    state: &mut OppoDualDeviceState,
 ) -> bool {
     match command {
         WorkerCommand::SetPairedDevice { address, action } => {
-            if read_only || !supports_dual_device {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_dual_device() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::Controls,
                     message: crate::t!("dual-device-management-blocked"),
                 });
-                let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+                let _ = ctx.updates.send(UiUpdate::PairedDeviceActionFinished);
                 return true;
             }
             let result = set_paired_device(
-                stream,
-                decoder,
-                controls_enabled,
-                paired_devices,
+                ctx.stream,
+                ctx.decoder,
+                &state.controls_enabled,
+                &state.paired_devices,
                 *address,
                 *action,
-                updates,
+                ctx.updates,
             );
             match result {
                 Ok((devices, changed)) => {
-                    *paired_devices = Ok(devices.clone());
-                    let _ = updates.send(UiUpdate::PairedDevices(Ok(devices)));
+                    state.paired_devices = Ok(devices.clone());
+                    let _ = ctx.updates.send(UiUpdate::PairedDevices(Ok(devices)));
                     let message = if changed {
                         match action {
                             PairedDeviceAction::Remove => crate::t!("dual-device-removed"),
@@ -162,81 +155,119 @@ pub fn handle_dual_device_command<T: Read + Write>(
                     } else {
                         crate::t!("dual-device-already-in-state")
                     };
-                    let _ = updates.send(UiUpdate::Status(message));
+                    let _ = ctx.updates.send(UiUpdate::Status(message));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: error,
                     });
-                    *paired_devices = read_paired_devices(stream, decoder, Some(updates));
-                    let _ = updates.send(UiUpdate::PairedDevices(paired_devices.clone()));
+                    state.paired_devices =
+                        read_paired_devices(ctx.stream, ctx.decoder, Some(ctx.updates));
+                    let _ = ctx
+                        .updates
+                        .send(UiUpdate::PairedDevices(state.paired_devices.clone()));
                 }
             }
-            let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+            let _ = ctx.updates.send(UiUpdate::PairedDeviceActionFinished);
             true
         }
         WorkerCommand::SetDualDeviceConnection(enabled) => {
-            if read_only || !supports_dual_device {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_dual_device() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::Controls,
                     message: crate::t!("dual-device-toggle-blocked"),
                 });
                 return true;
             }
             let payload = vec![17, if *enabled { 1 } else { 0 }];
-            match request(stream, decoder, 0x0403, 0, payload, Some(updates)) {
+            match request(
+                ctx.stream,
+                ctx.decoder,
+                0x0403,
+                0,
+                payload,
+                Some(ctx.updates),
+            ) {
                 Ok(_) => {
-                    if let Ok(res) = request(stream, decoder, 0x010d, 0, vec![1, 17], Some(updates))
-                    {
+                    if let Ok(res) = request(
+                        ctx.stream,
+                        ctx.decoder,
+                        0x010d,
+                        0,
+                        vec![1, 17],
+                        Some(ctx.updates),
+                    ) {
                         if let Ok(actual) = parse_feature_flags_response(&res.payload, 17) {
-                            *current_dual_device = Some(actual);
-                            *controls_enabled = Ok(actual);
-                            let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(actual));
-                            let _ = updates.send(UiUpdate::PairedDeviceControlsEnabled(Ok(actual)));
+                            state.dual_device_enabled = Some(actual);
+                            state.controls_enabled = Ok(actual);
+                            let _ = ctx
+                                .updates
+                                .send(UiUpdate::DualDeviceConnectionEnabled(actual));
+                            let _ = ctx
+                                .updates
+                                .send(UiUpdate::PairedDeviceControlsEnabled(Ok(actual)));
                         }
                     }
-                    let _ = updates.send(UiUpdate::Status(crate::t!("dual-device-toggle-updated")));
+                    let _ = ctx
+                        .updates
+                        .send(UiUpdate::Status(crate::t!("dual-device-toggle-updated")));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("dual-device-toggle-failed", error),
                     });
-                    if let Some(d) = *current_dual_device {
-                        let _ = updates.send(UiUpdate::DualDeviceConnectionEnabled(d));
+                    if let Some(d) = state.dual_device_enabled {
+                        let _ = ctx.updates.send(UiUpdate::DualDeviceConnectionEnabled(d));
                     }
                 }
             }
             true
         }
         WorkerCommand::SetPreferredDevice(addr) => {
-            if read_only || !supports_dual_device {
-                let _ = updates.send(UiUpdate::SettingError {
+            if ctx.read_only || !ctx.supports_dual_device() {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::Controls,
                     message: crate::t!("controls-preferred-device-blocked"),
                 });
                 return true;
             }
             let payload = encode_set_priority_device(*addr);
-            match request(stream, decoder, 0x0429, 0, payload, Some(updates)) {
+            match request(
+                ctx.stream,
+                ctx.decoder,
+                0x0429,
+                0,
+                payload,
+                Some(ctx.updates),
+            ) {
                 Ok(_) => {
-                    if let Ok(res) = request(stream, decoder, 0x0132, 0, vec![2], Some(updates)) {
+                    if let Ok(res) = request(
+                        ctx.stream,
+                        ctx.decoder,
+                        0x0132,
+                        0,
+                        vec![2],
+                        Some(ctx.updates),
+                    ) {
                         if let Ok(actual) = parse_priority_device_response(&res.payload) {
-                            *current_preferred_device = actual;
-                            let _ = updates.send(UiUpdate::PreferredDevice(actual));
+                            state.preferred_device = actual;
+                            let _ = ctx.updates.send(UiUpdate::PreferredDevice(actual));
                         }
                     }
-                    let _ = updates.send(UiUpdate::Status(crate::t!(
+                    let _ = ctx.updates.send(UiUpdate::Status(crate::t!(
                         "controls-preferred-device-updated"
                     )));
                 }
                 Err(error) => {
-                    let _ = updates.send(UiUpdate::SettingError {
+                    let _ = ctx.updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Controls,
                         message: crate::t!("controls-preferred-device-update-failed", error),
                     });
-                    let _ = updates.send(UiUpdate::PreferredDevice(*current_preferred_device));
+                    let _ = ctx
+                        .updates
+                        .send(UiUpdate::PreferredDevice(state.preferred_device));
                 }
             }
             true

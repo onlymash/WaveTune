@@ -228,13 +228,13 @@ pub struct OppoControlsDriverState {
 
 ## 四、 分阶段实施计划 (Implementation Roadmap)
 
-| 阶段 | 实施任务 | 关键产出 / 验证标准 |
-| :--- | :--- | :--- |
-| **Phase 1** | **参数对象化与 DTO 引入**<br>1. 定义 `CustomEqualizerAction`、`NoiseCycleSetting`、`GaiaEqBand`。<br>2. 重构 `encode_oppo_custom_equalizer`、`encode_oppo_set_key_function` 等编码函数签名。<br>3. 适配已有调用方与单元测试。 | `cargo test --locked` 120 个测试全部通过；消除散装参数。 |
-| **Phase 2** | **斩断 Protocol 对 Compatibility 依赖**<br>1. 移除 `oppo_noise.rs` 中的 `use crate::compatibility;`。<br>2. 调整调用链，将 profile 查询上提至 driver 层。<br>3. 验证降噪协议单元测试。 | 协议层不含任何 `crate::compatibility` 引用。 |
-| **Phase 3** | **Protocol 模块垂直拆分与别名清理**<br>1. 将 `oppo_parsers.rs` 拆分为 `sound.rs`、`controls.rs`、`device.rs`、`codec.rs`。<br>2. 清理 `src/protocol/brands/oppo/mod.rs` 的双重别名。<br>3. 保持向外部暴露干净的统一接口。 | 单个协议文件规模降至 200 行以内，功能内聚。 |
-| **Phase 4** | **蓝牙驱动层处理函数参数收敛**<br>1. 引入 `OppoFeatureContext` 与特性子状态结构体。<br>2. 重构 `handle_controls_command`、`handle_sound_command` 等函数。<br>3. 移除 `#[allow(clippy::too_many_arguments)]` 标注。 | 驱动层无任何超过 5 个参数的函数，Clippy 零警告。 |
-| **Phase 5** | **Compatibility 模块净化与单元测试归位**<br>1. 迁移 `STANDARD_GESTURE_ROWS` 至 `compatibility/brands/oppo/`。<br>2. 迁移 OPPO 专有机型单元测试至品牌测试目录。<br>3. 运行完整测试与格式化检查。 | `cargo fmt --check`、`cargo clippy`、`cargo test` 全绿。 |
+| 阶段 | 实施任务 | 关键产出 / 验证标准 | 状态 |
+| :--- | :--- | :--- | :--- |
+| **Phase 1** | **参数对象化与 DTO 引入**<br>1. 定义 `CustomEqualizerAction`、`NoiseCycleSetting`、`GaiaEqBand`。<br>2. 重构 `encode_oppo_custom_equalizer`、`encode_oppo_set_key_function` 等编码函数签名。<br>3. 适配已有调用方与单元测试。 | `cargo test --locked` 120 个测试全部通过；消除散装参数。 | **已完成** |
+| **Phase 2** | **斩断 Protocol 对 Compatibility 依赖**<br>1. 移除 `oppo_noise.rs` 中的 `use crate::compatibility;`。<br>2. 调整调用链，将 profile 查询上提至 driver 层。<br>3. 验证降噪协议单元测试。 | 协议层不含任何 `crate::compatibility` 引用。 | **已完成** |
+| **Phase 3** | **Protocol 模块垂直拆分与别名清理**<br>1. 将 `oppo_parsers.rs` 拆分为 `sound.rs`、`controls.rs`、`device.rs`、`codec.rs`。<br>2. 清理 `src/protocol/brands/oppo/mod.rs` 的双重别名。<br>3. 保持向外部暴露干净的统一接口。 | 单个协议文件规模降至 200 行以内，功能内聚。 | **已完成** |
+| **Phase 4** | **蓝牙驱动层处理函数参数收敛**<br>1. 引入 `OppoFeatureContext` 与特性子状态结构体。<br>2. 重构 `handle_controls_command`、`handle_sound_command` 等函数。<br>3. 移除 `#[allow(clippy::too_many_arguments)]` 标注。 | 驱动层无任何超过 3 个参数的指令处理函数，所有 `clippy::too_many_arguments` 彻底消除。 | **已完成** |
+| **Phase 5** | **Compatibility 模块净化与单元测试归位**<br>1. 迁移 `STANDARD_GESTURE_ROWS` 至 `compatibility/brands/oppo/oppo_gestures.rs`。<br>2. 迁移 OPPO 专有机型单元测试至 `src/compatibility/brands/oppo/tests.rs`。<br>3. 运行完整测试与格式化检查。 | `cargo fmt --check`、`cargo check --locked`、`cargo test --locked` 全部通过。 | **已完成** |
 
 ---
 

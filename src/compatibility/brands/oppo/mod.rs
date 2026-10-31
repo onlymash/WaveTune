@@ -17,9 +17,16 @@
 
 pub mod oppo_catalog;
 pub mod oppo_equalizer;
+pub mod oppo_gestures;
+
+#[cfg(test)]
+mod tests;
 
 pub use oppo_catalog::{DEVICE_PROFILES, OPPO_DEVICE_PROFILES};
 pub use oppo_equalizer::{
     DYNAUDIO_EQ_PRESETS, STANDARD_EQ_PRESETS, X3_EQ_PRESETS, equalizer_presets_for_product,
     game_mode_feature_id_for_product,
+};
+pub use oppo_gestures::{
+    STANDARD_GESTURE_ROWS, gesture_function_label_key, gesture_rows_for_product,
 };

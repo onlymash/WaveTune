@@ -178,102 +178,9 @@ pub struct GestureRow {
     pub label_key: &'static str,
 }
 
-pub static STANDARD_GESTURE_ROWS: &[GestureRow] = &[
-    GestureRow {
-        action: crate::protocol::GestureAction::SingleSqueeze,
-        is_call_control: false,
-        button: 1,
-        both_ears: false,
-        edits_noise_cycle: false,
-        allowed_functions: &[0, 1],
-        default_function: Some(1),
-        label_key: "controls-gesture-single",
-    },
-    GestureRow {
-        action: crate::protocol::GestureAction::DoubleSqueeze,
-        is_call_control: false,
-        button: 1,
-        both_ears: false,
-        edits_noise_cycle: false,
-        allowed_functions: &[0, 1, 5, 6, 3, 17],
-        default_function: Some(6),
-        label_key: "controls-gesture-double",
-    },
-    GestureRow {
-        action: crate::protocol::GestureAction::TripleSqueeze,
-        is_call_control: false,
-        button: 1,
-        both_ears: false,
-        edits_noise_cycle: false,
-        allowed_functions: &[0, 5, 6, 3, 17],
-        default_function: Some(5),
-        label_key: "controls-gesture-triple",
-    },
-    GestureRow {
-        action: crate::protocol::GestureAction::Slide,
-        is_call_control: false,
-        button: 1,
-        both_ears: false,
-        edits_noise_cycle: false,
-        allowed_functions: &[0, 7, 10],
-        default_function: Some(7),
-        label_key: "controls-gesture-slide",
-    },
-    GestureRow {
-        action: crate::protocol::GestureAction::SqueezeAndHold,
-        is_call_control: false,
-        button: 1,
-        both_ears: false,
-        edits_noise_cycle: true,
-        allowed_functions: &[0, 8, 3, 17],
-        default_function: Some(8),
-        label_key: "controls-gesture-hold",
-    },
-    GestureRow {
-        action: crate::protocol::GestureAction::SingleSqueeze,
-        is_call_control: true,
-        button: crate::protocol::KeyFunction::CALL_BUTTON,
-        both_ears: true,
-        edits_noise_cycle: false,
-        allowed_functions: &[0, 29],
-        default_function: Some(29),
-        label_key: "controls-gesture-call-single",
-    },
-    GestureRow {
-        action: crate::protocol::GestureAction::DoubleSqueeze,
-        is_call_control: true,
-        button: crate::protocol::KeyFunction::CALL_BUTTON,
-        both_ears: true,
-        edits_noise_cycle: false,
-        allowed_functions: &[0, 28],
-        default_function: Some(28),
-        label_key: "controls-gesture-call-double",
-    },
-];
-
-pub fn gesture_rows_for_product(_product_id: u32) -> &'static [GestureRow] {
-    STANDARD_GESTURE_ROWS
-}
-
-pub fn gesture_function_label_key(function: u8) -> &'static str {
-    match function {
-        0 => "controls-function-none",
-        1 => "controls-function-play-pause",
-        3 => "controls-function-voice-assistant",
-        5 => "controls-function-previous",
-        6 => "controls-function-next",
-        7 => "controls-function-volume-control",
-        8 => "controls-function-noise-control",
-        10 => "controls-function-switch-track",
-        11 => "controls-function-volume-up",
-        12 => "controls-function-volume-down",
-        13 => "controls-function-switch-devices",
-        17 => "controls-function-game-mode",
-        28 => "controls-function-decline-end-call",
-        29 => "controls-function-answer-end-call",
-        _ => "controls-function-unknown",
-    }
-}
+pub use brands::oppo::{
+    STANDARD_GESTURE_ROWS, gesture_function_label_key, gesture_rows_for_product,
+};
 
 #[allow(dead_code)]
 impl DeviceProfile {
@@ -402,6 +309,7 @@ pub fn fallback_noise_mode_indices_for(modes: &[NoiseMode]) -> Vec<u8> {
     modes.iter().map(|mode| mode.index).collect()
 }
 
+#[allow(dead_code)]
 pub fn resolve_noise_mode_indices_for_product(
     product_id: u32,
     api_indices: Option<&[u8]>,
@@ -412,6 +320,7 @@ pub fn resolve_noise_mode_indices_for_product(
     resolve_noise_mode_indices_for(profile.noise_modes, api_indices)
 }
 
+#[allow(dead_code)]
 pub fn resolve_noise_mode_indices_for(
     modes: &[NoiseMode],
     api_indices: Option<&[u8]>,
@@ -429,6 +338,7 @@ pub fn resolve_noise_mode_indices_for(
     (fallback_noise_mode_indices_for(modes), false)
 }
 
+#[allow(dead_code)]
 pub fn noise_mode_supported_for_product(
     product_id: u32,
     index: u8,
@@ -470,236 +380,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn imports_supported_oppo_oneplus_and_realme_profiles() {
-        assert_eq!(DEVICE_PROFILES.len(), 131);
-        let product_ids: BTreeSet<_> = DEVICE_PROFILES
-            .iter()
-            .filter_map(|profile| profile.product_id)
-            .collect();
-        assert_eq!(product_ids.len(), DEVICE_PROFILES.len());
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| !profile.noise_modes.is_empty())
-                .count(),
-            43
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_dual_device())
-                .count(),
-            51
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_wear_detection())
-                .count(),
-            49
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_fit_detection())
-                .count(),
-            31
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_equalizer())
-                .count(),
-            74
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_custom_equalizer())
-                .count(),
-            37
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_game_mode())
-                .count(),
-            69
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_spatial_audio())
-                .count(),
-            48
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_head_tracking())
-                .count(),
-            4
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_bass_engine())
-                .count(),
-            24
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_find_device())
-                .count(),
-            93
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_touch_customization())
-                .count(),
-            84
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_prompt_volume())
-                .count(),
-            27
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_sleep_detection())
-                .count(),
-            2
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_swift_pair())
-                .count(),
-            12
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_voice_command())
-                .count(),
-            5
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_head_motion())
-                .count(),
-            2
-        );
-        assert_eq!(
-            DEVICE_PROFILES
-                .iter()
-                .filter(|profile| profile.supports_hi_res())
-                .count(),
-            28
-        );
-        for profile in DEVICE_PROFILES {
-            let indices: BTreeSet<_> = profile.noise_modes.iter().map(|mode| mode.index).collect();
-            assert_eq!(
-                indices.len(),
-                profile.noise_modes.len(),
-                "{}",
-                profile.model
-            );
-            for mode in profile.noise_modes {
-                if let Some(parent) = mode.parent {
-                    assert!(
-                        indices.contains(&parent),
-                        "{} mode {}",
-                        profile.model,
-                        mode.index
-                    );
-                }
-            }
-        }
-        assert!(
-            DEVICE_PROFILES
-                .iter()
-                .any(|profile| profile.model == "OPPO Enco X3")
-        );
-        assert!(
-            DEVICE_PROFILES
-                .iter()
-                .any(|profile| profile.model == "OnePlus Buds Pro 2")
-        );
-        assert!(
-            DEVICE_PROFILES
-                .iter()
-                .any(|profile| profile.model == "realme Buds Air 5 Pro")
-        );
-    }
-
-    #[test]
-    fn x3_compatibility_profile_enables_declared_noise_and_dual_device_controls() {
-        let profile = profile_for_product_id(0x067410).unwrap();
-        assert_eq!(profile.model, "OPPO Enco X3");
-        assert!(profile.supports_controls());
-        assert!(profile.supports_dual_device());
-        assert!(profile.supports_wear_detection());
-        assert!(profile.supports_fit_detection());
-        assert!(profile.supports_equalizer());
-        assert!(!profile.supports_custom_equalizer());
-        assert!(profile.supports_game_mode());
-        assert!(profile.supports_spatial_audio());
-        assert!(profile.supports_head_tracking());
-        assert!(!profile.supports_bass_engine());
-        assert!(profile.supports_find_device());
-        assert!(profile.supports_touch_customization());
-        assert!(!profile.supports_prompt_volume());
-        assert!(!profile.supports_sleep_detection());
-        assert!(!profile.supports_swift_pair());
-        assert!(!profile.supports_voice_command());
-        assert!(!profile.supports_head_motion());
-        assert!(profile.supports_hi_res());
-        assert!(noise_mode_supported_for(1, &[4, 7], profile.noise_modes));
-        assert!(!noise_mode_supported_for(2, &[4, 7], profile.noise_modes));
-        let voice_mode = noise_mode_for(profile.noise_modes, 9).unwrap();
-        assert_eq!(voice_mode.kind, NoiseModeKind::VocalEnhancement);
-        assert!(noise_mode_readback_matches_for(9, 9, profile.noise_modes));
-        assert!(noise_mode_readback_matches_for(9, 2, profile.noise_modes));
-    }
-
-    #[test]
-    fn x4_compatibility_profile_enables_all_expected_capabilities() {
-        let profile = profile_for_product_id(0x06ec10).unwrap();
-        assert_eq!(profile.model, "OPPO Enco X4");
-        assert!(profile.supports_controls());
-        assert!(profile.supports_dual_device());
-        assert!(profile.supports_wear_detection());
-        assert!(profile.supports_fit_detection());
-        assert!(profile.supports_equalizer());
-        assert!(profile.supports_custom_equalizer());
-        assert!(profile.supports_game_mode());
-        assert!(profile.supports_spatial_audio());
-        assert!(profile.supports_head_tracking());
-        assert!(profile.supports_bass_engine());
-        assert!(profile.supports_find_device());
-        assert!(profile.supports_touch_customization());
-        assert!(profile.supports_prompt_volume());
-        assert!(profile.supports_sleep_detection());
-        assert!(profile.supports_swift_pair());
-        assert!(profile.supports_voice_command());
-        assert!(profile.supports_head_motion());
-        assert!(profile.supports_hi_res());
-        assert!(noise_mode_readback_matches_for(0, 3, profile.noise_modes));
-        assert!(noise_mode_readback_matches_for(1, 7, profile.noise_modes));
-        assert!(noise_mode_readback_matches_for(2, 8, profile.noise_modes));
-        assert!(noise_mode_readback_matches_for(4, 4, profile.noise_modes));
-        assert!(!noise_mode_readback_matches_for(4, 6, profile.noise_modes));
-        assert!(noise_mode_readback_matches_for(11, 13, profile.noise_modes));
-    }
-
-    #[test]
     fn empty_api_support_list_falls_back_to_the_model_tree() {
         let profile = profile_for_product_id(0x06ec10).unwrap();
         let (indices, from_api) = resolve_noise_mode_indices_for(profile.noise_modes, Some(&[]));
@@ -717,32 +397,7 @@ mod tests {
     }
 
     #[test]
-    fn sound_features_resolve_correctly_for_profiles() {
-        let x4_presets = equalizer_presets_for_product(0x06ec10);
-        assert_eq!(x4_presets.len(), 5);
-        assert_eq!(x4_presets[0].key, "equalizer-preset-dynaudio-classic");
-        assert_eq!(
-            equalizer_preset_key(7, x4_presets),
-            Some("equalizer-preset-dynaudio-hi-res")
-        );
-        assert_eq!(equalizer_preset_key(99, x4_presets), None);
-
-        let x3_presets = equalizer_presets_for_product(0x067410);
-        assert_eq!(x3_presets.len(), 5);
-        assert_eq!(x3_presets[0].key, "equalizer-preset-ultimate-sound");
-        assert_eq!(
-            equalizer_preset_key(1, x3_presets),
-            Some("equalizer-preset-hd-clarity")
-        );
-        assert_eq!(
-            equalizer_preset_key(7, x3_presets),
-            Some("equalizer-preset-dynaudio-tuning")
-        );
-
-        let std_presets = equalizer_presets_for_product(0x064810);
-        assert_eq!(std_presets.len(), 4);
-        assert_eq!(std_presets[0].key, "equalizer-preset-classic");
-
+    fn spatial_audio_features_resolve_correctly() {
         let spatial_with_head = spatial_audio_modes_for_profile(true, true);
         assert_eq!(spatial_with_head.len(), 3);
         assert_eq!(
@@ -759,8 +414,5 @@ mod tests {
             spatial_audio_mode_key(2),
             "spatial-audio-mode-head-tracking"
         );
-
-        assert_eq!(game_mode_feature_id_for_product(0x06ec10), 0x28);
-        assert_eq!(game_mode_feature_id_for_product(0x067410), 0x06);
     }
 }

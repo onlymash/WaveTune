@@ -24,15 +24,13 @@ use std::{
 use crate::{
     app::events::{UiUpdate, WorkerCommand},
     bluetooth::{DeviceChoice, DeviceSnapshot, driver::HeadsetDriver},
-    compatibility::{self, DeviceProfile, NoiseMode},
-    protocol::{
-        AppPacket, BassEngineLevel, CustomEqualizer, FrameDecoder, KeyFunction, NoiseCycleState,
-        PairedDevice, PairedDeviceAddress, WearState, parse_paired_devices_event, parse_wear_event,
-    },
+    compatibility::{self, DeviceProfile},
+    protocol::{AppPacket, FrameDecoder, WearState, parse_paired_devices_event, parse_wear_event},
 };
 
 use super::{
     features::{
+        OppoControlsState, OppoDualDeviceState, OppoFeatureContext, OppoSoundState,
         controls::handle_controls_command, dual_device::handle_dual_device_command,
         noise::handle_noise_command, sound::handle_sound_command,
     },
@@ -49,20 +47,9 @@ pub struct OppoDriver {
     supported_indices: Vec<u8>,
     supports_wear_detection: bool,
     wear: WearState,
-    game_mode_feature_id: u8,
-    bass_engine_level: Option<BassEngineLevel>,
-    is_finding_earbuds: bool,
-    current_custom_equalizers: Vec<CustomEqualizer>,
-    current_key_functions: Vec<KeyFunction>,
-    current_noise_cycle: NoiseCycleState,
-    current_prompt_volume: Option<u8>,
-    current_head_motion: Option<u8>,
-    current_dual_device: Option<bool>,
-    current_in_ear_detection: Option<bool>,
-    current_sleep_detection: Option<bool>,
-    current_preferred_device: Option<PairedDeviceAddress>,
-    paired_devices: Result<Vec<PairedDevice>, String>,
-    controls_enabled: Result<bool, String>,
+    pub sound: OppoSoundState,
+    pub controls: OppoControlsState,
+    pub dual_device: OppoDualDeviceState,
 }
 
 impl Default for OppoDriver {
@@ -81,20 +68,9 @@ impl OppoDriver {
             supported_indices: Vec::new(),
             supports_wear_detection: false,
             wear: WearState::default(),
-            game_mode_feature_id: 0x06,
-            bass_engine_level: None,
-            is_finding_earbuds: false,
-            current_custom_equalizers: Vec::new(),
-            current_key_functions: Vec::new(),
-            current_noise_cycle: NoiseCycleState::default(),
-            current_prompt_volume: None,
-            current_head_motion: None,
-            current_dual_device: None,
-            current_in_ear_detection: None,
-            current_sleep_detection: None,
-            current_preferred_device: None,
-            paired_devices: Ok(Vec::new()),
-            controls_enabled: Ok(false),
+            sound: OppoSoundState::default(),
+            controls: OppoControlsState::default(),
+            dual_device: OppoDualDeviceState::default(),
         }
     }
 }
@@ -122,20 +98,26 @@ impl HeadsetDriver for OppoDriver {
         self.supported_indices = snapshot.noise.supported_indices.clone();
         self.supports_wear_detection = snapshot.wear.supports_wear_detection;
         self.wear = snapshot.wear.wear.clone();
-        self.game_mode_feature_id = snapshot.sound.game_mode_feature_id;
-        self.bass_engine_level = snapshot.sound.bass_engine_level.clone();
-        self.is_finding_earbuds = snapshot.controls.is_finding_earbuds;
-        self.current_custom_equalizers = snapshot.sound.custom_equalizers.clone();
-        self.current_key_functions = snapshot.controls.key_functions.clone();
-        self.current_noise_cycle = snapshot.controls.noise_cycle.clone();
-        self.current_prompt_volume = snapshot.controls.prompt_volume;
-        self.current_head_motion = snapshot.controls.head_motion_type;
-        self.current_dual_device = snapshot.dual_device.dual_device_enabled;
-        self.current_in_ear_detection = snapshot.controls.in_ear_detection_enabled;
-        self.current_sleep_detection = snapshot.controls.sleep_detection_enabled;
-        self.current_preferred_device = snapshot.dual_device.preferred_device;
-        self.paired_devices = snapshot.dual_device.paired_devices.clone();
-        self.controls_enabled = snapshot.dual_device.controls_enabled.clone();
+        self.sound = OppoSoundState {
+            custom_equalizers: snapshot.sound.custom_equalizers.clone(),
+            bass_engine_level: snapshot.sound.bass_engine_level.clone(),
+            game_mode_feature_id: snapshot.sound.game_mode_feature_id,
+        };
+        self.controls = OppoControlsState {
+            key_functions: snapshot.controls.key_functions.clone(),
+            noise_cycle: snapshot.controls.noise_cycle.clone(),
+            is_finding_earbuds: snapshot.controls.is_finding_earbuds,
+            prompt_volume: snapshot.controls.prompt_volume,
+            head_motion: snapshot.controls.head_motion_type,
+            in_ear_detection: snapshot.controls.in_ear_detection_enabled,
+            sleep_detection: snapshot.controls.sleep_detection_enabled,
+        };
+        self.dual_device = OppoDualDeviceState {
+            dual_device_enabled: snapshot.dual_device.dual_device_enabled,
+            preferred_device: snapshot.dual_device.preferred_device,
+            paired_devices: snapshot.dual_device.paired_devices.clone(),
+            controls_enabled: snapshot.dual_device.controls_enabled.clone(),
+        };
 
         Ok(snapshot)
     }
@@ -146,96 +128,27 @@ impl HeadsetDriver for OppoDriver {
         command: WorkerCommand,
         updates: &Sender<UiUpdate>,
     ) -> Result<(), String> {
-        let modes = self
-            .profile
-            .map_or(&[] as &[NoiseMode], |profile| profile.noise_modes);
-        if handle_noise_command(
+        let mut ctx = OppoFeatureContext {
             stream,
-            &mut self.decoder,
-            &command,
-            self.read_only,
-            &self.supported_indices,
-            modes,
-            &mut self.wear,
-            self.supports_wear_detection,
+            decoder: &mut self.decoder,
             updates,
-        ) {
+            read_only: self.read_only,
+            profile: self.profile,
+            supported_indices: &self.supported_indices,
+            supports_wear_detection: self.supports_wear_detection,
+            wear: &mut self.wear,
+        };
+
+        if handle_noise_command(&mut ctx, &command) {
             return Ok(());
         }
-
-        let supports_equalizer = self.profile.is_some_and(|p| p.supports_equalizer());
-        let supports_custom_equalizer = self.profile.is_some_and(|p| p.supports_custom_equalizer());
-        let supports_spatial_audio = self.profile.is_some_and(|p| p.supports_spatial_audio());
-        let supports_game_mode = self.profile.is_some_and(|p| p.supports_game_mode());
-        let supports_bass_engine = self.profile.is_some_and(|p| p.supports_bass_engine());
-        let supports_hi_res = self.profile.is_some_and(|p| p.supports_hi_res());
-        if handle_sound_command(
-            stream,
-            &mut self.decoder,
-            &command,
-            self.read_only,
-            supports_equalizer,
-            supports_custom_equalizer,
-            &mut self.current_custom_equalizers,
-            supports_spatial_audio,
-            supports_game_mode,
-            self.game_mode_feature_id,
-            supports_bass_engine,
-            &mut self.bass_engine_level,
-            supports_hi_res,
-            updates,
-        ) {
+        if handle_sound_command(&mut ctx, &command, &mut self.sound) {
             return Ok(());
         }
-
-        let supports_touch_customization = self
-            .profile
-            .is_some_and(|p| p.supports_touch_customization());
-        let noise_modes_empty = self.profile.map_or(true, |p| p.noise_modes.is_empty());
-        let supports_find_device = self.profile.is_some_and(|p| p.supports_find_device());
-        let supports_fit_detection = self.profile.is_some_and(|p| p.supports_fit_detection());
-        let supports_prompt_volume = self.profile.is_some_and(|p| p.supports_prompt_volume());
-        let supports_head_motion = self.profile.is_some_and(|p| p.supports_head_motion());
-        let supports_sleep_detection = self.profile.is_some_and(|p| p.supports_sleep_detection());
-        if handle_controls_command(
-            stream,
-            &mut self.decoder,
-            &command,
-            self.read_only,
-            supports_touch_customization,
-            &mut self.current_key_functions,
-            noise_modes_empty,
-            &mut self.current_noise_cycle,
-            supports_find_device,
-            &mut self.is_finding_earbuds,
-            supports_fit_detection,
-            &self.wear,
-            supports_prompt_volume,
-            &mut self.current_prompt_volume,
-            supports_head_motion,
-            &mut self.current_head_motion,
-            self.supports_wear_detection,
-            &mut self.current_in_ear_detection,
-            supports_sleep_detection,
-            &mut self.current_sleep_detection,
-            updates,
-        ) {
+        if handle_controls_command(&mut ctx, &command, &mut self.controls) {
             return Ok(());
         }
-
-        let supports_dual_device = self.profile.is_some_and(|p| p.supports_dual_device());
-        if handle_dual_device_command(
-            stream,
-            &mut self.decoder,
-            &command,
-            self.read_only,
-            supports_dual_device,
-            &mut self.controls_enabled,
-            &mut self.current_dual_device,
-            &mut self.paired_devices,
-            &mut self.current_preferred_device,
-            updates,
-        ) {
+        if handle_dual_device_command(&mut ctx, &command, &mut self.dual_device) {
             return Ok(());
         }
 
@@ -272,7 +185,7 @@ impl HeadsetDriver for OppoDriver {
                     && packet.payload.first() == Some(&6)
                     && let Ok(devices) = parse_paired_devices_event(&packet.payload)
                 {
-                    self.paired_devices = Ok(devices);
+                    self.dual_device.paired_devices = Ok(devices);
                 }
                 if packet.command == 0x0204
                     && packet.payload.first() == Some(&2)

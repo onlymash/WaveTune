@@ -229,4 +229,3 @@ pub fn encode_oppo_set_noise_cycle(setting: &NoiseCycleSetting) -> Vec<u8> {
 }
 
 pub use encode_oppo_set_noise_cycle as encode_set_noise_cycle;
-

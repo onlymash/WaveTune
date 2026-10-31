@@ -213,4 +213,3 @@ pub fn encode_oppo_set_priority_device(address: Option<PairedDeviceAddress>) -> 
 }
 
 pub use encode_oppo_set_priority_device as encode_set_priority_device;
-
