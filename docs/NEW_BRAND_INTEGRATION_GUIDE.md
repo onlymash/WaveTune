@@ -8,38 +8,37 @@
 
 WaveTune 采用**品牌命名空间隔离**与**垂直切片架构**，新增一个耳机品牌涉及以下四个层次的实现：
 
-```text
-┌────────────────────────────────────────────────────────────────────────┐
-│ 1. 协议编解码层 (Protocol Codec Layer)                                 │
-│    src/protocol/brands/<brand>/                                        │
-│    - 纯无状态帧结构编码/解码 (Frame & AppPacket)                       │
-│    - 命令字枚举、数据载荷 Parser 与序列化函数                          │
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-                                   ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│ 2. 型号与能力目录层 (Catalog & Compatibility Layer)                    │
-│    src/compatibility/brands/<brand>/                                   │
-│    - Product ID 与型号映射                                              │
-│    - 静态能力声明 (DeviceProfile: 降噪树、EQ 预设、手势定义等)           │
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-                                   ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│ 3. 蓝牙驱动实现层 (Bluetooth Driver Slice Layer)                       │
-│    src/bluetooth/brands/<brand>/                                       │
-│    - 实现 HeadsetDriver trait，由通用 SessionRunner 统一调度            │
-│    - 业务功能切片 (features/noise, sound, controls, dual_device)        │
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-                                   ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│ 4. 工厂分发与发现注册 (Registry & Discovery Integration)               │
-│    src/bluetooth/mod.rs & src/bluetooth/discovery.rs                   │
-│    - DeviceBrand 枚举扩展                                              │
-│    - AnyDriver 枚举与 create_driver 静态工厂注册                       │
-│    - BlueZ 广播过滤规则 (Vendor ID / Control UUID)                     │
-└────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph S1["1. 协议编解码层 (Protocol Codec Layer)"]
+        direction TB
+        P1["路径: src/protocol/brands/brand_name/"]
+        P2["纯无状态帧结构编码与解码 (Frame & AppPacket)"]
+        P3["命令字枚举、数据载荷 Parser 与序列化函数"]
+    end
+
+    subgraph S2["2. 型号与能力目录层 (Catalog & Compatibility Layer)"]
+        direction TB
+        C1["路径: src/compatibility/brands/brand_name/"]
+        C2["Product ID 与耳机型号映射"]
+        C3["静态能力声明 (DeviceProfile: 降噪树、EQ预设、手势定义等)"]
+    end
+
+    subgraph S3["3. 蓝牙驱动实现层 (Bluetooth Driver Slice Layer)"]
+        direction TB
+        D1["路径: src/bluetooth/brands/brand_name/"]
+        D2["实现 HeadsetDriver trait，由通用 SessionRunner 统一调度"]
+        D3["业务功能垂直切片 (noise / sound / controls / dual_device)"]
+    end
+
+    subgraph S4["4. 工厂分发与发现注册 (Registry & Discovery Integration)"]
+        direction TB
+        R1["路径: src/bluetooth/mod.rs & src/bluetooth/discovery.rs"]
+        R2["DeviceBrand 枚举与 AnyDriver 静态分发工厂注册"]
+        R3["BlueZ 广播与服务过滤规则 (Vendor ID / Control UUID)"]
+    end
+
+    S1 ==> S2 ==> S3 ==> S4
 ```
 
 > [!IMPORTANT]

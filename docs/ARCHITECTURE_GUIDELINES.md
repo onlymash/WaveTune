@@ -8,42 +8,52 @@
 
 WaveTune 遵循**单向数据流（Unidirectional Data Flow, UDF）**与**分层隔离**原则，自底向上划分为三层：
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        UI 表现层 (GTK4 / Libadwaita)                    │
-│                                                                        │
-│   HomeView          SoundView         ControlsView       DeviceView    │
-│      │                  │                  │                  │        │
-│   ┌──┴──────────────────┴──────────────────┴──────────────────┴────┐   │
-│   │                      Feature Components                        │   │
-│   │  (NoiseComponent, SoundComponent, DeviceComponent...)         │   │
-│   │                                                                │   │
-│   │  - 纯粹的视图映射：fn render(&self, &DomainState)              │   │
-│   │  - 拥有相关局部子组件与 RAII 防重入 Guard                      │   │
-│   │  - 捕获用户操作并转换为 Action / WorkerCommand                 │   │
-│   └──────────────────────────────┬─────────────────────────────────┘   │
-└──────────────────────────────────┼─────────────────────────────────────┘
-                                   │ 1. User Action
-                                   ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                        应用业务与状态层 (MVI Core)                      │
-│                                                                        │
-│   ┌────────────────────────────────────────────────────────────────┐   │
-│   │               Feature Controllers & Session State              │   │
-│   │                                                                │   │
-│   │  - 单一可信状态源：HeadsetSessionState (state.rs)              │   │
-│   │  - 状态归约与分派：响应 UiUpdate 更新 State 并驱动视图重绘     │   │
-│   │  - 跨进程服务同步：生成快照同步至 D-Bus / Tray / QuickSettings │   │
-│   └──────────────▲─────────────────────────────────┬───────────────┘   │
-│                  │                                 │                   │
-│                  │ 4. UiUpdate (async_channel)     │ 2. WorkerCommand  │
-└──────────────────┼─────────────────────────────────┼───────────────────┘
-                   │                                 ▼
-┌──────────────────┴─────────────────────────────────────────────────────┐
-│                       底层通信与基础设施层 (IO Workers)                │
-│                                                                        │
-│   BlueZ Discovery (D-Bus)     RFCOMM Worker (Private Protocol)         │
-└────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph UI["UI 表现层 (GTK4 / Libadwaita)"]
+        subgraph Views["页面视图 (Page Views)"]
+            HomeView["HomeView"]
+            SoundView["SoundView"]
+            ControlsView["ControlsView"]
+            DeviceView["DeviceView"]
+        end
+
+        subgraph Components["业务视图组件 (Feature Components)"]
+            NoiseComp["NoiseComponent"]
+            SoundComp["SoundComponent"]
+            ControlsComp["ControlsComponent"]
+            DeviceComp["DeviceComponent"]
+        end
+
+        Views --- Components
+    end
+
+    subgraph Core["应用业务与状态层 (MVI Core)"]
+        Controllers["Feature Controllers (Noise / Sound / Controls / Device)"]
+        State[("单一可信状态源 HeadsetSessionState")]
+        DesktopSync["跨进程桌面服务 (D-Bus / Tray / Quick Settings)"]
+
+        Controllers <-->|"状态归约更新 / 状态读取"| State
+        State -->|"状态快照导出"| DesktopSync
+    end
+
+    subgraph IO["底层通信与基础设施层 (IO Workers)"]
+        Discovery["BlueZ Discovery (D-Bus)"]
+        Runner["SessionRunner & AnyDriver (RFCOMM Worker 线程)"]
+        Protocol["品牌私有协议编解码 (OPPO / EarFun / ...)"]
+
+        Discovery -.->|"发现已连接耳机"| Runner
+        Runner <--> Protocol
+    end
+
+    Device(("蓝牙无线耳机 (Physical Headset)"))
+
+    %% 单向数据流与控制闭环
+    Components ==>|"1. 用户交互 (User Action)"| Controllers
+    Controllers ==>|"2. 意图派发 (WorkerCommand)"| Runner
+    Runner <==>|"3. 私有协议帧读写 (ACK / 回读 / 异步通知)"| Device
+    Runner ==>|"4. 状态事件 (UiUpdate 异步通道)"| Controllers
+    Controllers -.->|"5. 驱动组件重绘 render(&state)"| Components
 ```
 
 ---
