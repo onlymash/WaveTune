@@ -21,9 +21,9 @@ use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
 use crate::bluetooth::brands::oppo::features::{OppoControlsState, OppoFeatureContext};
 use crate::bluetooth::brands::oppo::transport::request;
 use crate::protocol::{
-    EarSide, KeyFunction, NoiseCycleSetting, encode_oppo_find_earbuds, encode_oppo_fit_test,
-    encode_oppo_set_head_motion_type, encode_oppo_set_key_function, encode_oppo_set_noise_cycle,
-    encode_oppo_set_prompt_volume, parse_oppo_feature_flags_response,
+    EarSide, FindEarbudsMode, KeyFunction, NoiseCycleSetting, encode_oppo_find_earbuds,
+    encode_oppo_fit_test, encode_oppo_set_head_motion_type, encode_oppo_set_key_function,
+    encode_oppo_set_noise_cycle, encode_oppo_set_prompt_volume, parse_oppo_feature_flags_response,
     parse_oppo_head_motion_type_response, parse_oppo_noise_cycle_response,
     parse_oppo_prompt_volume_response, parse_oppo_touch_controls_response,
 };
@@ -189,7 +189,7 @@ pub fn handle_controls_command<T: Read + Write>(
             }
             true
         }
-        WorkerCommand::FindEarbuds(ring) => {
+        WorkerCommand::FindEarbuds(mode) => {
             if ctx.read_only || !ctx.supports_find_device() {
                 let _ = ctx.updates.send(UiUpdate::SettingError {
                     domain: SettingDomain::Controls,
@@ -197,7 +197,21 @@ pub fn handle_controls_command<T: Read + Write>(
                 });
                 return true;
             }
-            let payload = encode_oppo_find_earbuds(*ring);
+            if matches!(mode, FindEarbudsMode::Left | FindEarbudsMode::Right)
+                && !ctx.supports_find_device_sides()
+            {
+                let _ = ctx.updates.send(UiUpdate::SettingError {
+                    domain: SettingDomain::Controls,
+                    message: crate::t!("controls-find-side-blocked"),
+                });
+                let _ = ctx.updates.send(UiUpdate::FindEarbudsModeResult {
+                    requested: *mode,
+                    actual: state.find_earbuds_mode,
+                });
+                return true;
+            }
+            let finding = mode.is_finding();
+            let payload = encode_oppo_find_earbuds(finding);
             match request(
                 ctx.stream,
                 ctx.decoder,
@@ -207,9 +221,13 @@ pub fn handle_controls_command<T: Read + Write>(
                 Some(ctx.updates),
             ) {
                 Ok(_) => {
-                    state.is_finding_earbuds = *ring;
-                    let _ = ctx.updates.send(UiUpdate::IsFindingEarbuds(*ring));
-                    let _ = ctx.updates.send(UiUpdate::Status(if *ring {
+                    state.is_finding_earbuds = finding;
+                    state.find_earbuds_mode = Some(*mode);
+                    let _ = ctx.updates.send(UiUpdate::FindEarbudsModeResult {
+                        requested: *mode,
+                        actual: Some(*mode),
+                    });
+                    let _ = ctx.updates.send(UiUpdate::Status(if finding {
                         crate::t!("controls-find-ringing")
                     } else {
                         crate::t!("controls-find-stopped")
@@ -220,9 +238,10 @@ pub fn handle_controls_command<T: Read + Write>(
                         domain: SettingDomain::Controls,
                         message: crate::t!("controls-find-failed", error),
                     });
-                    let _ = ctx
-                        .updates
-                        .send(UiUpdate::IsFindingEarbuds(state.is_finding_earbuds));
+                    let _ = ctx.updates.send(UiUpdate::FindEarbudsModeResult {
+                        requested: *mode,
+                        actual: state.find_earbuds_mode,
+                    });
                 }
             }
             true

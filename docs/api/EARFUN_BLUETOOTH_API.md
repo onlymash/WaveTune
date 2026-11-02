@@ -409,6 +409,7 @@ stateDiagram-v2
   - Values: `0` = off, `1` = left earbud, `2` = right earbud, `3` = both earbuds. Gadgetbridge's setting offers precisely these four values.
 - **Model/source scope**: The Find Device setting is included in the Air Pro 4 and Free Pro 3 settings screens, and both model protocols send the query in their settings request. No corresponding Air S UI or query was found.
 - **Behavior and safety**: Gadgetbridge's UI text says this option plays a loud sound and warns users not to wear the headphones. This is a client warning, not a hardware-verified description of sound pattern, duration, or loudness. No successful hardware command trace or firmware-specific qualification was found.
+- **WaveTune interaction**: Air Pro 4 and Free Pro 3 allow selecting left, right, or both earbuds from a card-anchored popover, then starting/stopping the sound with one button. Stop sends mode `0`; the card keeps the loud-sound warning visible instead of interrupting the action with a confirmation dialog. This UI behavior does not change the unverified hardware evidence above.
 
 #### 4.9.2 Microphone Mode
 - **Gadgetbridge command path**:

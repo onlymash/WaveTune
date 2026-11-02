@@ -38,6 +38,7 @@ pub mod features {
     pub const HEAD_TRACKING: &str = "head-tracking";
     pub const BASS_ENGINE: &str = "bass-engine";
     pub const FIND_DEVICE: &str = "find-device";
+    pub const FIND_DEVICE_SIDES: &str = "find-device-sides";
     pub const TOUCH_CUSTOMIZATION: &str = "touch-customization";
     pub const TOUCH_LOCK: &str = "touch-lock";
     pub const PROMPT_VOLUME: &str = "prompt-volume";
@@ -283,6 +284,11 @@ impl DeviceProfile {
     #[inline]
     pub fn supports_find_device(&self) -> bool {
         self.has_feature(features::FIND_DEVICE)
+    }
+
+    #[inline]
+    pub fn supports_find_device_sides(&self) -> bool {
+        self.has_feature(features::FIND_DEVICE_SIDES)
     }
 
     #[inline]

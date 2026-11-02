@@ -19,9 +19,9 @@ use crate::{
     bluetooth::{DeviceChoice, DeviceSnapshot},
     compatibility::{EqualizerPreset, GestureRow, NoiseMode},
     protocol::{
-        BassEngineLevel, BatteryState, CustomEqualizer, EarSide, FirmwareVersions, FitTestResult,
-        GestureAction, KeyFunction, NoiseCycleState, PairedDevice, PairedDeviceAction,
-        PairedDeviceAddress, WearState,
+        BassEngineLevel, BatteryState, CustomEqualizer, EarSide, FindEarbudsMode, FirmwareVersions,
+        FitTestResult, GestureAction, KeyFunction, NoiseCycleState, PairedDevice,
+        PairedDeviceAction, PairedDeviceAddress, WearState,
     },
 };
 
@@ -96,7 +96,10 @@ pub enum UiUpdate {
     },
     KeyFunctions(Vec<KeyFunction>),
     NoiseCycle(NoiseCycleState),
-    IsFindingEarbuds(bool),
+    FindEarbudsModeResult {
+        requested: FindEarbudsMode,
+        actual: Option<FindEarbudsMode>,
+    },
     FitTestRunning(bool),
     FitTestResult(FitTestResult),
     PromptVolume(u8),
@@ -115,6 +118,7 @@ pub enum UiUpdate {
         supports_sleep_detection: bool,
         supports_head_motion: bool,
         supports_find_device: bool,
+        supports_find_device_sides: bool,
         supports_fit_detection: bool,
         supports_prompt_volume: bool,
         gesture_rows: Vec<GestureRow>,
@@ -163,7 +167,7 @@ pub enum WorkerCommand {
         mask: u32,
         is_shared: bool,
     },
-    FindEarbuds(bool),
+    FindEarbuds(FindEarbudsMode),
     RunFitTest,
     SetPromptVolume(u8),
     SetMicrophoneMode(u8),

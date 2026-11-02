@@ -212,6 +212,8 @@ pub fn initialize_oppo_session<T: Read + Write>(
                         .is_some_and(|profile| profile.supports_head_motion()),
                     supports_find_device: profile
                         .is_some_and(|profile| profile.supports_find_device()),
+                    supports_find_device_sides: profile
+                        .is_some_and(|profile| profile.supports_find_device_sides()),
                     supports_fit_detection: profile
                         .is_some_and(|profile| profile.supports_fit_detection()),
                     supports_prompt_volume: profile
@@ -228,6 +230,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
                     touch_lock_enabled: None,
                     sleep_detection_enabled: None,
                     is_finding_earbuds: false,
+                    find_earbuds_mode: None,
                 },
                 dual_device: DualDeviceSnapshot {
                     supports_dual_device: profile
@@ -572,6 +575,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
                 supports_sleep_detection: profile.supports_sleep_detection(),
                 supports_head_motion,
                 supports_find_device: profile.supports_find_device(),
+                supports_find_device_sides: profile.supports_find_device_sides(),
                 supports_fit_detection: profile.supports_fit_detection(),
                 supports_prompt_volume,
                 supports_microphone_mode: false,
@@ -586,6 +590,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
                 touch_lock_enabled: None,
                 sleep_detection_enabled,
                 is_finding_earbuds: false,
+                find_earbuds_mode: None,
             },
             dual_device: DualDeviceSnapshot {
                 supports_dual_device: supports_paired_devices,

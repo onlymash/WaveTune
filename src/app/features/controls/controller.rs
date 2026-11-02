@@ -38,7 +38,6 @@ pub(crate) struct ControlsController {
     context: FeatureContext,
     selected_ear: Rc<Cell<EarSide>>,
     cached_paired_devices: Rc<RefCell<Vec<PairedDevice>>>,
-    is_finding_earbuds: Rc<Cell<bool>>,
     fit_test_running: Rc<Cell<bool>>,
     prompt_volume_debounce_source: Rc<RefCell<Option<gtk::glib::SourceId>>>,
 }
@@ -54,7 +53,6 @@ impl ControlsController {
             context,
             selected_ear: Rc::new(Cell::new(EarSide::Left)),
             cached_paired_devices,
-            is_finding_earbuds: Rc::new(Cell::new(false)),
             fit_test_running: Rc::new(Cell::new(false)),
             prompt_volume_debounce_source: Rc::new(RefCell::new(None)),
         }
@@ -204,52 +202,15 @@ impl ControlsController {
         // 1. Find earbuds
         let context = self.context.clone();
         let component = self.component.clone();
-        let is_finding = self.is_finding_earbuds.clone();
-
         self.component
             .widgets
             .utilities
-            .connect_find_clicked(move || {
-                if is_finding.get() {
-                    component.widgets.utilities.set_find_sensitive(false);
-                    if let Err(err) = context.send_command(WorkerCommand::FindEarbuds(false)) {
-                        context.send_status(crate::t!("controls-find-send-failed", err));
-                        component.widgets.utilities.set_find_sensitive(true);
-                    }
-                } else {
-                    let in_ear = context.session_state.borrow().wear.any_earbud_in_ear();
-                    let context_find = context.clone();
-                    let utilities_find = component.widgets.utilities.clone();
-                    let do_play = move || {
-                        utilities_find.set_find_sensitive(false);
-                        if let Err(err) =
-                            context_find.send_command(WorkerCommand::FindEarbuds(true))
-                        {
-                            context_find.send_status(crate::t!("controls-find-send-failed", err));
-                            utilities_find.set_find_sensitive(true);
-                        }
-                    };
-
-                    if in_ear {
-                        let alert = adw::AlertDialog::builder()
-                            .heading(&crate::t!("controls-find-warning-title"))
-                            .body(&crate::t!("controls-find-warning-body"))
-                            .build();
-                        alert.add_response("cancel", &crate::t!("common-cancel"));
-                        alert.add_response("play", &crate::t!("controls-find-play"));
-                        alert.set_response_appearance("play", adw::ResponseAppearance::Destructive);
-                        alert.choose(
-                            Some(component.widgets.utilities.find_button()),
-                            None::<&gtk::gio::Cancellable>,
-                            move |response| {
-                                if response == "play" {
-                                    do_play();
-                                }
-                            },
-                        );
-                    } else {
-                        do_play();
-                    }
+            .connect_find_clicked(move |mode| {
+                component.widgets.utilities.begin_find_request(mode);
+                if let Err(err) = context.send_command(WorkerCommand::FindEarbuds(mode)) {
+                    context.send_status(crate::t!("controls-find-send-failed", err));
+                    let current = context.session_state.borrow().controls.find_earbuds_mode;
+                    component.complete_find_earbuds_request(mode, current);
                 }
             });
 
@@ -500,9 +461,8 @@ impl ControlsController {
                 self.component.render_sleep(st.controls.sleep_detection);
                 self.component
                     .render_prompt_volume(st.controls.prompt_volume);
-                self.is_finding_earbuds.set(st.controls.is_finding_earbuds);
                 self.component
-                    .render_finding_earbuds(st.controls.is_finding_earbuds);
+                    .render_find_earbuds_mode(st.controls.find_earbuds_mode);
                 self.component
                     .render_microphone_mode(st.controls.microphone_mode);
                 self.component.render_head_motion(st.controls.head_motion);
@@ -557,14 +517,14 @@ impl ControlsController {
                     .set_noise_cycle_sensitive(true);
                 true
             }
-            UiUpdate::IsFindingEarbuds(finding) => {
-                self.is_finding_earbuds.set(*finding);
-                self.context
-                    .session_state
-                    .borrow_mut()
-                    .controls
-                    .is_finding_earbuds = *finding;
-                self.component.render_finding_earbuds(*finding);
+            UiUpdate::FindEarbudsModeResult { requested, actual } => {
+                let mut state = self.context.session_state.borrow_mut();
+                state.controls.find_earbuds_mode = *actual;
+                state.controls.is_finding_earbuds =
+                    actual.is_some_and(crate::protocol::FindEarbudsMode::is_finding);
+                drop(state);
+                self.component
+                    .complete_find_earbuds_request(*requested, *actual);
                 true
             }
             UiUpdate::FitTestRunning(running) => {
@@ -656,6 +616,7 @@ impl ControlsController {
                 supports_sleep_detection,
                 supports_head_motion,
                 supports_find_device,
+                supports_find_device_sides,
                 supports_fit_detection,
                 supports_prompt_volume,
                 gesture_rows,
@@ -669,6 +630,7 @@ impl ControlsController {
                     st.controls.supports_sleep_detection = *supports_sleep_detection;
                     st.controls.supports_head_motion = *supports_head_motion;
                     st.controls.supports_find_device = *supports_find_device;
+                    st.controls.supports_find_device_sides = *supports_find_device_sides;
                     st.controls.supports_fit_detection = *supports_fit_detection;
                     st.controls.supports_prompt_volume = *supports_prompt_volume;
                     st.controls.gesture_rows = gesture_rows.clone();
@@ -702,7 +664,6 @@ impl ControlsController {
         }
         self.component.reset();
         self.selected_ear.set(EarSide::Left);
-        self.is_finding_earbuds.set(false);
         self.component
             .widgets
             .gestures

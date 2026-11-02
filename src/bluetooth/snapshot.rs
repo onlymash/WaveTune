@@ -18,8 +18,8 @@
 use crate::{
     compatibility::{EqualizerPreset, GestureRow, NoiseMode},
     protocol::{
-        BassEngineLevel, BatteryState, CustomEqualizer, FirmwareVersions, KeyFunction,
-        NoiseCycleState, PairedDevice, PairedDeviceAddress, WearState,
+        BassEngineLevel, BatteryState, CustomEqualizer, FindEarbudsMode, FirmwareVersions,
+        KeyFunction, NoiseCycleState, PairedDevice, PairedDeviceAddress, WearState,
     },
 };
 
@@ -137,6 +137,7 @@ pub struct ControlsSnapshot {
     pub supports_sleep_detection: bool,
     pub supports_head_motion: bool,
     pub supports_find_device: bool,
+    pub supports_find_device_sides: bool,
     pub supports_fit_detection: bool,
     pub supports_prompt_volume: bool,
     pub supports_microphone_mode: bool,
@@ -152,6 +153,7 @@ pub struct ControlsSnapshot {
     pub touch_lock_enabled: Option<bool>,
     pub sleep_detection_enabled: Option<bool>,
     pub is_finding_earbuds: bool,
+    pub find_earbuds_mode: Option<FindEarbudsMode>,
 }
 
 impl Default for ControlsSnapshot {
@@ -162,6 +164,7 @@ impl Default for ControlsSnapshot {
             supports_sleep_detection: false,
             supports_head_motion: false,
             supports_find_device: false,
+            supports_find_device_sides: false,
             supports_fit_detection: false,
             supports_prompt_volume: false,
             supports_microphone_mode: false,
@@ -176,6 +179,7 @@ impl Default for ControlsSnapshot {
             touch_lock_enabled: None,
             sleep_detection_enabled: None,
             is_finding_earbuds: false,
+            find_earbuds_mode: None,
         }
     }
 }

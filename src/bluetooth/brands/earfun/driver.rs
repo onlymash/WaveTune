@@ -313,7 +313,7 @@ impl HeadsetDriver for EarFunDriver {
                 }
                 Ok(())
             }
-            WorkerCommand::FindEarbuds(ring) => {
+            WorkerCommand::FindEarbuds(mode) => {
                 let supported = compatibility::profile_for_product_id(pid)
                     .is_some_and(|profile| profile.supports_find_device());
                 if snapshot.identity.read_only || !supported {
@@ -321,20 +321,54 @@ impl HeadsetDriver for EarFunDriver {
                         domain: SettingDomain::Controls,
                         message: crate::t!("controls-find-blocked"),
                     });
+                    let actual = self
+                        .snapshot
+                        .as_ref()
+                        .and_then(|state| state.controls.find_earbuds_mode);
+                    let _ = updates.send(UiUpdate::FindEarbudsModeResult {
+                        requested: mode,
+                        actual,
+                    });
+                    return Ok(());
+                }
+                if matches!(
+                    mode,
+                    crate::protocol::FindEarbudsMode::Left
+                        | crate::protocol::FindEarbudsMode::Right
+                ) && !compatibility::profile_for_product_id(pid)
+                    .is_some_and(|profile| profile.supports_find_device_sides())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-find-side-blocked"),
+                    });
+                    let previous = self
+                        .snapshot
+                        .as_ref()
+                        .and_then(|state| state.controls.find_earbuds_mode);
+                    let _ = updates.send(UiUpdate::FindEarbudsModeResult {
+                        requested: mode,
+                        actual: previous,
+                    });
                     return Ok(());
                 }
 
-                let target = if ring {
-                    EarFunFindMode::Both
-                } else {
-                    EarFunFindMode::Off
+                let target = match mode {
+                    crate::protocol::FindEarbudsMode::Off => EarFunFindMode::Off,
+                    crate::protocol::FindEarbudsMode::Left => EarFunFindMode::Left,
+                    crate::protocol::FindEarbudsMode::Right => EarFunFindMode::Right,
+                    crate::protocol::FindEarbudsMode::Both => EarFunFindMode::Both,
                 };
                 match set_find_mode(stream, &mut self.decoder, target, Some(updates)) {
                     Ok(actual) => {
                         if let Some(state) = &mut self.snapshot {
                             state.controls.is_finding_earbuds = actual.is_finding();
+                            state.controls.find_earbuds_mode = Some(mode);
                         }
-                        let _ = updates.send(UiUpdate::IsFindingEarbuds(actual.is_finding()));
+                        let _ = updates.send(UiUpdate::FindEarbudsModeResult {
+                            requested: mode,
+                            actual: Some(mode),
+                        });
                         let _ = updates.send(UiUpdate::Status(if actual.is_finding() {
                             crate::t!("controls-find-ringing")
                         } else {
@@ -346,11 +380,14 @@ impl HeadsetDriver for EarFunDriver {
                             domain: SettingDomain::Controls,
                             message: crate::t!("controls-find-failed", error),
                         });
-                        let finding = self
+                        let previous = self
                             .snapshot
                             .as_ref()
-                            .is_some_and(|state| state.controls.is_finding_earbuds);
-                        let _ = updates.send(UiUpdate::IsFindingEarbuds(finding));
+                            .and_then(|state| state.controls.find_earbuds_mode);
+                        let _ = updates.send(UiUpdate::FindEarbudsModeResult {
+                            requested: mode,
+                            actual: previous,
+                        });
                     }
                 }
                 Ok(())

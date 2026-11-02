@@ -32,6 +32,7 @@ pub(crate) struct ControlsFeaturesViewState<'a> {
     pub supports_sleep: bool,
     pub supports_head: bool,
     pub supports_find: bool,
+    pub supports_find_sides: bool,
     pub supports_fit: bool,
     pub supports_volume: bool,
     pub supports_microphone_mode: bool,
@@ -62,9 +63,11 @@ pub(crate) fn update_controls_features(
 
     widgets.head_motion.set_supported(state.supports_head);
 
-    widgets
-        .utilities
-        .set_supported(state.supports_find, state.supports_fit);
+    widgets.utilities.set_supported(
+        state.supports_find,
+        state.supports_find_sides,
+        state.supports_fit,
+    );
 }
 
 pub(crate) fn update_key_functions(
@@ -86,8 +89,11 @@ pub(crate) fn update_noise_cycle(
     widgets.gestures.update_noise_cycle(cycle, selected_ear);
 }
 
-pub(crate) fn update_finding_earbuds(widgets: &ControlsWidgets, finding: bool) {
-    widgets.utilities.set_finding(finding);
+pub(crate) fn update_find_earbuds_mode(
+    widgets: &ControlsWidgets,
+    mode: Option<crate::protocol::FindEarbudsMode>,
+) {
+    widgets.utilities.set_find_mode(mode);
 }
 
 pub(crate) fn update_fit_test_running(widgets: &ControlsWidgets, running: bool) {

@@ -18,14 +18,27 @@
 use adw::prelude::*;
 use gtk::{Align, Box as GtkBox, Button, Label, Orientation, Spinner};
 
-use crate::protocol::{FitQuality, FitTestResult};
+use crate::protocol::{FindEarbudsMode, FitQuality, FitTestResult};
+use std::{cell::Cell, rc::Rc};
+
+fn find_mode_label(mode: FindEarbudsMode) -> String {
+    match mode {
+        FindEarbudsMode::Off | FindEarbudsMode::Both => crate::t!("controls-find-both"),
+        FindEarbudsMode::Left => crate::t!("controls-find-left"),
+        FindEarbudsMode::Right => crate::t!("controls-find-right"),
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct UtilityWidgets {
     utility_group: adw::PreferencesGroup,
     find_card: adw::ActionRow,
-    find_btn: Button,
-    find_status_label: Label,
+    find_target_button: gtk::MenuButton,
+    find_target_label: Label,
+    find_find_button: Button,
+    find_target: Rc<Cell<FindEarbudsMode>>,
+    find_active: Rc<Cell<bool>>,
+    pending_find: Rc<Cell<Option<FindEarbudsMode>>>,
     fit_card: adw::ActionRow,
     fit_btn: Button,
     fit_spinner: Spinner,
@@ -33,34 +46,86 @@ pub(crate) struct UtilityWidgets {
 }
 
 impl UtilityWidgets {
-    pub fn set_supported(&self, supports_find: bool, supports_fit: bool) {
+    pub fn set_supported(
+        &self,
+        supports_find: bool,
+        supports_find_sides: bool,
+        supports_fit: bool,
+    ) {
         self.utility_group
             .set_visible(supports_find || supports_fit);
         self.find_card.set_visible(supports_find);
+        self.find_target_button
+            .set_visible(supports_find && supports_find_sides);
         self.fit_card.set_visible(supports_fit);
     }
 
-    pub fn set_finding(&self, finding: bool) {
-        if finding {
-            self.find_btn.set_label(&crate::t!("controls-find-stop"));
-            self.find_btn.add_css_class("destructive-action");
-            self.find_status_label
-                .set_text(&crate::t!("controls-find-playing-note"));
-            self.find_status_label.set_visible(true);
-        } else {
-            self.find_btn.set_label(&crate::t!("controls-find-play"));
-            self.find_btn.remove_css_class("destructive-action");
-            self.find_status_label.set_visible(false);
+    pub fn set_find_mode(&self, mode: Option<FindEarbudsMode>) {
+        if self.pending_find.get().is_some() {
+            return;
         }
-        self.find_btn.set_sensitive(true);
+        if let Some(mode) = mode.filter(|mode| mode.is_finding()) {
+            self.find_target.set(mode);
+        }
+        self.render_find_mode(mode.is_some_and(FindEarbudsMode::is_finding), true);
+    }
+
+    pub fn begin_find_request(&self, mode: FindEarbudsMode) {
+        self.pending_find.set(Some(mode));
+        if mode.is_finding() {
+            self.find_target.set(mode);
+            self.render_find_mode(true, true);
+        } else {
+            // Keep Stop visible until the device confirms that playback stopped.
+            self.render_find_mode(true, false);
+        }
+    }
+
+    pub fn complete_find_request(
+        &self,
+        requested: FindEarbudsMode,
+        actual: Option<FindEarbudsMode>,
+    ) {
+        if self.pending_find.get() != Some(requested) {
+            return;
+        }
+        self.pending_find.set(None);
+        self.render_confirmed_find_mode(actual);
+    }
+
+    fn render_confirmed_find_mode(&self, mode: Option<FindEarbudsMode>) {
+        if let Some(mode) = mode.filter(|mode| mode.is_finding()) {
+            self.find_target.set(mode);
+        }
+        self.render_find_mode(mode.is_some_and(FindEarbudsMode::is_finding), true);
+    }
+
+    fn render_find_mode(&self, is_finding: bool, action_sensitive: bool) {
+        self.find_target_label
+            .set_text(&find_mode_label(self.find_target.get()));
+        self.find_active.set(is_finding);
+        let action_label = if is_finding {
+            crate::t!("controls-find-stop")
+        } else {
+            crate::t!("controls-find-start")
+        };
+        self.find_find_button.set_label(&action_label);
+        if is_finding {
+            self.find_find_button.remove_css_class("suggested-action");
+            self.find_find_button.add_css_class("destructive-action");
+            self.find_target_button.set_sensitive(false);
+        } else {
+            self.find_find_button.remove_css_class("destructive-action");
+            self.find_find_button.add_css_class("suggested-action");
+            self.find_target_button.set_sensitive(true);
+        }
+        self.find_find_button.set_sensitive(action_sensitive);
     }
 
     pub fn set_find_sensitive(&self, sensitive: bool) {
-        self.find_btn.set_sensitive(sensitive);
-    }
-
-    pub fn find_button(&self) -> &Button {
-        &self.find_btn
+        self.find_find_button.set_sensitive(sensitive);
+        self.find_target_button
+            .set_sensitive(sensitive && !self.find_active.get());
     }
 
     pub fn set_fit_running(&self, running: bool) {
@@ -107,20 +172,37 @@ impl UtilityWidgets {
 
     pub fn reset(&self) {
         self.utility_group.set_visible(false);
-        self.find_status_label.set_visible(false);
+        self.find_target.set(FindEarbudsMode::Both);
+        self.find_active.set(false);
+        self.pending_find.set(None);
+        self.find_target_label
+            .set_text(&find_mode_label(FindEarbudsMode::Both));
+        self.find_find_button
+            .set_label(&crate::t!("controls-find-start"));
+        self.find_find_button.remove_css_class("destructive-action");
+        self.find_find_button.add_css_class("suggested-action");
         self.fit_spinner.set_visible(false);
         self.fit_spinner.set_spinning(false);
         self.fit_result_label.set_text("");
-        self.find_btn.set_sensitive(false);
+        self.set_find_sensitive(false);
         self.fit_btn.set_sensitive(false);
     }
 
     pub fn connect_find_clicked<F>(&self, callback: F)
     where
-        F: Fn() + 'static,
+        F: Fn(FindEarbudsMode) + 'static,
     {
-        self.find_btn.connect_clicked(move |_| {
-            callback();
+        let callback = Rc::new(callback);
+        let target = self.find_target.clone();
+        let active = self.find_active.clone();
+        let button = self.find_find_button.clone();
+        button.connect_clicked(move |_| {
+            let mode = if active.get() {
+                FindEarbudsMode::Off
+            } else {
+                target.get()
+            };
+            callback(mode);
         });
     }
 
@@ -140,25 +222,58 @@ pub(crate) fn build_utilities_group() -> (adw::PreferencesGroup, UtilityWidgets)
         .description(&crate::t!("controls-find-and-seal-desc"))
         .build();
 
-    // Find My Earbuds ActionRow
     let find_card = adw::ActionRow::builder()
         .title(&crate::t!("controls-find-earbuds"))
-        .subtitle(&crate::t!("controls-find-and-seal-desc"))
+        .subtitle(&crate::t!("controls-find-warning-body"))
         .build();
-    let find_box = GtkBox::new(Orientation::Vertical, 4);
+
+    let find_target = Rc::new(Cell::new(FindEarbudsMode::Both));
+    let target_popover = gtk::Popover::new();
+    let find_target_label = Label::new(Some(&find_mode_label(FindEarbudsMode::Both)));
+    let target_popover_box = GtkBox::new(Orientation::Vertical, 8);
+    target_popover_box.set_margin_top(8);
+    target_popover_box.set_margin_bottom(8);
+    target_popover_box.set_margin_start(8);
+    target_popover_box.set_margin_end(8);
+    target_popover_box.set_size_request(200, -1);
+    for (mode, label) in [
+        (FindEarbudsMode::Left, crate::t!("controls-find-left")),
+        (FindEarbudsMode::Right, crate::t!("controls-find-right")),
+        (FindEarbudsMode::Both, crate::t!("controls-find-both")),
+    ] {
+        let option = Button::with_label(&label);
+        option.add_css_class("flat");
+        let target = find_target.clone();
+        let target_label = find_target_label.clone();
+        let target_popover = target_popover.clone();
+        option.connect_clicked(move |_| {
+            target.set(mode);
+            target_label.set_text(&find_mode_label(mode));
+            target_popover.popdown();
+        });
+        target_popover_box.append(&option);
+    }
+    target_popover.set_child(Some(&target_popover_box));
+    let target_button_child = GtkBox::new(Orientation::Horizontal, 4);
+    target_button_child.append(&find_target_label);
+    target_button_child.append(&gtk::Image::from_icon_name("pan-down-symbolic"));
+    let find_target_button = gtk::MenuButton::builder()
+        .child(&target_button_child)
+        .popover(&target_popover)
+        .tooltip_text(&crate::t!("controls-find-target"))
+        .valign(Align::Center)
+        .build();
+    find_target_button.add_css_class("flat");
+    let find_find_button = Button::with_label(&crate::t!("controls-find-start"));
+    find_find_button.set_sensitive(false);
+    find_find_button.add_css_class("suggested-action");
+    let find_box = GtkBox::new(Orientation::Horizontal, 8);
     find_box.set_valign(Align::Center);
-    let find_btn = Button::with_label(&crate::t!("controls-find-play"));
-    find_btn.set_sensitive(false);
-    let find_status_label = Label::new(None);
-    find_status_label.set_visible(false);
-    find_status_label.add_css_class("caption");
-    find_status_label.add_css_class("accent");
-    find_box.append(&find_btn);
-    find_box.append(&find_status_label);
+    find_box.append(&find_target_button);
+    find_box.append(&find_find_button);
     find_card.add_suffix(&find_box);
     utility_group.add(&find_card);
 
-    // Fit Test ActionRow
     let fit_card = adw::ActionRow::builder()
         .title(&crate::t!("controls-fit-test-title"))
         .subtitle(&crate::t!("controls-fit-test-desc"))
@@ -180,8 +295,12 @@ pub(crate) fn build_utilities_group() -> (adw::PreferencesGroup, UtilityWidgets)
     let widgets = UtilityWidgets {
         utility_group: utility_group.clone(),
         find_card,
-        find_btn,
-        find_status_label,
+        find_target_button,
+        find_target_label,
+        find_find_button,
+        find_target,
+        find_active: Rc::new(Cell::new(false)),
+        pending_find: Rc::new(Cell::new(None)),
         fit_card,
         fit_btn,
         fit_spinner,

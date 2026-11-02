@@ -5,6 +5,7 @@
 ## 当前实施状态
 
 - 已完成协议 DTO/编解码、严格查询响应解析、按 profile 初始化查询、型号能力门控、EarFun SET ACK 后 GET 读回，以及 Controls 页面查找/提示音/麦克风控件和中英文文案。
+- 查找控件使用卡片内的浮动菜单选择左耳、右耳或双耳，并用单个查找/停止按钮控制；持续显示大音量警告，不再要求用户通过确认对话框继续。OPPO 等不支持单耳选择的型号隐藏目标菜单，保留双耳查找/停止。
 - 当前 profile 开放范围：Air Pro 4 支持查找、提示音音量和麦克风模式；Free Pro 3 仅支持查找；Air S 不开放这三项。提示音 UI 为 `0..=4`（关闭至最大），并通过反向映射转换 wire 值。
 - 自动化协议、兼容性与模拟会话测试已通过；这些测试不证明设备 ACK、固件行为或实际效果。尚未进行任何真机写入验证。
 - Fast Pair / LE Audio 目前只有协议值编解码及单测；没有型号能力声明、初始化查询、驱动命令或 UI。硬件验证完成前继续保持未开放，也不发送重启命令。
@@ -27,8 +28,8 @@
 
 - [`src/protocol/brands/earfun/earfun_commands.rs`](../../src/protocol/brands/earfun/earfun_commands.rs) 已定义所有目标指令常量：查找 `0x0332/0x0333`、提示音 `0x0338/0x0339`、麦克风 `0x0330/0x0331`、高级音频模式 `0x034B/0x034C`。`0x034D` 音频模式状态也已有解析器，但它不是 Fast Pair / LE Audio 设置值的读回解析器。
 - [`src/bluetooth/brands/earfun/transport.rs`](../../src/bluetooth/brands/earfun/transport.rs) 已提供请求超时、GAIA 响应命令匹配与状态码检查的 `request()`，可作为写操作 ACK 及查询读回的基础。现有 `send_command()` 只确认字节已写入；`drain_stream()` 不能代替 ACK。
-- 通用应用层已具备 `WorkerCommand::FindEarbuds(bool)`、`SetPromptVolume(u8)`、`UiUpdate::IsFindingEarbuds`、`PromptVolume` 和相关支持位；控制页已有查找按钮和提示音滑块。
-- [`src/compatibility/brands/earfun/earfun_catalog.rs`](../../src/compatibility/brands/earfun/earfun_catalog.rs) 已给 Air Pro 4 和 Free Pro 3 声明 `FIND_DEVICE`、`PROMPT_VOLUME`，但驱动快照尚未据此开放控件。
+- 实施前通用应用层已有 `WorkerCommand::FindEarbuds(bool)`、`SetPromptVolume(u8)`、`UiUpdate::IsFindingEarbuds`、`PromptVolume` 和相关支持位；控制页原有单一查找切换按钮和提示音滑块。
+- 实施前 [`src/compatibility/brands/earfun/earfun_catalog.rs`](../../src/compatibility/brands/earfun/earfun_catalog.rs) 已给 Air Pro 4 和 Free Pro 3 声明 `FIND_DEVICE`、`PROMPT_VOLUME`，但驱动快照尚未据此开放控件。
 - EarFun 目前已接入手势、触控锁、入耳检测、降噪、游戏模式、EQ、编解码器及多设备等会话逻辑；本计划应复用现有驱动、快照和 Controls/Sound 切片，而非另建传输或会话框架。
 
 ### 当时尚未打通的代码路径
@@ -37,13 +38,13 @@
 - [`src/bluetooth/brands/earfun/features/controls.rs`](../../src/bluetooth/brands/earfun/features/controls.rs) 目前处理入耳检测、触控手势及触控锁，没有上述新功能的查询/设置方法。
 - [`src/bluetooth/brands/earfun/driver.rs`](../../src/bluetooth/brands/earfun/driver.rs) 尚未为查找、提示音、麦克风或高级模式命令建立处理闭环；即使通用 UI 能发相应 `WorkerCommand`，也不能据此认定 EarFun 已支持。
 - [`src/protocol/brands/earfun/earfun_parsers.rs`](../../src/protocol/brands/earfun/earfun_parsers.rs) 尚无目标设置的强类型解析器；高级模式枚举/解析也未实现。当前 `SoundSnapshot` 仅覆盖现有音频功能和 codec，不含高级音频模式状态。
-- 通用提示音滑块目前固定为 `1..=10`。EarFun 源码记录的 wire 值为 `0..=4` 且方向反转，不能直接把当前滑块整数发给 EarFun。查找 UI 是开始/停止按钮，而协议设置值包含左右耳选项；应先限定行为，不把未请求的左右耳选择器扩展进范围。
+- 通用提示音滑块目前固定为 `1..=10`。EarFun 源码记录的 wire 值为 `0..=4` 且方向反转，不能直接把当前滑块整数发给 EarFun。实施前查找 UI 是开始/停止按钮，而协议设置值包含左右耳选项；本轮据用户反馈将其改为卡片内直接选择，不再采用原先仅双耳查找的初步建议。
 
 ## 3. 源码证据与初步设备范围
 
 | 功能 | Gadgetbridge 源码记录 | WaveTune 首期目标与门槛 |
 |---|---|---|
-| 查找耳机 | Air Pro 4 与 Free Pro 3 设置界面/查询路径包含此功能。设置 `0x0332`，查询 `0x0333`；值 `0` 停止、`1` 左耳、`2` 右耳、`3` 双耳。未找到 Air S 对应界面/查询证据。此为客户端源码证据，API 文档未记录硬件成功轨迹。 | Air Pro 4、Free Pro 3。沿用现有开始/停止按钮，开始设为双耳 `3`、停止设为 `0`；不增加单耳选择 UI。设备/耳塞佩戴警告继续保留。 |
+| 查找耳机 | Air Pro 4 与 Free Pro 3 设置界面/查询路径包含此功能。设置 `0x0332`，查询 `0x0333`；值 `0` 停止、`1` 左耳、`2` 右耳、`3` 双耳。未找到 Air S 对应界面/查询证据。此为客户端源码证据，API 文档未记录硬件成功轨迹。 | Air Pro 4、Free Pro 3。卡片内浮动菜单选择左耳、右耳或双耳，单个按钮启动并变为停止；警告文案常驻显示。 |
 | 提示音音量 | Air Pro 4 界面提供此设置，`0x0338 [volume]` 设置、`0x0339` 查询；线值 `0` 最大、`4` 关闭。Free Pro 3 共用的设置请求会查询该项，但其设置界面未提供控制。未找到 Air S 设置证据。未有固件限定的硬件轨迹。 | 首期只对 Air Pro 4 开放写入。Free Pro 3 暂不因 profile 中已有标记而显示可写控件；经后续证据验证后再单独扩展。Air S 不开放。 |
 | 麦克风模式 | Air Pro 4 声音设置提供模式选择；`0x0330 [mode]` 设置、`0x0331` 查询，`0` 自动、`1` 左耳、`2` 右耳。Free Pro 3 的共享设置查询路径包含查询，但界面没有相应控制；未找到 Air S 支持证据。未有硬件成功轨迹或明确固件范围。 | 首期以 Air Pro 4 为候选，仅在具体固件上的单项硬件写入/读回验证通过后开放。Free Pro 3 可暂不开放写入；Air S 不开放。 |
 | Fast Pair / LE Audio 模式 | Gadgetbridge 的 Air Pro 4 设置界面提供 `0x034B` 设置、`0x034C` 查询选项：`0` Fast Pair、`1` LE Audio。源码编码一字节值，通用设置界面有重启确认提示，但未证明需要实际发送重启；无具体固件硬件行为、成功读回或音频链路验证。 | 仅将 Air Pro 4 作为**待验证候选**。硬件验证完整通过前，不新增 profile 可写能力、查询或 UI 控件；不假设设置后应发送 `0x0308` 重启。Free Pro 3、Air S 无支持证据。 |
@@ -83,14 +84,14 @@
 - 在 `src/bluetooth/brands/earfun/init.rs` 中，仅对 profile 支持的功能逐项查询；把响应解析结果写入快照和 diagnostics。查找初始状态应准确反映耳机当前 mode；不可读时保持未知。
 - 在 EarFun controls feature 内实现查找、提示音、麦克风查询/设置；在 sound feature 或单独的高级模式 feature 中实现 `0x034C/0x034B`。遵循 `request()` 响应关联/状态检查，并单独验证写 ACK 与后续 GET 读回。
 - 扩展 `EarFunDriver::handle_command`：按当前 profile 做第二道写入门控；一次仅发送一个设置，等待 ACK，再查询 GET 并比较目标值。仅在匹配时更新 `self.snapshot` 并发出 UI 更新；失败时发出设置错误并推送原确认值/保留状态。
-- 查找按钮开始时发 `SET_FIND_DEVICE(3)`，停止时发 `SET_FIND_DEVICE(0)`；设置后通过 GET 确认并更新 `is_finding_earbuds`/UI 事件。若开关过程中断连、超时或读回不一致，保持原状态并显示错误。
+- 查找卡片按用户选择发送 `SET_FIND_DEVICE(1/2/3)`，停止发送 `SET_FIND_DEVICE(0)`；设置后通过 GET 确认并更新查找模式/UI。若设置过程中断连、超时或读回不一致，保持原状态并显示错误。
 - 高级模式在硬件验证完成之前不加入会话初始化与命令分支。验证通过后仍需确认模式切换对 RFCOMM、系统音频连接和重连生命周期的影响；只有证据要求时才实现显式等待重连/恢复。
 
 **完成标准：** mock RFCOMM 测试证明请求顺序为 SET -> 成功 ACK -> GET -> 比较；错误 ACK、超时、拒绝、错误读回、断连均不产生成功状态。
 
 ### 阶段 4：Controls / Sound UI 与本地化（基础控制代码已完成）
 
-- 复用 Controls 页现有查找按钮和提示音滑块；根据能力隐藏未支持控件，并采用型号描述的滑块范围/映射。音量交互继续防抖，但成功/失败状态由后台确认结果驱动，失败时恢复最近一次确认值。
+- 复用 Controls 页查找卡片和提示音滑块；根据能力在浮动菜单中显示可选查找目标，并以同一个按钮开始/停止查找，按钮状态只由后台确认结果驱动。查找警告常驻在卡片内，不弹出阻断操作的确认对话框。音量交互继续防抖，但成功/失败状态由后台确认结果驱动，失败时恢复最近一次确认值。
 - 在 Controls 页新增麦克风模式选择项（自动、左耳、右耳），绑定强类型状态与命令；只在支持的设备显示。异步设置时禁用控件，收到成功读回后才更新显示。
 - 只有高级模式已通过阶段 0 硬件验证后，才在 Sound/设备音频设置区加入 Google Fast Pair / LE Audio 选项。若验证表明会导致重启/链路中断，按已证实行为添加确认提示与连接恢复 UX；不得照搬 Gadgetbridge 的通用重启确认而推断需要主动重启。
 - 补充中英文 Fluent 标签、描述、状态和错误文案；描述中不要将源码推断写成已验证硬件能力。控件生命周期、设备切换、未知状态和断连重置符合现有 MVI 模式。
@@ -131,6 +132,6 @@ flowchart TD
 | 当前 `send_command()` 后排空数据被误认为 ACK | 新写入走可验证响应关联的请求路径；必须在 GET 读回一致后更新状态。 |
 | 音量 wire 值方向与现有 OPPO UI 不同 | 由 profile 提供型号范围/映射；转换纯函数独立测试，禁止改坏 OPPO 1–10 滑块。 |
 | profile 声明范围宽于客户端设置界面证据 | 首期收窄提示音到 Air Pro 4；Free Pro 3 等待证据后独立启用。 |
-| 查找耳机播放高音量提示 | 继续使用现有佩戴警告；首期仅双耳查找，不添加未请求的单耳交互。 |
+| 查找耳机播放高音量提示 | 在卡片内持续显示取下耳机的警告，并提供即时停止动作；仅对源码确认支持单耳模式的型号显示左右耳选项。 |
 | Fast Pair / LE Audio 切换可能影响连接或要求重启 | 先验证确切型号/固件及实际音频行为；不猜测重启、不默认发送 `0x0308`。 |
 | 查询失败被当成 off/自动/默认音量 | 状态保持 `None`/未知，向用户呈现真实错误或未读状态；不回填成功形状的默认值。 |

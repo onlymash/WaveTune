@@ -109,6 +109,7 @@ fn test_earfun_touch_lock_feature_declaration() {
     assert!(air_pro_4.supports_touch_customization());
     assert!(air_pro_4.supports_touch_lock());
     assert!(air_pro_4.supports_find_device());
+    assert!(air_pro_4.supports_find_device_sides());
     assert!(air_pro_4.supports_prompt_volume());
     assert!(air_pro_4.supports_microphone_mode());
 
@@ -116,6 +117,7 @@ fn test_earfun_touch_lock_feature_declaration() {
     assert!(free_pro_3.supports_touch_customization());
     assert!(free_pro_3.supports_touch_lock());
     assert!(free_pro_3.supports_find_device());
+    assert!(free_pro_3.supports_find_device_sides());
     assert!(!free_pro_3.supports_prompt_volume());
     assert!(!free_pro_3.supports_microphone_mode());
 
@@ -123,6 +125,7 @@ fn test_earfun_touch_lock_feature_declaration() {
     assert!(air_s.supports_touch_customization());
     assert!(!air_s.supports_touch_lock());
     assert!(!air_s.supports_find_device());
+    assert!(!air_s.supports_find_device_sides());
     assert!(!air_s.supports_prompt_volume());
     assert!(!air_s.supports_microphone_mode());
 }

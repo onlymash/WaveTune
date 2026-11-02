@@ -181,6 +181,21 @@ pub enum EarSide {
     Both = 4,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FindEarbudsMode {
+    #[default]
+    Off,
+    Left,
+    Right,
+    Both,
+}
+
+impl FindEarbudsMode {
+    pub const fn is_finding(self) -> bool {
+        !matches!(self, Self::Off)
+    }
+}
+
 impl EarSide {
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {

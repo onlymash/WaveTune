@@ -53,6 +53,7 @@ impl ControlsComponent {
                 supports_sleep: state.supports_sleep_detection,
                 supports_head: state.supports_head_motion,
                 supports_find: state.supports_find_device,
+                supports_find_sides: state.supports_find_device_sides,
                 supports_fit: state.supports_fit_detection,
                 supports_volume: state.supports_prompt_volume,
                 supports_microphone_mode: state.supports_microphone_mode,
@@ -127,8 +128,18 @@ impl ControlsComponent {
         controls_state::update_preferred_devices(&self.widgets, preferred, devices);
     }
 
-    pub fn render_finding_earbuds(&self, finding: bool) {
-        controls_state::update_finding_earbuds(&self.widgets, finding);
+    pub fn render_find_earbuds_mode(&self, mode: Option<crate::protocol::FindEarbudsMode>) {
+        controls_state::update_find_earbuds_mode(&self.widgets, mode);
+    }
+
+    pub fn complete_find_earbuds_request(
+        &self,
+        requested: crate::protocol::FindEarbudsMode,
+        actual: Option<crate::protocol::FindEarbudsMode>,
+    ) {
+        self.widgets
+            .utilities
+            .complete_find_request(requested, actual);
     }
 
     pub fn render_fit_test_running(&self, running: bool) {

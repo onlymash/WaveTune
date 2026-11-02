@@ -248,6 +248,7 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
     let supports_touch_customization = profile.supports_touch_customization();
     let supports_touch_lock = profile.supports_touch_lock();
     let supports_find_device = profile.supports_find_device();
+    let supports_find_device_sides = profile.supports_find_device_sides();
     let supports_prompt_volume = profile.supports_prompt_volume();
     let supports_microphone_mode = profile.supports_microphone_mode();
     let available_codecs: Vec<u8> = compatibility::supported_earfun_codecs(pid)
@@ -594,6 +595,7 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
             supports_touch_customization,
             supports_touch_lock,
             supports_find_device,
+            supports_find_device_sides,
             supports_prompt_volume,
             supports_microphone_mode,
             key_functions,
@@ -603,6 +605,20 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
             prompt_volume_range: supports_prompt_volume.then_some((0, 4)),
             microphone_mode,
             is_finding_earbuds: find_mode.is_some_and(|mode| mode.is_finding()),
+            find_earbuds_mode: find_mode.map(|mode| match mode {
+                crate::protocol::brands::earfun::EarFunFindMode::Off => {
+                    crate::protocol::FindEarbudsMode::Off
+                }
+                crate::protocol::brands::earfun::EarFunFindMode::Left => {
+                    crate::protocol::FindEarbudsMode::Left
+                }
+                crate::protocol::brands::earfun::EarFunFindMode::Right => {
+                    crate::protocol::FindEarbudsMode::Right
+                }
+                crate::protocol::brands::earfun::EarFunFindMode::Both => {
+                    crate::protocol::FindEarbudsMode::Both
+                }
+            }),
             in_ear_detection_enabled,
             ..ControlsSnapshot::default()
         },

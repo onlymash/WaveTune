@@ -223,7 +223,12 @@ mod tests {
         assert!(snapshot.controls.supports_touch_lock);
         assert_eq!(snapshot.controls.touch_lock_enabled, Some(false));
         assert!(snapshot.controls.supports_find_device);
+        assert!(snapshot.controls.supports_find_device_sides);
         assert!(!snapshot.controls.is_finding_earbuds);
+        assert_eq!(
+            snapshot.controls.find_earbuds_mode,
+            Some(crate::protocol::FindEarbudsMode::Off)
+        );
         assert!(snapshot.controls.supports_prompt_volume);
         assert_eq!(snapshot.controls.prompt_volume, Some(2));
         assert_eq!(snapshot.controls.prompt_volume_range, Some((0, 4)));
@@ -332,6 +337,10 @@ mod tests {
         assert_eq!(snapshot.sound.audio_codec, Some(8));
         assert_eq!(snapshot.controls.touch_lock_enabled, Some(true));
         assert!(snapshot.controls.is_finding_earbuds);
+        assert_eq!(
+            snapshot.controls.find_earbuds_mode,
+            Some(crate::protocol::FindEarbudsMode::Both)
+        );
         assert!(snapshot.controls.supports_prompt_volume);
         assert_eq!(snapshot.controls.prompt_volume, None);
         assert!(snapshot.controls.supports_microphone_mode);
@@ -1033,6 +1042,17 @@ mod tests {
             assert_eq!(req.command, EarFunCommands::GET_FIND_DEVICE);
             send_mock_response(&mut device, req.command, vec![0, 3]);
 
+            for (mode, payload) in [(1, vec![0, 1]), (2, vec![0, 2]), (0, vec![0, 0])] {
+                let req = read_mock_request(&mut device);
+                assert_eq!(req.command, EarFunCommands::SET_FIND_DEVICE);
+                assert_eq!(req.payload, vec![mode]);
+                send_mock_response(&mut device, req.command, vec![0]);
+
+                let req = read_mock_request(&mut device);
+                assert_eq!(req.command, EarFunCommands::GET_FIND_DEVICE);
+                send_mock_response(&mut device, req.command, payload);
+            }
+
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::SET_VOICE_PROMPT_VOLUME);
             assert_eq!(req.payload, vec![1]); // UI level 3 maps to wire level 1.
@@ -1070,6 +1090,16 @@ mod tests {
             .unwrap(),
             EarFunFindMode::Both
         );
+        for mode in [
+            EarFunFindMode::Left,
+            EarFunFindMode::Right,
+            EarFunFindMode::Off,
+        ] {
+            assert_eq!(
+                set_find_mode(&mut client, &mut decoder, mode, Some(&updates)).unwrap(),
+                mode
+            );
+        }
         assert_eq!(
             set_prompt_volume(&mut client, &mut decoder, 3, Some(&updates)).unwrap(),
             3

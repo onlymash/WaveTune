@@ -21,8 +21,8 @@ use crate::{
     bluetooth::DeviceSnapshot,
     compatibility::{EqualizerPreset, GestureRow, NoiseMode},
     protocol::{
-        BassEngineLevel, BatteryState, CustomEqualizer, KeyFunction, NoiseCycleState, PairedDevice,
-        PairedDeviceAddress, WearState,
+        BassEngineLevel, BatteryState, CustomEqualizer, FindEarbudsMode, KeyFunction,
+        NoiseCycleState, PairedDevice, PairedDeviceAddress, WearState,
     },
 };
 
@@ -136,6 +136,7 @@ impl HeadsetSessionState {
         self.controls.supports_sleep_detection = snapshot.controls.supports_sleep_detection;
         self.controls.supports_head_motion = snapshot.controls.supports_head_motion;
         self.controls.supports_find_device = snapshot.controls.supports_find_device;
+        self.controls.supports_find_device_sides = snapshot.controls.supports_find_device_sides;
         self.controls.supports_fit_detection = snapshot.controls.supports_fit_detection;
         self.controls.supports_prompt_volume = snapshot.controls.supports_prompt_volume;
         self.controls.supports_microphone_mode = snapshot.controls.supports_microphone_mode;
@@ -147,6 +148,7 @@ impl HeadsetSessionState {
         self.controls.prompt_volume_range = snapshot.controls.prompt_volume_range;
         self.controls.microphone_mode = snapshot.controls.microphone_mode;
         self.controls.is_finding_earbuds = snapshot.controls.is_finding_earbuds;
+        self.controls.find_earbuds_mode = snapshot.controls.find_earbuds_mode;
         self.controls.head_motion = snapshot.controls.head_motion_type;
         self.controls.in_ear_detection = snapshot.controls.in_ear_detection_enabled;
         self.controls.touch_lock_enabled = snapshot.controls.touch_lock_enabled;
@@ -257,6 +259,7 @@ pub struct ControlsState {
     pub supports_sleep_detection: bool,
     pub supports_head_motion: bool,
     pub supports_find_device: bool,
+    pub supports_find_device_sides: bool,
     pub supports_fit_detection: bool,
     pub supports_prompt_volume: bool,
     pub supports_microphone_mode: bool,
@@ -268,6 +271,7 @@ pub struct ControlsState {
     pub prompt_volume_range: Option<(u8, u8)>,
     pub microphone_mode: Option<u8>,
     pub is_finding_earbuds: bool,
+    pub find_earbuds_mode: Option<FindEarbudsMode>,
     pub head_motion: Option<u8>,
     pub in_ear_detection: Option<bool>,
     pub touch_lock_enabled: Option<bool>,
@@ -282,6 +286,7 @@ impl ControlsState {
         self.supports_sleep_detection = false;
         self.supports_head_motion = false;
         self.supports_find_device = false;
+        self.supports_find_device_sides = false;
         self.supports_fit_detection = false;
         self.supports_prompt_volume = false;
         self.supports_microphone_mode = false;
@@ -293,6 +298,7 @@ impl ControlsState {
         self.prompt_volume_range = None;
         self.microphone_mode = None;
         self.is_finding_earbuds = false;
+        self.find_earbuds_mode = None;
         self.head_motion = None;
         self.in_ear_detection = None;
         self.touch_lock_enabled = None;

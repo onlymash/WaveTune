@@ -110,6 +110,7 @@ impl HeadsetDriver for OppoDriver {
             key_functions: snapshot.controls.key_functions.clone(),
             noise_cycle: snapshot.controls.noise_cycle.clone(),
             is_finding_earbuds: snapshot.controls.is_finding_earbuds,
+            find_earbuds_mode: snapshot.controls.find_earbuds_mode,
             prompt_volume: snapshot.controls.prompt_volume,
             head_motion: snapshot.controls.head_motion_type,
             in_ear_detection: snapshot.controls.in_ear_detection_enabled,

@@ -99,6 +99,11 @@ impl<'a, T: Read + Write> OppoFeatureContext<'a, T> {
     }
 
     #[inline]
+    pub fn supports_find_device_sides(&self) -> bool {
+        self.profile.is_some_and(|p| p.supports_find_device_sides())
+    }
+
+    #[inline]
     pub fn supports_fit_detection(&self) -> bool {
         self.profile.is_some_and(|p| p.supports_fit_detection())
     }
@@ -125,6 +130,7 @@ pub struct OppoControlsState {
     pub key_functions: Vec<KeyFunction>,
     pub noise_cycle: NoiseCycleState,
     pub is_finding_earbuds: bool,
+    pub find_earbuds_mode: Option<crate::protocol::FindEarbudsMode>,
     pub prompt_volume: Option<u8>,
     pub head_motion: Option<u8>,
     pub in_ear_detection: Option<bool>,
