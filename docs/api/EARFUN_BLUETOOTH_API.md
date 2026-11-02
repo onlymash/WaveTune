@@ -82,7 +82,7 @@ Bit 7..0    : Command Code
 
 ## 3. Session Initialization Sequence
 
-When connecting over RFCOMM Channel 11, the official client and Gadgetbridge perform the following handshake:
+When connecting over RFCOMM Channel 11, Gadgetbridge's Air Pro 4 and Free Pro 3 implementations perform the following handshake:
 
 1. **Query Firmware Version**:
    - Host sends: `FF 04 00 00 00 0A 03 09`
@@ -106,6 +106,7 @@ When connecting over RFCOMM Channel 11, the official client and Gadgetbridge per
    - Voice Prompt Volume: `0x0339`
    - Microphone Mode: `0x0331`
    - Find Device: `0x0333`
+   - This extended request set is used by Gadgetbridge's Air Pro 4 and Free Pro 3 protocol classes. Air S uses the shared basic request for earbud battery and touch gestures; do not infer support for these extended queries on Air S.
 
 ---
 
@@ -289,13 +290,11 @@ EarFun exposes audio codec selection and audio mode configuration via GAIA V1/V2
     - `0x02`: Active when Stable Connection (SBC/AAC) or LDAC is engaged.
     - `0x00`: Idle / default state.
   - Automatically sent by the headset to the host when an audio connection changes or when a second device connects.
-- **Advanced Audio Mode (`0x034B` Set / `0x034C` Query)**:
-  - Query: `0x034C` $\to$ Response `0x834C [00, mode]`
-  - Set: `0x034B [mode]`
-  - Modes:
-    - `0`: Google Fast Pair mode
-    - `1`: LE Audio (Bluetooth Low Energy Audio / LC3 broadcast and unicast)
-  - Also triggers an earbud reboot upon switching.
+- **Advanced Audio Mode (`0x034B` Set / `0x034C` Query; Gadgetbridge source evidence only)**:
+  - Gadgetbridge defines `0x034C` as the query command and `0x034B` as the set command. Its response handler reads the mode from payload byte 1; the source does not validate the preceding status byte.
+  - Gadgetbridge's option values are `0` = Google Fast Pair and `1` = LE Audio. The Air Pro 4 settings screen exposes these two choices; this is evidence of a client implementation, not evidence that either mode works on a particular headset or firmware.
+  - The inspected source encodes the selected value as a one-byte `0x034B` payload. It registers a generic reboot-confirmation dialog for this preference, but its encoder does not append a `0x0308` reboot command. Whether the headset reboots itself, whether a separate reboot is needed, and the actual effects of either mode are **unverified**.
+  - No model/firmware-specific hardware validation, LE Audio codec/transport behavior, Fast Pair behavior, or successful response trace was found in the inspected Gadgetbridge source. Do not treat the advertised descriptions as proof of feature support.
 
 ---
 
@@ -396,9 +395,28 @@ stateDiagram-v2
 ---
 
 ### 4.9 Voice Prompt Volume
-- **Query**: `0x0339` $\to$ Response `0x8339 [00, vol]`
-- **Set**: `0x0338 [vol]`
-- **Scale**: `0` (Maximum) to `4` (Minimum / Mute).
+- **Gadgetbridge command path**:
+  - Query: `0x0339` with an empty request payload. The response handler reads payload byte 1 from command `0x8339` (the common response form is `[status, volume]`; the handler does not validate the status byte).
+  - Set: `0x0338 [volume]`, one byte.
+  - Values: `0` = maximum and `4` = off; intermediate values are `1`–`3`. Gadgetbridge reverses this range for its 0–4 slider (`wire value = 4 - slider value`).
+- **Model/source scope**: The settings control and request are present in Gadgetbridge's EarFun Air Pro 4 implementation. The shared Air Pro 4 settings request is also used by Free Pro 3, but the inspected Free Pro 3 settings screen does not expose a voice-prompt-volume control. No Air S settings request/UI for this feature was found.
+- **Validation**: These semantics are source-derived; no successful hardware read/write trace or firmware-specific qualification was found for this feature.
+
+#### 4.9.1 Find Device
+- **Gadgetbridge command path**:
+  - Query: `0x0333` with an empty request payload. The response handler reads payload byte 1 from command `0x8333` (the common response form is `[status, mode]`; the handler does not validate the status byte).
+  - Set: `0x0332 [mode]`, one byte.
+  - Values: `0` = off, `1` = left earbud, `2` = right earbud, `3` = both earbuds. Gadgetbridge's setting offers precisely these four values.
+- **Model/source scope**: The Find Device setting is included in the Air Pro 4 and Free Pro 3 settings screens, and both model protocols send the query in their settings request. No corresponding Air S UI or query was found.
+- **Behavior and safety**: Gadgetbridge's UI text says this option plays a loud sound and warns users not to wear the headphones. This is a client warning, not a hardware-verified description of sound pattern, duration, or loudness. No successful hardware command trace or firmware-specific qualification was found.
+
+#### 4.9.2 Microphone Mode
+- **Gadgetbridge command path**:
+  - Query: `0x0331` with an empty request payload. The response handler reads payload byte 1 from command `0x8331` (the common response form is `[status, mode]`; the handler does not validate the status byte).
+  - Set: `0x0330 [mode]`, one byte.
+  - Values: `0` = automatic earbud selection, `1` = left earbud, `2` = right earbud. These values appear in Gadgetbridge's command definitions and settings choices.
+- **Model/source scope**: The microphone-mode control is included in the Air Pro 4 sound settings and its query is sent by the Air Pro 4 settings request. Free Pro 3 uses the same query request code path but its inspected settings screen does not expose this control. No Air S support evidence was found.
+- **Reboot/validation**: Gadgetbridge attaches a generic reboot-confirmation dialog to changes, but the microphone-mode encoder sends only `0x0330 [mode]`; it does not append `0x0308`. A required reboot and successful mode changes on hardware are not confirmed by the inspected source.
 
 ---
 
@@ -491,3 +509,14 @@ RFCOMM Connection to Channel 11: SUCCESS
 [RX] Query Rejected:    FF 03 00 01 00 1D 0F 82 01 (Error 0x0F82, STATUS_NOT_SUPPORTED)
 ```
 
+## 6. Gadgetbridge Source Evidence and Validation Boundary
+
+The command names, client-side enum values, request encoding, response handling, and model-specific settings described in Sections 4.7.3 and 4.9–4.9.2 are based on the local Gadgetbridge checkout at revision `86703c8006`:
+
+- `app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunPacket.java`
+- `app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunPacketEncoder.java`
+- `app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunProtocol.java`
+- `app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunResponseHandler.java`
+- `app/src/main/java/nodomain/freeyourgadget/gadgetbridge/devices/earfun/EarFunAirPro4Coordinator.java` and `EarFunFreePro3Coordinator.java`, plus their respective settings XML.
+
+These are **client-source references**, not hardware-validated protocol facts. Gadgetbridge exposes the find-device setting for Air Pro 4 and Free Pro 3, and voice-prompt volume, microphone mode, and advanced audio mode in the Air Pro 4 settings. Its Air Pro 4 and Free Pro 3 protocols request the extended settings, while Air S does not. The documented Air Pro 4 live verification above does not include successful tests of these controls; no firmware-specific evidence for them or working LE Audio / Google Fast Pair switching was found. Treat all such on-device behavior as unverified until separately tested and recorded.
