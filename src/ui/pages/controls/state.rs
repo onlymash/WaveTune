@@ -34,6 +34,9 @@ pub(crate) struct ControlsFeaturesViewState<'a> {
     pub supports_find: bool,
     pub supports_fit: bool,
     pub supports_volume: bool,
+    pub supports_microphone_mode: bool,
+    pub prompt_volume_range: Option<(u8, u8)>,
+    pub microphone_mode: Option<u8>,
     pub gesture_rows: &'a [GestureRow],
 }
 
@@ -52,7 +55,10 @@ pub(crate) fn update_controls_features(
         state.supports_wear,
         state.supports_sleep,
         state.supports_volume,
+        state.supports_microphone_mode,
+        state.prompt_volume_range,
     );
+    widgets.features.set_microphone_mode(state.microphone_mode);
 
     widgets.head_motion.set_supported(state.supports_head);
 

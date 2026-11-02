@@ -37,7 +37,10 @@ use crate::protocol::{BatteryState, FirmwareVersions, WearPart, WearState};
 
 use super::driver::EarFunDriver;
 use super::features::{
-    controls::{query_touch_actions, query_touch_lock},
+    controls::{
+        query_find_mode, query_microphone_mode, query_prompt_volume, query_touch_actions,
+        query_touch_lock,
+    },
     dual_device::read_earfun_paired_devices,
     noise::earfun_mode_to_protocol_index,
 };
@@ -244,6 +247,9 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
     let supports_audio_codec = profile.supports_audio_codec();
     let supports_touch_customization = profile.supports_touch_customization();
     let supports_touch_lock = profile.supports_touch_lock();
+    let supports_find_device = profile.supports_find_device();
+    let supports_prompt_volume = profile.supports_prompt_volume();
+    let supports_microphone_mode = profile.supports_microphone_mode();
     let available_codecs: Vec<u8> = compatibility::supported_earfun_codecs(pid)
         .iter()
         .map(|c| c.as_u8())
@@ -458,6 +464,51 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
         None
     };
 
+    let find_mode = if supports_find_device {
+        match query_find_mode(stream, &mut decoder, updates) {
+            Ok(mode) => Some(mode),
+            Err(error) => {
+                probe_errors.push(format!("Find Device query failed: {error}"));
+                None
+            }
+        }
+    } else {
+        None
+    };
+    if find_mode.is_some() {
+        detected_features.push("find-device".to_string());
+    }
+
+    let prompt_volume = if supports_prompt_volume {
+        match query_prompt_volume(stream, &mut decoder, updates) {
+            Ok(volume) => Some(volume),
+            Err(error) => {
+                probe_errors.push(format!("Voice prompt volume query failed: {error}"));
+                None
+            }
+        }
+    } else {
+        None
+    };
+    if prompt_volume.is_some() {
+        detected_features.push("prompt-volume".to_string());
+    }
+
+    let microphone_mode = if supports_microphone_mode {
+        match query_microphone_mode(stream, &mut decoder, updates) {
+            Ok(mode) => Some(mode as u8),
+            Err(error) => {
+                probe_errors.push(format!("Microphone mode query failed: {error}"));
+                None
+            }
+        }
+    } else {
+        None
+    };
+    if microphone_mode.is_some() {
+        detected_features.push("microphone-mode".to_string());
+    }
+
     // When connected via RFCOMM, earbuds are active and in-ear
     let wear = if supports_wear_detection {
         WearState {
@@ -542,9 +593,16 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
         controls: ControlsSnapshot {
             supports_touch_customization,
             supports_touch_lock,
+            supports_find_device,
+            supports_prompt_volume,
+            supports_microphone_mode,
             key_functions,
             gesture_rows,
             touch_lock_enabled,
+            prompt_volume,
+            prompt_volume_range: supports_prompt_volume.then_some((0, 4)),
+            microphone_mode,
+            is_finding_earbuds: find_mode.is_some_and(|mode| mode.is_finding()),
             in_ear_detection_enabled,
             ..ControlsSnapshot::default()
         },

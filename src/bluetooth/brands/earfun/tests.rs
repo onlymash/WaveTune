@@ -189,6 +189,18 @@ mod tests {
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::GET_TOUCH_MODE);
             send_mock_response(&mut device, req.command, vec![0x00, 0x00]); // Disabled
+
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_FIND_DEVICE);
+            send_mock_response(&mut device, req.command, vec![0x00, 0x00]);
+
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_VOICE_PROMPT_VOLUME);
+            send_mock_response(&mut device, req.command, vec![0x00, 0x02]);
+
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_MICROPHONE_MODE);
+            send_mock_response(&mut device, req.command, vec![0x00, 0x01]);
         });
 
         let (snapshot, _) =
@@ -210,6 +222,13 @@ mod tests {
         assert_eq!(snapshot.controls.key_functions.len(), 8);
         assert!(snapshot.controls.supports_touch_lock);
         assert_eq!(snapshot.controls.touch_lock_enabled, Some(false));
+        assert!(snapshot.controls.supports_find_device);
+        assert!(!snapshot.controls.is_finding_earbuds);
+        assert!(snapshot.controls.supports_prompt_volume);
+        assert_eq!(snapshot.controls.prompt_volume, Some(2));
+        assert_eq!(snapshot.controls.prompt_volume_range, Some((0, 4)));
+        assert!(snapshot.controls.supports_microphone_mode);
+        assert_eq!(snapshot.controls.microphone_mode, Some(1));
 
         let devs = snapshot.dual_device.paired_devices.unwrap();
         assert_eq!(devs.len(), 2);
@@ -296,6 +315,10 @@ mod tests {
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::GET_TOUCH_MODE);
             send_mock_response(&mut device, req.command, vec![0x00, 0x01]); // Enabled
+
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_FIND_DEVICE);
+            send_mock_response(&mut device, req.command, vec![0x00, 0x03]);
         });
 
         let (snapshot, _) =
@@ -308,6 +331,10 @@ mod tests {
         assert!(snapshot.battery.case.is_none());
         assert_eq!(snapshot.sound.audio_codec, Some(8));
         assert_eq!(snapshot.controls.touch_lock_enabled, Some(true));
+        assert!(snapshot.controls.is_finding_earbuds);
+        assert!(snapshot.controls.supports_prompt_volume);
+        assert_eq!(snapshot.controls.prompt_volume, None);
+        assert!(snapshot.controls.supports_microphone_mode);
 
         device_thread.join().unwrap();
     }
@@ -565,6 +592,10 @@ mod tests {
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::GET_TOUCH_MODE);
             send_mock_response(&mut device, req.command, vec![0x00, 0x00]); // Disabled
+
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_FIND_DEVICE);
+            send_mock_response(&mut device, req.command, vec![0x00, 0x00]);
         });
 
         // Test that custom device name does NOT affect identification:
@@ -586,6 +617,9 @@ mod tests {
         assert_eq!(snapshot.controls.key_functions.len(), 8);
         assert!(snapshot.controls.supports_touch_lock);
         assert_eq!(snapshot.controls.touch_lock_enabled, Some(false));
+        assert!(snapshot.controls.supports_find_device);
+        assert!(!snapshot.controls.supports_prompt_volume);
+        assert!(!snapshot.controls.supports_microphone_mode);
 
         device_thread.join().unwrap();
     }
@@ -973,5 +1007,94 @@ mod tests {
             selected_eq,
             "Should emit Equalizer(100) when custom selected"
         );
+    }
+
+    #[test]
+    fn test_earfun_controls_require_ack_and_matching_readback() {
+        use crate::bluetooth::brands::earfun::features::controls::{
+            set_find_mode, set_microphone_mode, set_prompt_volume,
+        };
+        use crate::protocol::brands::earfun::{EarFunFindMode, EarFunMicrophoneMode};
+
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+
+        let device_thread = thread::spawn(move || {
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_FIND_DEVICE);
+            assert_eq!(req.payload, vec![3]);
+            send_mock_response(&mut device, req.command, vec![0]);
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_FIND_DEVICE);
+            send_mock_response(&mut device, req.command, vec![0, 3]);
+
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_VOICE_PROMPT_VOLUME);
+            assert_eq!(req.payload, vec![1]); // UI level 3 maps to wire level 1.
+            send_mock_response(&mut device, req.command, vec![0]);
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_VOICE_PROMPT_VOLUME);
+            send_mock_response(&mut device, req.command, vec![0, 1]);
+
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_MICROPHONE_MODE);
+            assert_eq!(req.payload, vec![2]);
+            send_mock_response(&mut device, req.command, vec![0]);
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_MICROPHONE_MODE);
+            send_mock_response(&mut device, req.command, vec![0, 2]);
+
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_MICROPHONE_MODE);
+            assert_eq!(req.payload, vec![1]);
+            send_mock_response(&mut device, req.command, vec![0]);
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_MICROPHONE_MODE);
+            send_mock_response(&mut device, req.command, vec![0, 0]);
+        });
+
+        let (updates, _rx) = mpsc::channel();
+        let mut decoder = EarFunFrameDecoder::default();
+        assert_eq!(
+            set_find_mode(
+                &mut client,
+                &mut decoder,
+                EarFunFindMode::Both,
+                Some(&updates)
+            )
+            .unwrap(),
+            EarFunFindMode::Both
+        );
+        assert_eq!(
+            set_prompt_volume(&mut client, &mut decoder, 3, Some(&updates)).unwrap(),
+            3
+        );
+        assert_eq!(
+            set_microphone_mode(
+                &mut client,
+                &mut decoder,
+                EarFunMicrophoneMode::Right,
+                Some(&updates)
+            )
+            .unwrap(),
+            EarFunMicrophoneMode::Right
+        );
+        assert!(
+            set_microphone_mode(
+                &mut client,
+                &mut decoder,
+                EarFunMicrophoneMode::Left,
+                Some(&updates)
+            )
+            .is_err(),
+            "mismatching readback must not be reported as success"
+        );
+
+        device_thread.join().unwrap();
     }
 }

@@ -61,7 +61,7 @@ vivo、漫步者等多品牌耳机支持奠定基础。
   引入 `compatibility::registry::builtin_profiles()` 统一聚合多品牌型号目录，为后续支持 Huawei、Xiaomi、Vivo、
   Edifier 等多品牌耳机建立了清晰的可扩展边界。
 - 已完成控制页面（Controls Page）完整功能移植：
-  包括左右耳手势触控定制（单击/双击/三击/长按/滑动/通话控制）、长按噪声控制模式循环（Noise Cycle）、双设备连接开关与首选连接设备下拉（Preferred Device）、佩戴检测自动暂停恢复开关、入睡检测开关、头部动作接听控制、耳机实用工具（查找耳机铃声播放与入耳防伤耳警告弹窗、耳塞贴合度气密性测试 Fit Test）以及提示音音量滑块防抖控制。相关协议编解码、后台会话轮询、UI 控件生命周期与回读门控均已完整贯通并通过单元测试。
+  包括左右耳手势触控定制（单击/双击/三击/长按/滑动/通话控制）、长按噪声控制模式循环（Noise Cycle）、双设备连接开关与首选连接设备下拉（Preferred Device）、佩戴检测自动暂停恢复开关、入睡检测开关、头部动作接听控制、耳机实用工具（查找耳机铃声播放与入耳防伤耳警告弹窗、耳塞贴合度气密性测试 Fit Test）以及提示音音量滑块防抖控制。EarFun Air Pro 4 另有麦克风模式选择（自动/左耳/右耳）；EarFun 的查找、提示音音量与麦克风功能按型号 profile 开放，设置后等待 ACK 并进行读回校验。相关自动化协议/会话测试通过，但新增 EarFun 控件尚未真机验证，详见 [EarFun 高级控制开发计划](EARFUN_ADVANCED_CONTROLS_DEVELOPMENT_PLAN.md)。
 - 已完成后台驻留、系统托盘与 GNOME 快捷设置面板（Quick Settings）集成：
   应用支持 `--background` 静默启动、关闭主窗口隐藏驻留（`Ctrl+Q` / 主菜单完全退出）及可选登录后台自启，并在耳机断开后重新武装自动重连；通过内置 `gtk::gio` 在 Session D-Bus（`io.github.onlymash.WaveTune` -> `/io/github/onlymash/WaveTune/QuickSettings`）暴露经确认的只读设备状态与降噪切换方法（不含任何蓝牙地址等隐私信息）；同时导出 StatusNotifierItem（`/StatusNotifierItem`）与 DBusMenu（`/io/github/onlymash/WaveTune/Menu`），在后台模式下提供单色符号托盘图标、设备/电量摘要、受佩戴门控的降噪切换及打开/退出菜单项，兼容 GNOME AppIndicator 扩展、KDE Plasma、XFCE、Waybar 等 SNI 宿主；配套 GNOME 45–51 ESM 扩展 `wavetune@onlymash.github.com` 以非乐观更新方式集成到右上角快捷面板，并随打包脚本一并分发。
 

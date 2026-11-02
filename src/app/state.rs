@@ -138,11 +138,15 @@ impl HeadsetSessionState {
         self.controls.supports_find_device = snapshot.controls.supports_find_device;
         self.controls.supports_fit_detection = snapshot.controls.supports_fit_detection;
         self.controls.supports_prompt_volume = snapshot.controls.supports_prompt_volume;
+        self.controls.supports_microphone_mode = snapshot.controls.supports_microphone_mode;
 
         self.controls.key_functions = snapshot.controls.key_functions.clone();
         self.controls.gesture_rows = snapshot.controls.gesture_rows.clone();
         self.controls.noise_cycle = Some(snapshot.controls.noise_cycle);
         self.controls.prompt_volume = snapshot.controls.prompt_volume;
+        self.controls.prompt_volume_range = snapshot.controls.prompt_volume_range;
+        self.controls.microphone_mode = snapshot.controls.microphone_mode;
+        self.controls.is_finding_earbuds = snapshot.controls.is_finding_earbuds;
         self.controls.head_motion = snapshot.controls.head_motion_type;
         self.controls.in_ear_detection = snapshot.controls.in_ear_detection_enabled;
         self.controls.touch_lock_enabled = snapshot.controls.touch_lock_enabled;
@@ -255,11 +259,15 @@ pub struct ControlsState {
     pub supports_find_device: bool,
     pub supports_fit_detection: bool,
     pub supports_prompt_volume: bool,
+    pub supports_microphone_mode: bool,
 
     pub key_functions: Vec<KeyFunction>,
     pub gesture_rows: Vec<GestureRow>,
     pub noise_cycle: Option<NoiseCycleState>,
     pub prompt_volume: Option<u8>,
+    pub prompt_volume_range: Option<(u8, u8)>,
+    pub microphone_mode: Option<u8>,
+    pub is_finding_earbuds: bool,
     pub head_motion: Option<u8>,
     pub in_ear_detection: Option<bool>,
     pub touch_lock_enabled: Option<bool>,
@@ -276,11 +284,15 @@ impl ControlsState {
         self.supports_find_device = false;
         self.supports_fit_detection = false;
         self.supports_prompt_volume = false;
+        self.supports_microphone_mode = false;
 
         self.key_functions.clear();
         self.gesture_rows.clear();
         self.noise_cycle = None;
         self.prompt_volume = None;
+        self.prompt_volume_range = None;
+        self.microphone_mode = None;
+        self.is_finding_earbuds = false;
         self.head_motion = None;
         self.in_ear_detection = None;
         self.touch_lock_enabled = None;

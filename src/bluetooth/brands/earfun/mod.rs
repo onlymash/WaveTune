@@ -38,8 +38,9 @@ pub use driver::EarFunDriver;
 #[allow(unused_imports)]
 pub use features::{
     controls::{
-        query_touch_actions, query_touch_lock, set_in_ear_detection, set_touch_action,
-        set_touch_lock,
+        query_find_mode, query_microphone_mode, query_prompt_volume, query_touch_actions,
+        query_touch_lock, set_find_mode, set_in_ear_detection, set_microphone_mode,
+        set_prompt_volume, set_touch_action, set_touch_lock,
     },
     dual_device::{read_earfun_paired_devices, set_dual_device},
     noise::{earfun_mode_to_protocol_index, protocol_index_to_earfun_mode, set_noise_mode},

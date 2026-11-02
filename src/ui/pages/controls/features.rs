@@ -29,6 +29,7 @@ pub(crate) struct FeatureTogglesWidgets {
     dual_row: adw::ActionRow,
     dual_switch: Switch,
     preferred_row: adw::ComboRow,
+    microphone_mode_row: adw::ComboRow,
     in_ear_row: adw::ActionRow,
     in_ear_switch: Switch,
     sleep_row: adw::ActionRow,
@@ -40,6 +41,7 @@ pub(crate) struct FeatureTogglesWidgets {
     in_ear_flag: crate::ui::ReentrancyFlag,
     sleep_flag: crate::ui::ReentrancyFlag,
     preferred_flag: crate::ui::ReentrancyFlag,
+    microphone_mode_flag: crate::ui::ReentrancyFlag,
     prompt_volume_flag: crate::ui::ReentrancyFlag,
 }
 
@@ -50,9 +52,16 @@ impl FeatureTogglesWidgets {
         supports_wear: bool,
         supports_sleep: bool,
         supports_volume: bool,
+        supports_microphone_mode: bool,
+        prompt_volume_range: Option<(u8, u8)>,
     ) {
-        self.features_group
-            .set_visible(supports_dual || supports_wear || supports_sleep || supports_volume);
+        self.features_group.set_visible(
+            supports_dual
+                || supports_wear
+                || supports_sleep
+                || supports_volume
+                || supports_microphone_mode,
+        );
         self.dual_row.set_visible(supports_dual);
         self.dual_switch.set_sensitive(supports_dual);
         self.dual_row.set_sensitive(supports_dual);
@@ -69,6 +78,15 @@ impl FeatureTogglesWidgets {
         self.sleep_row.set_sensitive(supports_sleep);
 
         self.prompt_volume_row.set_visible(supports_volume);
+        self.prompt_volume_scale.set_sensitive(false);
+        self.microphone_mode_row
+            .set_visible(supports_microphone_mode);
+        self.microphone_mode_row.set_sensitive(false);
+        if let Some((min, max)) = prompt_volume_range.filter(|_| supports_volume) {
+            self.prompt_volume_scale.set_range(min as f64, max as f64);
+        } else {
+            self.prompt_volume_scale.set_range(1.0, 10.0);
+        }
     }
 
     pub fn set_dual_device(&self, enabled: bool) {
@@ -128,6 +146,16 @@ impl FeatureTogglesWidgets {
         self.prompt_volume_scale.set_sensitive(true);
     }
 
+    pub fn set_microphone_mode(&self, mode: Option<u8>) {
+        let _guard = self.microphone_mode_flag.enter();
+        self.microphone_mode_row.set_selected_id(mode);
+        self.microphone_mode_row.set_sensitive(mode.is_some());
+    }
+
+    pub fn set_microphone_mode_sensitive(&self, sensitive: bool) {
+        self.microphone_mode_row.set_sensitive(sensitive);
+    }
+
     pub fn set_preferred_devices(
         &self,
         preferred: Option<PairedDeviceAddress>,
@@ -178,6 +206,11 @@ impl FeatureTogglesWidgets {
         self.sleep_switch.set_active(false);
         self.sleep_switch.set_sensitive(false);
         self.sleep_row.set_sensitive(false);
+        self.prompt_volume_scale.set_sensitive(false);
+        self.microphone_mode_row.set_selected_id(None);
+        self.microphone_mode_row.set_visible(false);
+        self.microphone_mode_row.set_sensitive(false);
+        self.prompt_volume_scale.set_range(1.0, 10.0);
     }
 
     pub fn connect_dual_toggled<F>(&self, callback: F)
@@ -238,6 +271,24 @@ impl FeatureTogglesWidgets {
                     return;
                 }
                 callback(vol);
+            });
+    }
+
+    pub fn connect_microphone_mode_selected<F>(&self, callback: F)
+    where
+        F: Fn(u8) + 'static,
+    {
+        let flag = self.microphone_mode_flag.clone();
+        self.microphone_mode_row
+            .connect_selected_notify(move |row| {
+                if flag.is_updating() {
+                    return;
+                }
+                let Some(mode) = row.selected_id() else {
+                    return;
+                };
+                row.set_sensitive(false);
+                callback(mode);
             });
     }
 
@@ -325,6 +376,19 @@ pub(crate) fn build_features_group() -> (adw::PreferencesGroup, FeatureTogglesWi
     );
     features_group.add(&preferred_row);
 
+    let microphone_mode_row = combo_row(
+        &crate::t!("controls-microphone-mode-title"),
+        Some(&crate::t!("controls-microphone-mode-desc")),
+    );
+    microphone_mode_row.set_items(&[
+        (0, crate::t!("controls-microphone-mode-auto")),
+        (1, crate::t!("controls-microphone-mode-left")),
+        (2, crate::t!("controls-microphone-mode-right")),
+    ]);
+    microphone_mode_row.set_visible(false);
+    microphone_mode_row.set_sensitive(false);
+    features_group.add(&microphone_mode_row);
+
     let (in_ear_row, in_ear_switch) = switch_row(
         &crate::t!("wear-detection"),
         Some(&crate::t!("wear-auto-pause-resume-desc")),
@@ -359,6 +423,7 @@ pub(crate) fn build_features_group() -> (adw::PreferencesGroup, FeatureTogglesWi
         dual_row,
         dual_switch,
         preferred_row,
+        microphone_mode_row,
         in_ear_row,
         in_ear_switch,
         sleep_row,
@@ -370,6 +435,7 @@ pub(crate) fn build_features_group() -> (adw::PreferencesGroup, FeatureTogglesWi
         in_ear_flag: crate::ui::ReentrancyFlag::new(),
         sleep_flag: crate::ui::ReentrancyFlag::new(),
         preferred_flag: crate::ui::ReentrancyFlag::new(),
+        microphone_mode_flag: crate::ui::ReentrancyFlag::new(),
         prompt_volume_flag: crate::ui::ReentrancyFlag::new(),
     };
 

@@ -55,6 +55,9 @@ impl ControlsComponent {
                 supports_find: state.supports_find_device,
                 supports_fit: state.supports_fit_detection,
                 supports_volume: state.supports_prompt_volume,
+                supports_microphone_mode: state.supports_microphone_mode,
+                prompt_volume_range: state.prompt_volume_range,
+                microphone_mode: state.microphone_mode,
                 gesture_rows: &state.gesture_rows,
             },
         );
@@ -79,6 +82,10 @@ impl ControlsComponent {
         if let Some(vol) = volume {
             controls_state::update_prompt_volume(&self.widgets, vol);
         }
+    }
+
+    pub fn render_microphone_mode(&self, mode: Option<u8>) {
+        self.widgets.features.set_microphone_mode(mode);
     }
 
     pub fn render_head_motion(&self, motion_type: Option<u8>) {
@@ -144,6 +151,7 @@ impl ControlsComponent {
         self.widgets.features.set_dual_sensitive(true);
         self.widgets.features.set_in_ear_sensitive(true);
         self.widgets.features.set_sleep_sensitive(true);
+        self.widgets.features.set_microphone_mode_sensitive(true);
         self.widgets.features.set_preferred_sensitive(true);
         self.widgets.head_motion.set_switch_sensitive(true);
         self.widgets.head_motion.set_motion_sensitive(true);

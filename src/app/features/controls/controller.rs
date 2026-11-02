@@ -67,6 +67,7 @@ impl ControlsController {
         self.bind_noise_cycle_events();
         self.bind_find_and_fit_events();
         self.bind_prompt_volume_events();
+        self.bind_microphone_mode_events();
         self.bind_head_motion_events();
         self.bind_dual_device_events();
         self.bind_detection_events();
@@ -271,6 +272,7 @@ impl ControlsController {
     fn bind_prompt_volume_events(&self) {
         let debounce = self.prompt_volume_debounce_source.clone();
         let context = self.context.clone();
+        let component = self.component.clone();
 
         self.component
             .widgets
@@ -282,6 +284,7 @@ impl ControlsController {
 
                 let debounce_clone = debounce.clone();
                 let context = context.clone();
+                let component = component.clone();
 
                 let source_id =
                     gtk::glib::timeout_add_local(Duration::from_millis(500), move || {
@@ -291,10 +294,27 @@ impl ControlsController {
                         {
                             context
                                 .send_status(crate::t!("controls-prompt-volume-send-failed", err));
+                            let volume = context.session_state.borrow().controls.prompt_volume;
+                            component.render_prompt_volume(volume);
                         }
                         gtk::glib::ControlFlow::Break
                     });
                 *debounce.borrow_mut() = Some(source_id);
+            });
+    }
+
+    fn bind_microphone_mode_events(&self) {
+        let context = self.context.clone();
+        let component = self.component.clone();
+        self.component
+            .widgets
+            .features
+            .connect_microphone_mode_selected(move |mode| {
+                if let Err(error) = context.send_command(WorkerCommand::SetMicrophoneMode(mode)) {
+                    context.send_status(crate::t!("controls-microphone-mode-send-failed", error));
+                    let current = context.session_state.borrow().controls.microphone_mode;
+                    component.render_microphone_mode(current);
+                }
             });
     }
 
@@ -480,6 +500,11 @@ impl ControlsController {
                 self.component.render_sleep(st.controls.sleep_detection);
                 self.component
                     .render_prompt_volume(st.controls.prompt_volume);
+                self.is_finding_earbuds.set(st.controls.is_finding_earbuds);
+                self.component
+                    .render_finding_earbuds(st.controls.is_finding_earbuds);
+                self.component
+                    .render_microphone_mode(st.controls.microphone_mode);
                 self.component.render_head_motion(st.controls.head_motion);
                 self.component.render_preferred_devices(
                     st.controls.preferred_device,
@@ -534,6 +559,11 @@ impl ControlsController {
             }
             UiUpdate::IsFindingEarbuds(finding) => {
                 self.is_finding_earbuds.set(*finding);
+                self.context
+                    .session_state
+                    .borrow_mut()
+                    .controls
+                    .is_finding_earbuds = *finding;
                 self.component.render_finding_earbuds(*finding);
                 true
             }
@@ -554,6 +584,19 @@ impl ControlsController {
                     st.controls.prompt_volume = Some(*volume);
                 }
                 self.component.render_prompt_volume(Some(*volume));
+                true
+            }
+            UiUpdate::MicrophoneMode(mode) => {
+                self.context
+                    .session_state
+                    .borrow_mut()
+                    .controls
+                    .microphone_mode = *mode;
+                self.component.render_microphone_mode(*mode);
+                self.component
+                    .widgets
+                    .features
+                    .set_microphone_mode_sensitive(mode.is_some());
                 true
             }
             UiUpdate::HeadMotionType(motion_type) => {
@@ -659,6 +702,7 @@ impl ControlsController {
         }
         self.component.reset();
         self.selected_ear.set(EarSide::Left);
+        self.is_finding_earbuds.set(false);
         self.component
             .widgets
             .gestures

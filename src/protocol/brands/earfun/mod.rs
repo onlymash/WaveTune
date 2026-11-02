@@ -19,6 +19,7 @@ pub mod earfun_commands;
 pub mod earfun_controls;
 pub mod earfun_packet;
 pub mod earfun_parsers;
+pub mod earfun_system;
 #[cfg(test)]
 mod tests;
 
@@ -26,3 +27,4 @@ pub use earfun_commands::*;
 pub use earfun_controls::*;
 pub use earfun_packet::*;
 pub use earfun_parsers::*;
+pub use earfun_system::*;

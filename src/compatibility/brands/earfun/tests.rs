@@ -108,14 +108,23 @@ fn test_earfun_touch_lock_feature_declaration() {
     let air_pro_4 = profile_for_product_id(EARFUN_AIR_PRO_4_PRODUCT_ID).unwrap();
     assert!(air_pro_4.supports_touch_customization());
     assert!(air_pro_4.supports_touch_lock());
+    assert!(air_pro_4.supports_find_device());
+    assert!(air_pro_4.supports_prompt_volume());
+    assert!(air_pro_4.supports_microphone_mode());
 
     let free_pro_3 = profile_for_product_id(EARFUN_FREE_PRO_3_PRODUCT_ID).unwrap();
     assert!(free_pro_3.supports_touch_customization());
     assert!(free_pro_3.supports_touch_lock());
+    assert!(free_pro_3.supports_find_device());
+    assert!(!free_pro_3.supports_prompt_volume());
+    assert!(!free_pro_3.supports_microphone_mode());
 
     let air_s = profile_for_product_id(EARFUN_AIR_S_PRODUCT_ID).unwrap();
     assert!(air_s.supports_touch_customization());
     assert!(!air_s.supports_touch_lock());
+    assert!(!air_s.supports_find_device());
+    assert!(!air_s.supports_prompt_volume());
+    assert!(!air_s.supports_microphone_mode());
 }
 
 #[test]

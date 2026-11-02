@@ -1,6 +1,14 @@
 # EarFun 查找、提示音与音频模式功能开发计划
 
-本文基于当前 WaveTune 代码、[EarFun GAIA V3 API 记录](../api/EARFUN_BLUETOOTH_API.md)及本地 Gadgetbridge EarFun 实现制定。此文档是后续开发路线图，不代表功能已经实现或经真机验证。
+本文基于 WaveTune 代码、[EarFun GAIA V3 API 记录](../api/EARFUN_BLUETOOTH_API.md)及本地 Gadgetbridge EarFun 实现制定，并记录本轮实施结果与剩余验收项。代码实现不代表功能已经过真机验证。
+
+## 当前实施状态
+
+- 已完成协议 DTO/编解码、严格查询响应解析、按 profile 初始化查询、型号能力门控、EarFun SET ACK 后 GET 读回，以及 Controls 页面查找/提示音/麦克风控件和中英文文案。
+- 当前 profile 开放范围：Air Pro 4 支持查找、提示音音量和麦克风模式；Free Pro 3 仅支持查找；Air S 不开放这三项。提示音 UI 为 `0..=4`（关闭至最大），并通过反向映射转换 wire 值。
+- 自动化协议、兼容性与模拟会话测试已通过；这些测试不证明设备 ACK、固件行为或实际效果。尚未进行任何真机写入验证。
+- Fast Pair / LE Audio 目前只有协议值编解码及单测；没有型号能力声明、初始化查询、驱动命令或 UI。硬件验证完成前继续保持未开放，也不发送重启命令。
+- 下一步验收仍需在目标型号/固件上逐项验证查询、SET ACK、GET 回读和实际效果，并更新 API 记录；在此之前不得声称硬件支持已验证。
 
 ## 1. 目标与范围
 
@@ -13,7 +21,7 @@
 
 遵循产品 ID 和协议能力门控。未知型号保持只读；单个设置一次只发一条命令，且只在成功 ACK 与状态读回一致后更新确认状态。客户端源码说明不等同于设备硬件验证。不得猜测响应、固件行为或重启要求。
 
-## 2. 当前实现评估
+## 2. 实施前代码评估（基线）
 
 ### 已有、可复用的基础
 
@@ -23,7 +31,7 @@
 - [`src/compatibility/brands/earfun/earfun_catalog.rs`](../../src/compatibility/brands/earfun/earfun_catalog.rs) 已给 Air Pro 4 和 Free Pro 3 声明 `FIND_DEVICE`、`PROMPT_VOLUME`，但驱动快照尚未据此开放控件。
 - EarFun 目前已接入手势、触控锁、入耳检测、降噪、游戏模式、EQ、编解码器及多设备等会话逻辑；本计划应复用现有驱动、快照和 Controls/Sound 切片，而非另建传输或会话框架。
 
-### 尚未打通的代码路径
+### 当时尚未打通的代码路径
 
 - [`src/bluetooth/brands/earfun/init.rs`](../../src/bluetooth/brands/earfun/init.rs) 读取触控等状态，但不查询查找状态、提示音音量、麦克风模式或 `0x034C` 高级音频模式；构造 `ControlsSnapshot` 时也没有填入查找/提示音支持位和音量。
 - [`src/bluetooth/brands/earfun/features/controls.rs`](../../src/bluetooth/brands/earfun/features/controls.rs) 目前处理入耳检测、触控手势及触控锁，没有上述新功能的查询/设置方法。
@@ -51,7 +59,7 @@
 - 先使用 Air Pro 4 验证查找、提示音音量、麦克风模式；Free Pro 3 只验证其源码支持的查找。高级模式需额外验证 Fast Pair/LE Audio 设置和读回、设备重连/模式实际效果及是否自动重启。每次只执行一个设置，不与其他控制连接并行操作同一耳机。
 - 输出确认的型号/固件能力范围。若任何步骤缺少安全的 ACK/读回证据，该功能保持未开放，而不是跳过保护直接实现乐观更新。
 
-### 阶段 1：协议 DTO、编解码与单测
+### 阶段 1：协议 DTO、编解码与单测（代码已完成）
 
 - 在 `src/protocol/brands/earfun/` 新增适当的控制/高级模式协议模块，或扩展现有 parser/controls 模块（遵守领域拆分与模块大小规范）；在 `mod.rs` 导出类型与纯函数。
 - 添加强类型 `EarFunMicrophoneMode`（Auto/Left/Right）、`EarFunFindMode`（Off/Left/Right/Both）和 `EarFunAdvancedAudioMode`（Fast Pair/LE Audio），拒绝未定义值。
@@ -61,7 +69,7 @@
 
 **完成标准：** 所有纯协议逻辑有字节级测试；异常 payload 只能返回明确错误，不产生看似成功的值。
 
-### 阶段 2：型号能力与状态模型
+### 阶段 2：型号能力与状态模型（代码已完成）
 
 - 在兼容层增加独立的能力声明，仅为有证据的型号开放对应功能。确认并修订 `earfun_catalog.rs` 中现有 `PROMPT_VOLUME` 声明：首期按 Gadgetbridge 界面证据仅 Air Pro 4 可写；Free Pro 3 保持关闭，直至实现/硬件证据补齐。保留 Air Pro 4 与 Free Pro 3 的 `FIND_DEVICE` 候选声明；不为 Air S 添加能力。
 - 新增麦克风模式与高级音频模式的 profile 能力，禁止以“命令常量已存在”作为支持条件；只有阶段 0 验证通过的产品/固件范围才可开放。
@@ -70,7 +78,7 @@
 
 **完成标准：** profile、快照与 UI 派生能力一致；未知设备和未验证功能默认不显示、不接受写入，断开后无旧设备状态残留。
 
-### 阶段 3：EarFun 会话读写闭环
+### 阶段 3：EarFun 会话读写闭环（基础控制代码已完成）
 
 - 在 `src/bluetooth/brands/earfun/init.rs` 中，仅对 profile 支持的功能逐项查询；把响应解析结果写入快照和 diagnostics。查找初始状态应准确反映耳机当前 mode；不可读时保持未知。
 - 在 EarFun controls feature 内实现查找、提示音、麦克风查询/设置；在 sound feature 或单独的高级模式 feature 中实现 `0x034C/0x034B`。遵循 `request()` 响应关联/状态检查，并单独验证写 ACK 与后续 GET 读回。
@@ -80,7 +88,7 @@
 
 **完成标准：** mock RFCOMM 测试证明请求顺序为 SET -> 成功 ACK -> GET -> 比较；错误 ACK、超时、拒绝、错误读回、断连均不产生成功状态。
 
-### 阶段 4：Controls / Sound UI 与本地化
+### 阶段 4：Controls / Sound UI 与本地化（基础控制代码已完成）
 
 - 复用 Controls 页现有查找按钮和提示音滑块；根据能力隐藏未支持控件，并采用型号描述的滑块范围/映射。音量交互继续防抖，但成功/失败状态由后台确认结果驱动，失败时恢复最近一次确认值。
 - 在 Controls 页新增麦克风模式选择项（自动、左耳、右耳），绑定强类型状态与命令；只在支持的设备显示。异步设置时禁用控件，收到成功读回后才更新显示。
@@ -89,13 +97,13 @@
 
 **完成标准：** Air Pro 4 / Free Pro 3 仅显示各自经过能力配置的功能；提示音滑块的视觉与 wire 值方向正确；未确认设置不能让界面出现乐观成功状态。
 
-### 阶段 5：自动化验证与硬件验收
+### 阶段 5：自动化验证与硬件验收（自动化完成，硬件验收待完成）
 
 - 协议单测：状态码、payload 长度、值范围、枚举转换、音量映射、查找模式。
 - 会话 mock 测试：初始化查询顺序、setter ACK 和读回一致/不一致、ACK 拒绝、查询超时、异常断连、快速连续滑动防抖、停止查找，以及切换耳机时清除新状态。
 - 能力回归测试：Air Pro 4 查找/提示音/麦克风；Free Pro 3 查找；Air S 隐藏这些未证实控件；Free Pro 3 提示音/麦克风和所有未验证高级模式默认不开放。高级模式测试只针对阶段 0 中已验证的设备/固件。
 - 控件测试：滑块端点 0/4 映射、回读同步、设置失败恢复旧值、未知状态不显示虚假值、断连重置、无障碍与中英文文案。
-- 真机逐功能验证并更新 API 文档与兼容性证据：记录型号、固件、操作值、ACK、回读值、实际效果和重连行为；不导出或记录地址、序列号、配对主机名称。
+- [ ] 真机逐功能验证并更新 API 文档与兼容性证据：记录型号、固件、操作值、ACK、回读值、实际效果和重连行为；不导出或记录地址、序列号、配对主机名称。
 
 **最终完成标准：** `cargo fmt --check`、相关 `cargo test --locked` 及 `cargo check --locked` 通过；目标机型/固件有逐功能真机记录。构建通过不能替代硬件支持声明所需的实测证据。
 

@@ -41,6 +41,7 @@ pub mod features {
     pub const TOUCH_CUSTOMIZATION: &str = "touch-customization";
     pub const TOUCH_LOCK: &str = "touch-lock";
     pub const PROMPT_VOLUME: &str = "prompt-volume";
+    pub const MICROPHONE_MODE: &str = "microphone-mode";
     pub const SLEEP_DETECTION: &str = "sleep-detection";
     pub const SWIFT_PAIR: &str = "swift-pair";
     pub const VOICE_COMMAND: &str = "voice-command";
@@ -297,6 +298,11 @@ impl DeviceProfile {
     #[inline]
     pub fn supports_prompt_volume(&self) -> bool {
         self.has_feature(features::PROMPT_VOLUME)
+    }
+
+    #[inline]
+    pub fn supports_microphone_mode(&self) -> bool {
+        self.has_feature(features::MICROPHONE_MODE)
     }
 
     #[inline]

@@ -25,14 +25,19 @@ use std::{
 
 use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
 use crate::bluetooth::{DeviceChoice, DeviceSnapshot, driver::HeadsetDriver};
+use crate::compatibility;
 use crate::protocol::brands::earfun::{
-    EarFunCommands, EarFunFrameDecoder, parse_earfun_ambient_mode, parse_earfun_anc_sub_mode,
-    parse_earfun_battery_component, parse_earfun_transparency_sub_mode,
+    EarFunCommands, EarFunFindMode, EarFunFrameDecoder, EarFunMicrophoneMode,
+    parse_earfun_ambient_mode, parse_earfun_anc_sub_mode, parse_earfun_battery_component,
+    parse_earfun_transparency_sub_mode,
 };
 use crate::protocol::{BatteryState, CustomEqualizer, EarSide, KeyFunction, PairedDeviceAction};
 
 use super::features::{
-    controls::{query_touch_actions, set_in_ear_detection, set_touch_action, set_touch_lock},
+    controls::{
+        query_touch_actions, set_find_mode, set_in_ear_detection, set_microphone_mode,
+        set_prompt_volume, set_touch_action, set_touch_lock,
+    },
     dual_device::{read_earfun_paired_devices, set_dual_device},
     noise::{earfun_mode_to_protocol_index, set_noise_mode},
     sound::{apply_custom_equalizer, apply_equalizer_preset, set_audio_codec, set_game_mode},
@@ -304,6 +309,130 @@ impl HeadsetDriver for EarFunDriver {
                             domain: SettingDomain::Controls,
                             message: error,
                         });
+                    }
+                }
+                Ok(())
+            }
+            WorkerCommand::FindEarbuds(ring) => {
+                let supported = compatibility::profile_for_product_id(pid)
+                    .is_some_and(|profile| profile.supports_find_device());
+                if snapshot.identity.read_only || !supported {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-find-blocked"),
+                    });
+                    return Ok(());
+                }
+
+                let target = if ring {
+                    EarFunFindMode::Both
+                } else {
+                    EarFunFindMode::Off
+                };
+                match set_find_mode(stream, &mut self.decoder, target, Some(updates)) {
+                    Ok(actual) => {
+                        if let Some(state) = &mut self.snapshot {
+                            state.controls.is_finding_earbuds = actual.is_finding();
+                        }
+                        let _ = updates.send(UiUpdate::IsFindingEarbuds(actual.is_finding()));
+                        let _ = updates.send(UiUpdate::Status(if actual.is_finding() {
+                            crate::t!("controls-find-ringing")
+                        } else {
+                            crate::t!("controls-find-stopped")
+                        }));
+                    }
+                    Err(error) => {
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-find-failed", error),
+                        });
+                        let finding = self
+                            .snapshot
+                            .as_ref()
+                            .is_some_and(|state| state.controls.is_finding_earbuds);
+                        let _ = updates.send(UiUpdate::IsFindingEarbuds(finding));
+                    }
+                }
+                Ok(())
+            }
+            WorkerCommand::SetPromptVolume(volume) => {
+                let supported = compatibility::profile_for_product_id(pid)
+                    .is_some_and(|profile| profile.supports_prompt_volume());
+                if snapshot.identity.read_only || !supported {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-prompt-volume-blocked"),
+                    });
+                    return Ok(());
+                }
+                match set_prompt_volume(stream, &mut self.decoder, volume, Some(updates)) {
+                    Ok(actual) => {
+                        if let Some(state) = &mut self.snapshot {
+                            state.controls.prompt_volume = Some(actual);
+                        }
+                        let _ = updates.send(UiUpdate::PromptVolume(actual));
+                        let _ = updates.send(UiUpdate::Status(crate::t!(
+                            "controls-prompt-volume-updated"
+                        )));
+                    }
+                    Err(error) => {
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-prompt-volume-update-failed", error),
+                        });
+                        if let Some(volume) = self
+                            .snapshot
+                            .as_ref()
+                            .and_then(|state| state.controls.prompt_volume)
+                        {
+                            let _ = updates.send(UiUpdate::PromptVolume(volume));
+                        }
+                    }
+                }
+                Ok(())
+            }
+            WorkerCommand::SetMicrophoneMode(value) => {
+                let supported = compatibility::profile_for_product_id(pid)
+                    .is_some_and(|profile| profile.supports_microphone_mode());
+                if snapshot.identity.read_only || !supported {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-microphone-mode-blocked"),
+                    });
+                    return Ok(());
+                }
+                let Some(mode) = EarFunMicrophoneMode::from_u8(value) else {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-microphone-mode-invalid"),
+                    });
+                    let current = self
+                        .snapshot
+                        .as_ref()
+                        .and_then(|state| state.controls.microphone_mode);
+                    let _ = updates.send(UiUpdate::MicrophoneMode(current));
+                    return Ok(());
+                };
+                match set_microphone_mode(stream, &mut self.decoder, mode, Some(updates)) {
+                    Ok(actual) => {
+                        if let Some(state) = &mut self.snapshot {
+                            state.controls.microphone_mode = Some(actual as u8);
+                        }
+                        let _ = updates.send(UiUpdate::MicrophoneMode(Some(actual as u8)));
+                        let _ = updates.send(UiUpdate::Status(crate::t!(
+                            "controls-microphone-mode-updated"
+                        )));
+                    }
+                    Err(error) => {
+                        let _ = updates.send(UiUpdate::SettingError {
+                            domain: SettingDomain::Controls,
+                            message: crate::t!("controls-microphone-mode-update-failed", error),
+                        });
+                        let mode = self
+                            .snapshot
+                            .as_ref()
+                            .and_then(|state| state.controls.microphone_mode);
+                        let _ = updates.send(UiUpdate::MicrophoneMode(mode));
                     }
                 }
                 Ok(())

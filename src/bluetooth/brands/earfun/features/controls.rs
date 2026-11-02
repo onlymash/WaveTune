@@ -24,10 +24,128 @@ use std::{
 use crate::app::events::UiUpdate;
 use crate::bluetooth::brands::earfun::transport::{drain_stream, request, send_command};
 use crate::protocol::brands::earfun::{
-    EarFunCommands, EarFunFrameDecoder, encode_earfun_set_gesture, encode_earfun_set_touch_lock,
-    parse_earfun_touch_gestures_response, parse_earfun_touch_lock_response,
+    EarFunCommands, EarFunFindMode, EarFunFrameDecoder, EarFunMicrophoneMode,
+    encode_earfun_set_find_mode, encode_earfun_set_gesture, encode_earfun_set_microphone_mode,
+    encode_earfun_set_touch_lock, encode_earfun_set_voice_prompt_volume, parse_earfun_find_mode,
+    parse_earfun_microphone_mode, parse_earfun_touch_gestures_response,
+    parse_earfun_touch_lock_response, parse_earfun_voice_prompt_volume,
 };
 use crate::protocol::core::types::{EarSide, GestureAction, KeyFunction};
+
+pub fn query_find_mode<T: Read + Write>(
+    stream: &mut T,
+    decoder: &mut EarFunFrameDecoder,
+    updates: Option<&Sender<UiUpdate>>,
+) -> Result<EarFunFindMode, String> {
+    let packet = request(
+        stream,
+        decoder,
+        EarFunCommands::GET_FIND_DEVICE,
+        vec![],
+        updates,
+    )?;
+    parse_earfun_find_mode(&packet.payload).map_err(|error| error.to_string())
+}
+
+pub fn set_find_mode<T: Read + Write>(
+    stream: &mut T,
+    decoder: &mut EarFunFrameDecoder,
+    mode: EarFunFindMode,
+    updates: Option<&Sender<UiUpdate>>,
+) -> Result<EarFunFindMode, String> {
+    request(
+        stream,
+        decoder,
+        EarFunCommands::SET_FIND_DEVICE,
+        encode_earfun_set_find_mode(mode),
+        updates,
+    )?;
+    let actual = query_find_mode(stream, decoder, updates)?;
+    if actual != mode {
+        return Err(format!(
+            "Find Device readback mismatch: requested {}, received {}",
+            mode as u8, actual as u8
+        ));
+    }
+    Ok(actual)
+}
+
+pub fn query_prompt_volume<T: Read + Write>(
+    stream: &mut T,
+    decoder: &mut EarFunFrameDecoder,
+    updates: Option<&Sender<UiUpdate>>,
+) -> Result<u8, String> {
+    let packet = request(
+        stream,
+        decoder,
+        EarFunCommands::GET_VOICE_PROMPT_VOLUME,
+        vec![],
+        updates,
+    )?;
+    parse_earfun_voice_prompt_volume(&packet.payload).map_err(|error| error.to_string())
+}
+
+pub fn set_prompt_volume<T: Read + Write>(
+    stream: &mut T,
+    decoder: &mut EarFunFrameDecoder,
+    volume: u8,
+    updates: Option<&Sender<UiUpdate>>,
+) -> Result<u8, String> {
+    let payload =
+        encode_earfun_set_voice_prompt_volume(volume).map_err(|error| error.to_string())?;
+    request(
+        stream,
+        decoder,
+        EarFunCommands::SET_VOICE_PROMPT_VOLUME,
+        payload,
+        updates,
+    )?;
+    let actual = query_prompt_volume(stream, decoder, updates)?;
+    if actual != volume {
+        return Err(format!(
+            "Voice Prompt Volume readback mismatch: requested {volume}, received {actual}"
+        ));
+    }
+    Ok(actual)
+}
+
+pub fn query_microphone_mode<T: Read + Write>(
+    stream: &mut T,
+    decoder: &mut EarFunFrameDecoder,
+    updates: Option<&Sender<UiUpdate>>,
+) -> Result<EarFunMicrophoneMode, String> {
+    let packet = request(
+        stream,
+        decoder,
+        EarFunCommands::GET_MICROPHONE_MODE,
+        vec![],
+        updates,
+    )?;
+    parse_earfun_microphone_mode(&packet.payload).map_err(|error| error.to_string())
+}
+
+pub fn set_microphone_mode<T: Read + Write>(
+    stream: &mut T,
+    decoder: &mut EarFunFrameDecoder,
+    mode: EarFunMicrophoneMode,
+    updates: Option<&Sender<UiUpdate>>,
+) -> Result<EarFunMicrophoneMode, String> {
+    request(
+        stream,
+        decoder,
+        EarFunCommands::SET_MICROPHONE_MODE,
+        encode_earfun_set_microphone_mode(mode),
+        updates,
+    )?;
+    let actual = query_microphone_mode(stream, decoder, updates)?;
+    if actual != mode {
+        return Err(format!(
+            "Microphone Mode readback mismatch: requested {}, received {}",
+            mode as u8, actual as u8
+        ));
+    }
+    Ok(actual)
+}
 
 pub fn set_in_ear_detection<T: Read + Write>(
     stream: &mut T,

@@ -11,7 +11,7 @@ An unofficial multi-brand wireless headset control center for the Linux desktop 
 - **Status Monitoring & 3D Preview**: Real-time battery levels and charging status for left/right earbuds and charging case, in-ear wear and case-lid detection, firmware version display, device artwork, and interactive 3D model preview.
 - **Noise Control**: Switch between Active Noise Cancellation (with multi-level intensity), Transparency mode (including Vocal Enhancement), and Adaptive noise control.
 - **Sound & Audio Effects**: Built-in sound presets, custom multi-band Equalizer (EQ), Spatial Audio (Fixed / Head Tracking), and low-latency Game Mode.
-- **Controls & Utilities**: Customize left/right touch and call gestures, long-press noise-control cycling, dual-device connection and paired-host switching, in-ear auto-pause, sleep detection, earbud fit test, Find My Earbuds, and prompt volume adjustment (available features depend on headset model).
+- **Controls & Utilities**: Customize left/right touch and call gestures, long-press noise-control cycling, dual-device connection and paired-host switching, in-ear auto-pause, sleep detection, earbud fit test, Find My Earbuds, prompt volume adjustment, and (on EarFun Air Pro 4) microphone selection. Available features depend on headset model; the new EarFun controls are source-derived and have not yet been hardware-validated.
 - **Desktop Integration**: Native GTK4 / Libadwaita UI with English/Chinese localization, selectable app icon styles, background mode with a StatusNotifierItem system tray, silent login autostart, plus a companion GNOME Shell Quick Settings extension (GNOME 45–51).
 
 ## Installation
