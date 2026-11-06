@@ -39,6 +39,7 @@ pub fn set_dual_device<T: Read + Write>(
     product_id: u32,
     enabled: bool,
     current_codec: Option<u8>,
+    restart_required: bool,
     updates: &Sender<UiUpdate>,
 ) -> Result<bool, String> {
     // If enabling dual device on EarFun Air Pro 4 and current codec is LDAC (8),
@@ -58,6 +59,11 @@ pub fn set_dual_device<T: Read + Write>(
         EarFunCommands::SET_CONNECT_TWO_DEVICES,
         vec![enabled as u8],
     )?;
+
+    if !restart_required {
+        drain_stream(stream, decoder, Some(updates), Duration::from_millis(50));
+        return Ok(enabled);
+    }
 
     // Send reboot command for dual-device setting to take effect
     let _ = updates.send(UiUpdate::DeviceRebooting);

@@ -69,6 +69,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(bat.percentage, 90);
+        assert_eq!(bat.charging, None);
 
         // Disconnected or unavailable battery (e.g. charging case offline/lid closed returns 0xFF / 255)
         let unavailable_bat = parse_earfun_battery_component(&[0x00, 0xFF]).unwrap();

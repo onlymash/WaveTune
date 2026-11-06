@@ -18,7 +18,7 @@
 use super::{earfun_equalizer::*, earfun_gestures::*};
 use crate::compatibility::{
     gesture_function_label_key_for_product, gesture_rows_for_product as global_gesture_rows,
-    profile_for_product_id,
+    profile_for_identity, profile_for_product_id,
 };
 use crate::protocol::GestureAction;
 
@@ -128,6 +128,69 @@ fn test_earfun_touch_lock_feature_declaration() {
     assert!(!air_s.supports_find_device_sides());
     assert!(!air_s.supports_prompt_volume());
     assert!(!air_s.supports_microphone_mode());
+}
+
+#[test]
+fn firmware_model_profiles_are_resolved_without_fabricated_product_ids() {
+    let models = [
+        ("TW700", "EarFun Air Pro 4+", true, true),
+        ("TW700AI", "EarFun Air Pro 4+AI", true, true),
+        ("TW800", "EarFun Air Pro 5", true, true),
+        ("TW500", "EarFun Air Pro 3", true, true),
+        ("TW500_3072", "EarFun Air Pro 3 (3072)", true, true),
+        ("TWA01", "EarFun Air S", true, false),
+        ("ATVEL_TW201", "ATVEL Tune S5 ProX", false, false),
+        ("TW101S", "EarFun Free 2S", false, false),
+        ("HP1000", "EarFun Wave Pro X", true, true),
+    ];
+
+    for (model_code, model_name, supports_noise, supports_dual) in models {
+        let profile = profile_for_identity(0, Some(model_code))
+            .unwrap_or_else(|| panic!("missing profile for {model_code}"));
+        assert_eq!(profile.model, model_name);
+        assert_eq!(profile.product_id, None);
+        assert_eq!(
+            profile.supports_noise_control(),
+            supports_noise,
+            "{model_code} noise"
+        );
+        assert_eq!(
+            profile.supports_dual_device(),
+            supports_dual,
+            "{model_code} dual"
+        );
+        assert!(profile.supports_custom_equalizer());
+    }
+
+    let tw700 = profile_for_identity(0, Some("TW700")).unwrap();
+    assert!(tw700.supports_wear_detection());
+    assert!(tw700.supports_audio_codec());
+    assert!(tw700.supports_touch_customization());
+    assert!(tw700.supports_touch_lock());
+    assert!(crate::compatibility::earfun_dual_device_restart_required(
+        0,
+        Some("TW700")
+    ));
+    assert!(!crate::compatibility::earfun_dual_device_restart_required(
+        0,
+        Some("TW500")
+    ));
+    assert!(crate::compatibility::earfun_is_headphones(
+        0,
+        Some("HP1000")
+    ));
+    assert!(!crate::compatibility::earfun_has_case_battery(
+        0,
+        Some("HP1000")
+    ));
+    assert_eq!(
+        profile_for_identity(EARFUN_FREE_PRO_3_PRODUCT_ID, Some("TW700"))
+            .unwrap()
+            .model,
+        "EarFun Free Pro 3"
+    );
+    assert!(profile_for_identity(0, Some("not-a-model")).is_none());
+    assert!(profile_for_product_id(0).is_none());
 }
 
 #[test]

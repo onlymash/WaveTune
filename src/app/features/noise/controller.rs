@@ -40,7 +40,7 @@ impl NoiseController {
             if !st.connected {
                 return Err(crate::t!("channel-not-connected"));
             }
-            let worn = !st.supports_wear_detection || st.wear.any_earbud_in_ear();
+            let worn = !st.supports_wear_status || st.wear.any_earbud_in_ear();
             if !worn {
                 return Err(crate::t!("wear-earbuds-not-in-ear"));
             }
@@ -52,6 +52,11 @@ impl NoiseController {
         let cmd = WorkerCommand::SetNoiseMode(protocol_index);
         match self.context.send_command(cmd) {
             Ok(()) => {
+                {
+                    let mut st = self.context.session_state.borrow_mut();
+                    st.noise.pending_mode = Some(protocol_index);
+                }
+                self.component.render(&self.context.session_state.borrow());
                 self.component.set_controls_sensitive(false);
                 Ok(())
             }
@@ -89,15 +94,33 @@ impl NoiseController {
                 true
             }
             UiUpdate::ProductId { product_id, .. } => {
-                let profile = crate::compatibility::profile_for_product_id(*product_id);
+                let profile = crate::compatibility::profile_for_identity(
+                    *product_id,
+                    self.context
+                        .session_state
+                        .borrow()
+                        .firmware_model_code
+                        .as_deref(),
+                );
                 let supports_noise = profile.is_some_and(|p| p.supports_noise_control());
                 self.component.widgets.set_visible(supports_noise);
                 true
             }
             UiUpdate::NoiseMode(index) => {
+                let mut st = self.context.session_state.borrow_mut();
+                if st.noise.observe_mode(*index) {
+                    if is_non_off_writable_mode(*index, &st.noise.modes) {
+                        st.noise.last_non_off_mode = Some(*index);
+                    }
+                }
+                drop(st);
+                self.component.render(&self.context.session_state.borrow());
+                true
+            }
+            UiUpdate::NoiseModeWriteCompleted(index) | UiUpdate::NoiseModeConfirmed(index) => {
                 {
                     let mut st = self.context.session_state.borrow_mut();
-                    st.noise.current_mode = Some(*index);
+                    st.noise.complete_write(*index);
                     if is_non_off_writable_mode(*index, &st.noise.modes) {
                         st.noise.last_non_off_mode = Some(*index);
                     }
@@ -136,6 +159,7 @@ impl NoiseController {
                 domain: SettingDomain::NoiseMode,
                 ..
             } => {
+                self.context.session_state.borrow_mut().noise.pending_mode = None;
                 self.component.render(&self.context.session_state.borrow());
                 true
             }

@@ -8,10 +8,10 @@ An unofficial multi-brand wireless headset control center for the Linux desktop 
 
 ## Features
 
-- **Status Monitoring & 3D Preview**: Real-time battery levels and charging status for left/right earbuds and charging case, in-ear wear and case-lid detection, firmware version display, device artwork, and interactive 3D model preview.
-- **Noise Control**: Switch between Active Noise Cancellation (with multi-level intensity), Transparency mode (including Vocal Enhancement), and Adaptive noise control.
+- **Status Monitoring & 3D Preview**: Real-time battery levels, charging status where reported by the protocol, in-ear wear and case-lid state where available, firmware version display, device artwork, and interactive 3D model preview.
+- **Noise Control**: Switch between Active Noise Cancellation (with multi-level intensity), Transparency mode (including Vocal Enhancement), and Adaptive noise control. Availability follows model capabilities; a wear-state gate is applied only when the protocol reports physical wear state. EarFun GAIA reports the in-ear detection setting but not physical wear or charging state.
 - **Sound & Audio Effects**: Built-in sound presets, custom multi-band Equalizer (EQ), Spatial Audio (Fixed / Head Tracking), and low-latency Game Mode.
-- **Controls & Utilities**: Customize left/right touch and call gestures, long-press noise-control cycling, dual-device connection and paired-host switching, in-ear auto-pause, sleep detection, earbud fit test, Find My Earbuds, prompt volume adjustment, and (on EarFun Air Pro 4) microphone selection. Choose the target from a compact popover and use the find/stop action in the controls card. Available features depend on headset model; the new EarFun controls are source-derived and have not yet been hardware-validated.
+- **Controls & Utilities**: Customize left/right touch and call gestures, long-press noise-control cycling, dual-device connection and paired-host switching, in-ear auto-pause, sleep detection, earbud fit test, Find My Earbuds, prompt volume adjustment, and microphone selection on compatible EarFun GAIA profiles. Choose the target from a compact popover and use the find/stop action in the controls card. EarFun features are enabled according to each registered model's compatibility profile; hardware validation is recorded separately and is not an additional enablement requirement.
 - **Desktop Integration**: Native GTK4 / Libadwaita UI with English/Chinese localization, selectable app icon styles, background mode with a StatusNotifierItem system tray, silent login autostart, plus a companion GNOME Shell Quick Settings extension (GNOME 45–51).
 
 ## Installation
@@ -98,7 +98,7 @@ Built packages are written to `target/dist/`. For AUR repository generation and 
 
 ## Compatibility
 
-The built-in compatibility catalog covers 130+ OPPO, OnePlus, and realme headset models, as well as EarFun headsets (EarFun Air Pro 4, EarFun Free Pro 3, EarFun Air S). Supported controls are enabled dynamically based on each headset's reported product ID, capability flags, and model profile; unrecognized models connect in a safe read-only mode limited to handshake and product identification.
+The built-in compatibility catalog covers 130+ OPPO, OnePlus, and realme headset models, as well as EarFun Air Pro 4, Free Pro 3, Air S, Air Pro 4+/4+AI, Air Pro 5, Air Pro 3 variants, Free 2S, ATVEL Tune S5 ProX, and Wave Pro X. EarFun models without a known numeric Product ID can be identified from a strict model prefix in the GAIA firmware response. Their profile-declared, implemented features are available without requiring prior real-device validation; validation status is tracked separately from compatibility. EF-protocol EarFun models remain unsupported until their separate frame family is implemented. Unsupported or unrecognized models remain read-only.
 
 ## License
 

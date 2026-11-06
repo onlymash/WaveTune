@@ -39,9 +39,9 @@ impl NoiseComponent {
             supported_indices: &session.noise.supported_indices,
             support_note: &session.noise.support_note,
             capability_enabled: session.noise.enabled && session.connected,
-            supports_wear_detection: session.supports_wear_detection,
+            supports_wear_status: session.supports_wear_status,
             wear: &session.wear,
-            current_mode: session.noise.current_mode,
+            current_mode: session.noise.pending_mode.or(session.noise.current_mode),
             modes: &session.noise.modes,
         };
         self.widgets.render(&view_state);

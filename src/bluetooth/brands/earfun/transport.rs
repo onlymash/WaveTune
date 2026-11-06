@@ -44,12 +44,12 @@ pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 pub const POLL_INTERVAL: Duration = Duration::from_secs(15);
 
 pub fn open_earfun_rfcomm(device: &DeviceChoice) -> std::io::Result<std::fs::File> {
-    let mut service_uuids = device.control_service_uuids.clone();
-    if service_uuids.is_empty() {
-        if let Ok(gaia_uuid) = bluer::Uuid::parse_str(GAIA_SERVICE_UUID) {
-            service_uuids.push(gaia_uuid);
-        }
-    }
+    // BlueZ may omit both manufacturer Product ID data and service UUIDs for an
+    // already-paired device. EarFun devices are identified before reaching this
+    // driver; preserve the GAIA UUID and channel-11 fallback in that case.
+    let service_uuids = [bluer::Uuid::parse_str(GAIA_SERVICE_UUID).map_err(|error| {
+        std::io::Error::other(format!("invalid EarFun GAIA service UUID: {error}"))
+    })?];
     let query = RfcommServiceQuery {
         service_uuids: &service_uuids,
         primary_spp_names: EARFUN_PRIMARY_SPP_NAMES,

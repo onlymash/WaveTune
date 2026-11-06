@@ -67,6 +67,8 @@ pub enum UiUpdate {
     DeviceModel(std::path::PathBuf),
     DeviceScene(std::path::PathBuf),
     NoiseMode(u8),
+    NoiseModeWriteCompleted(u8),
+    NoiseModeConfirmed(u8),
     NoiseControlsEnabled(bool),
     NoiseModeOptions {
         indices: Vec<u8>,

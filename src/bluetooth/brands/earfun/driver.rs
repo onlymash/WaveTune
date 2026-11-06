@@ -44,8 +44,7 @@ use super::features::{
 };
 use super::init::initialize_earfun_session_with_lap;
 use super::transport::{
-    EARFUN_AIR_S_PRODUCT_ID, POLL_INTERVAL, get_local_rfcomm_lap, open_earfun_rfcomm, request,
-    send_command,
+    POLL_INTERVAL, get_local_rfcomm_lap, open_earfun_rfcomm, request, send_command,
 };
 use super::unsolicited::handle_unsolicited;
 
@@ -119,6 +118,10 @@ impl HeadsetDriver for EarFunDriver {
         self.anc_sub = snapshot.noise.anc_sub;
         self.transp_sub = snapshot.noise.transp_sub;
         self.custom_equalizers = snapshot.sound.custom_equalizers.clone();
+        let behavior_pid = compatibility::earfun_behavior_product_id(
+            snapshot.identity.product_id,
+            snapshot.identity.firmware_model_code.as_deref(),
+        );
 
         // Auto-apply saved equalizer preset if configured
         if let Some(preset) = snapshot.sound.equalizer_preset {
@@ -127,7 +130,7 @@ impl HeadsetDriver for EarFunDriver {
                     let _ = apply_custom_equalizer(
                         stream,
                         &mut self.decoder,
-                        snapshot.identity.product_id,
+                        behavior_pid,
                         &custom.bands,
                         updates,
                     );
@@ -135,7 +138,7 @@ impl HeadsetDriver for EarFunDriver {
                     let _ = apply_equalizer_preset(
                         stream,
                         &mut self.decoder,
-                        snapshot.identity.product_id,
+                        behavior_pid,
                         preset,
                         updates,
                     );
@@ -168,16 +171,26 @@ impl HeadsetDriver for EarFunDriver {
         )
         .ok()
         .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
-        let right = request(
-            stream,
-            &mut self.decoder,
-            EarFunCommands::BATTERY_RIGHT,
-            vec![],
-            Some(updates),
-        )
-        .ok()
-        .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
-        let case = if snapshot.identity.product_id != EARFUN_AIR_S_PRODUCT_ID {
+        let right = if compatibility::earfun_is_headphones(
+            snapshot.identity.product_id,
+            snapshot.identity.firmware_model_code.as_deref(),
+        ) {
+            None
+        } else {
+            request(
+                stream,
+                &mut self.decoder,
+                EarFunCommands::BATTERY_RIGHT,
+                vec![],
+                Some(updates),
+            )
+            .ok()
+            .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten())
+        };
+        let case = if compatibility::earfun_has_case_battery(
+            snapshot.identity.product_id,
+            snapshot.identity.firmware_model_code.as_deref(),
+        ) {
             request(
                 stream,
                 &mut self.decoder,
@@ -197,13 +210,15 @@ impl HeadsetDriver for EarFunDriver {
 
         // Periodic ambient sound poll to sync with earbud physical touches
         let has_submodes = snapshot.noise.modes.iter().any(|m| m.parent.is_some());
-        if let Ok(pkt) = request(
-            stream,
-            &mut self.decoder,
-            EarFunCommands::GET_AMBIENT_SOUND,
-            vec![],
-            Some(updates),
-        ) {
+        if !snapshot.noise.modes.is_empty()
+            && let Ok(pkt) = request(
+                stream,
+                &mut self.decoder,
+                EarFunCommands::GET_AMBIENT_SOUND,
+                vec![],
+                Some(updates),
+            )
+        {
             if let Ok(master) = parse_earfun_ambient_mode(&pkt.payload) {
                 let actual_idx = if !has_submodes {
                     master
@@ -255,25 +270,36 @@ impl HeadsetDriver for EarFunDriver {
             return Ok(());
         };
         let pid = snapshot.identity.product_id;
+        let firmware_model_code = snapshot.identity.firmware_model_code.as_deref();
+        let profile = compatibility::profile_for_identity(pid, firmware_model_code);
+        let behavior_pid = compatibility::earfun_behavior_product_id(pid, firmware_model_code);
         let current_dual_device = snapshot.dual_device.dual_device_enabled;
         let current_audio_codec = snapshot.sound.audio_codec;
+        let wear = snapshot.wear.wear.clone();
+        let supports_wear_status = snapshot.wear.supports_wear_status;
+        let noise_controls_enabled = !snapshot.identity.read_only
+            && !snapshot.noise.modes.is_empty()
+            && (!supports_wear_status || wear.any_earbud_in_ear());
 
         match command {
             WorkerCommand::Disconnect => Ok(()),
             WorkerCommand::SetNoiseMode(protocol_index) => {
-                let _ = updates.send(UiUpdate::Status(crate::t!("noise-mode-waiting-confirm")));
                 match set_noise_mode(
                     stream,
                     &mut self.decoder,
                     pid,
+                    firmware_model_code,
                     protocol_index,
                     &mut self.anc_sub,
                     &mut self.transp_sub,
+                    &wear,
+                    supports_wear_status,
                     updates,
                 ) {
                     Ok(actual) => {
-                        let _ = updates.send(UiUpdate::NoiseMode(actual));
-                        let _ = updates.send(UiUpdate::Status(crate::t!("noise-mode-confirmed")));
+                        let _ = updates.send(UiUpdate::NoiseModeWriteCompleted(actual));
+                        let _ =
+                            updates.send(UiUpdate::Status(crate::t!("noise-mode-command-sent")));
                     }
                     Err(error) => {
                         let _ = updates.send(UiUpdate::SettingError {
@@ -282,10 +308,19 @@ impl HeadsetDriver for EarFunDriver {
                         });
                     }
                 }
-                let _ = updates.send(UiUpdate::NoiseControlsEnabled(true));
+                let _ = updates.send(UiUpdate::NoiseControlsEnabled(noise_controls_enabled));
                 Ok(())
             }
             WorkerCommand::SetGameMode(enabled) => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_game_mode())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::GameMode,
+                        message: crate::t!("game-mode-blocked"),
+                    });
+                    return Ok(());
+                }
                 match set_game_mode(stream, &mut self.decoder, enabled, updates) {
                     Ok(actual) => {
                         let _ = updates.send(UiUpdate::GameMode(actual));
@@ -300,6 +335,15 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::SetInEarDetection(enabled) => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_wear_detection())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("wear-detection-blocked"),
+                    });
+                    return Ok(());
+                }
                 match set_in_ear_detection(stream, &mut self.decoder, enabled, updates) {
                     Ok(actual) => {
                         let _ = updates.send(UiUpdate::InEarDetectionEnabled(actual));
@@ -314,7 +358,7 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::FindEarbuds(mode) => {
-                let supported = compatibility::profile_for_product_id(pid)
+                let supported = compatibility::profile_for_identity(pid, firmware_model_code)
                     .is_some_and(|profile| profile.supports_find_device());
                 if snapshot.identity.read_only || !supported {
                     let _ = updates.send(UiUpdate::SettingError {
@@ -335,7 +379,7 @@ impl HeadsetDriver for EarFunDriver {
                     mode,
                     crate::protocol::FindEarbudsMode::Left
                         | crate::protocol::FindEarbudsMode::Right
-                ) && !compatibility::profile_for_product_id(pid)
+                ) && !compatibility::profile_for_identity(pid, firmware_model_code)
                     .is_some_and(|profile| profile.supports_find_device_sides())
                 {
                     let _ = updates.send(UiUpdate::SettingError {
@@ -393,7 +437,7 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::SetPromptVolume(volume) => {
-                let supported = compatibility::profile_for_product_id(pid)
+                let supported = compatibility::profile_for_identity(pid, firmware_model_code)
                     .is_some_and(|profile| profile.supports_prompt_volume());
                 if snapshot.identity.read_only || !supported {
                     let _ = updates.send(UiUpdate::SettingError {
@@ -429,7 +473,7 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::SetMicrophoneMode(value) => {
-                let supported = compatibility::profile_for_product_id(pid)
+                let supported = compatibility::profile_for_identity(pid, firmware_model_code)
                     .is_some_and(|profile| profile.supports_microphone_mode());
                 if snapshot.identity.read_only || !supported {
                     let _ = updates.send(UiUpdate::SettingError {
@@ -480,6 +524,15 @@ impl HeadsetDriver for EarFunDriver {
                 action,
                 function,
             } => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_touch_customization())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-gesture-blocked"),
+                    });
+                    return Ok(());
+                }
                 let _ = updates.send(UiUpdate::Status(crate::t!("controls-gesture-updating")));
                 match set_touch_action(
                     stream,
@@ -541,6 +594,15 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::SetTouchLock(locked) => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_touch_lock())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("controls-gesture-blocked"),
+                    });
+                    return Ok(());
+                }
                 match set_touch_lock(stream, &mut self.decoder, locked, Some(updates)) {
                     Ok(actual) => {
                         if let Some(st) = &mut self.snapshot {
@@ -558,12 +620,22 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::SetDualDeviceConnection(enabled) => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_dual_device())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("dual-device-toggle-blocked"),
+                    });
+                    return Ok(());
+                }
                 match set_dual_device(
                     stream,
                     &mut self.decoder,
-                    pid,
+                    behavior_pid,
                     enabled,
                     current_audio_codec,
+                    compatibility::earfun_dual_device_restart_required(pid, firmware_model_code),
                     updates,
                 ) {
                     Ok(actual) => {
@@ -587,10 +659,21 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::SetAudioCodec(codec) => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_audio_codec())
+                    || !compatibility::supported_codecs_for_identity(pid, firmware_model_code)
+                        .contains(&codec)
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::AudioCodec,
+                        message: crate::t!("audio-codec-blocked"),
+                    });
+                    return Ok(());
+                }
                 match set_audio_codec(
                     stream,
                     &mut self.decoder,
-                    pid,
+                    behavior_pid,
                     codec,
                     current_dual_device,
                     updates,
@@ -609,6 +692,16 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::SetPairedDevice { address, action } => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_dual_device())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Controls,
+                        message: crate::t!("dual-device-management-blocked"),
+                    });
+                    let _ = updates.send(UiUpdate::PairedDeviceActionFinished);
+                    return Ok(());
+                }
                 let slot = address.command_bytes()[2];
                 match action {
                     PairedDeviceAction::Connect => {
@@ -689,10 +782,19 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::SetEqualizer(preset_index) => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_equalizer())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Equalizer,
+                        message: crate::t!("equalizer-blocked"),
+                    });
+                    return Ok(());
+                }
                 match apply_equalizer_preset(
                     stream,
                     &mut self.decoder,
-                    pid,
+                    behavior_pid,
                     preset_index,
                     Some(updates),
                 ) {
@@ -701,12 +803,12 @@ impl HeadsetDriver for EarFunDriver {
                             c.is_selected = false;
                         }
                         let _ = crate::resources::save_custom_equalizers(
-                            pid,
+                            behavior_pid,
                             self.device_address.as_deref(),
                             &self.custom_equalizers,
                         );
                         let _ = crate::resources::save_equalizer_preset(
-                            pid,
+                            behavior_pid,
                             self.device_address.as_deref(),
                             preset_index,
                         );
@@ -730,6 +832,15 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::SelectCustomEqualizer(id) => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_custom_equalizer())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Equalizer,
+                        message: crate::t!("equalizer-custom-blocked"),
+                    });
+                    return Ok(());
+                }
                 let custom_eq = self.custom_equalizers.iter().find(|c| c.id == id).cloned();
 
                 if let Some(eq) = custom_eq {
@@ -737,7 +848,7 @@ impl HeadsetDriver for EarFunDriver {
                     match apply_custom_equalizer(
                         stream,
                         &mut self.decoder,
-                        pid,
+                        behavior_pid,
                         &eq.bands,
                         Some(updates),
                     ) {
@@ -746,12 +857,12 @@ impl HeadsetDriver for EarFunDriver {
                                 c.is_selected = c.id == id;
                             }
                             let _ = crate::resources::save_custom_equalizers(
-                                pid,
+                                behavior_pid,
                                 self.device_address.as_deref(),
                                 &self.custom_equalizers,
                             );
                             let _ = crate::resources::save_equalizer_preset(
-                                pid,
+                                behavior_pid,
                                 self.device_address.as_deref(),
                                 id,
                             );
@@ -778,6 +889,15 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::AddCustomEqualizer { name, bands } => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_custom_equalizer())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Equalizer,
+                        message: crate::t!("equalizer-custom-blocked"),
+                    });
+                    return Ok(());
+                }
                 if self.custom_equalizers.len() >= 3 {
                     let _ = updates.send(UiUpdate::SettingError {
                         domain: SettingDomain::Equalizer,
@@ -802,7 +922,7 @@ impl HeadsetDriver for EarFunDriver {
 
                 self.custom_equalizers.push(new_eq);
                 let _ = crate::resources::save_custom_equalizers(
-                    pid,
+                    behavior_pid,
                     self.device_address.as_deref(),
                     &self.custom_equalizers,
                 );
@@ -811,6 +931,15 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::SaveCustomEqualizer { id, name, bands } => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_custom_equalizer())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Equalizer,
+                        message: crate::t!("equalizer-custom-blocked"),
+                    });
+                    return Ok(());
+                }
                 let mut is_active = false;
                 if let Some(target) = self.custom_equalizers.iter_mut().find(|c| c.id == id) {
                     target.name = name;
@@ -819,7 +948,7 @@ impl HeadsetDriver for EarFunDriver {
                 }
 
                 let _ = crate::resources::save_custom_equalizers(
-                    pid,
+                    behavior_pid,
                     self.device_address.as_deref(),
                     &self.custom_equalizers,
                 );
@@ -831,7 +960,7 @@ impl HeadsetDriver for EarFunDriver {
                     match apply_custom_equalizer(
                         stream,
                         &mut self.decoder,
-                        pid,
+                        behavior_pid,
                         &bands,
                         Some(updates),
                     ) {
@@ -852,6 +981,15 @@ impl HeadsetDriver for EarFunDriver {
                 Ok(())
             }
             WorkerCommand::DeleteCustomEqualizer(id) => {
+                if snapshot.identity.read_only
+                    || !profile.is_some_and(|profile| profile.supports_custom_equalizer())
+                {
+                    let _ = updates.send(UiUpdate::SettingError {
+                        domain: SettingDomain::Equalizer,
+                        message: crate::t!("equalizer-custom-blocked"),
+                    });
+                    return Ok(());
+                }
                 let was_active = self
                     .custom_equalizers
                     .iter()
@@ -861,7 +999,7 @@ impl HeadsetDriver for EarFunDriver {
                 self.custom_equalizers.retain(|c| c.id != id);
 
                 let _ = crate::resources::save_custom_equalizers(
-                    pid,
+                    behavior_pid,
                     self.device_address.as_deref(),
                     &self.custom_equalizers,
                 );
@@ -869,10 +1007,15 @@ impl HeadsetDriver for EarFunDriver {
                 let _ = updates.send(UiUpdate::Status(crate::t!("equalizer-custom-deleted")));
 
                 if was_active {
-                    let _ =
-                        apply_equalizer_preset(stream, &mut self.decoder, pid, 0, Some(updates));
+                    let _ = apply_equalizer_preset(
+                        stream,
+                        &mut self.decoder,
+                        behavior_pid,
+                        0,
+                        Some(updates),
+                    );
                     let _ = crate::resources::save_equalizer_preset(
-                        pid,
+                        behavior_pid,
                         self.device_address.as_deref(),
                         0,
                     );

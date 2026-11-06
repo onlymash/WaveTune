@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BatteryPart {
     pub percentage: u8,
-    pub charging: bool,
+    pub charging: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

@@ -28,7 +28,8 @@ pub(super) const ONEPLUS_COMPANY_ID: u16 = crate::protocol::brands::oppo::ONEPLU
 pub(super) const OPPO_COMPANY_ID: u16 = crate::protocol::brands::oppo::OPPO_COMPANY_ID;
 pub(super) const REALME_COMPANY_ID: u16 = crate::protocol::brands::oppo::REALME_COMPANY_ID;
 pub(super) const EARFUN_COMPANY_ID: u16 = 0x5A70;
-pub(super) const GAIA_UUID: &str = "00001107-d102-11e1-9b23-00025b00a5a5";
+pub(super) const OPPO_SECONDARY_CONTROL_UUID: &str =
+    crate::protocol::brands::oppo::OPPO_SECONDARY_CONTROL_SERVICE_UUID;
 
 pub fn spawn_discovery(updates: Sender<UiUpdate>) -> std::io::Result<thread::JoinHandle<()>> {
     thread::Builder::new()
@@ -112,14 +113,7 @@ async fn find_device_async() -> Result<Vec<DeviceChoice>, String> {
             .alias()
             .await
             .map_err(|error| format!("Unable to read Bluetooth device name: {error}"))?;
-        let name = device
-            .name()
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| alias.clone());
-        let Some(brand) = identify_brand(&manufacturer_data, has_control_service, &name, &uuids)
-        else {
+        let Some(brand) = identify_brand(&manufacturer_data, &uuids) else {
             continue;
         };
         let product_id = if brand == DeviceBrand::EarFun {
@@ -157,25 +151,26 @@ pub(super) fn is_headset(icon: Option<&str>, class: Option<u32>) -> bool {
 
 pub(super) fn identify_brand(
     manufacturer_data: &std::collections::HashMap<u16, Vec<u8>>,
-    has_control_service: bool,
-    device_name: &str,
     uuids: &std::collections::HashSet<Uuid>,
 ) -> Option<DeviceBrand> {
     if manufacturer_data.contains_key(&ONEPLUS_COMPANY_ID) {
         Some(DeviceBrand::OnePlus)
     } else if manufacturer_data.contains_key(&REALME_COMPANY_ID) {
         Some(DeviceBrand::Realme)
-    } else if manufacturer_data.contains_key(&EARFUN_COMPANY_ID)
-        || device_name.to_lowercase().starts_with("earfun")
+    } else if manufacturer_data.contains_key(&EARFUN_COMPANY_ID) {
+        Some(DeviceBrand::EarFun)
+    } else if manufacturer_data.contains_key(&OPPO_COMPANY_ID) {
+        Some(DeviceBrand::Oppo)
+    } else if uuids
+        .iter()
+        .any(|uuid| uuid.to_string().starts_with("0000eb"))
     {
         Some(DeviceBrand::EarFun)
-    } else if manufacturer_data.contains_key(&OPPO_COMPANY_ID) || has_control_service {
-        Some(DeviceBrand::Oppo)
-    } else if uuids.iter().any(|u| {
-        let s = u.to_string();
-        s.starts_with("0000eb") || s == GAIA_UUID
+    } else if uuids.iter().any(|uuid| {
+        uuid.to_string()
+            .eq_ignore_ascii_case(OPPO_SECONDARY_CONTROL_UUID)
     }) {
-        Some(DeviceBrand::EarFun)
+        Some(DeviceBrand::Oppo)
     } else {
         None
     }

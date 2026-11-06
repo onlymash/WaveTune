@@ -40,7 +40,7 @@ pub(crate) struct NoiseControlsViewState<'a> {
     #[allow(dead_code)]
     pub support_note: &'a str,
     pub capability_enabled: bool,
-    pub supports_wear_detection: bool,
+    pub supports_wear_status: bool,
     pub wear: &'a crate::protocol::WearState,
     pub current_mode: Option<u8>,
     pub modes: &'a [NoiseMode],
@@ -56,7 +56,7 @@ pub(crate) struct QuickNoiseWidgets {
 
 impl QuickNoiseWidgets {
     pub fn render(&self, state: &NoiseControlsViewState) {
-        let worn = !state.supports_wear_detection || state.wear.any_earbud_in_ear();
+        let worn = !state.supports_wear_status || state.wear.any_earbud_in_ear();
         self.refresh_controls(
             state.supported_indices,
             state.capability_enabled && worn,

@@ -25,7 +25,7 @@ mod tests;
 #[allow(unused_imports)]
 pub use earfun_catalog::{
     EARFUN_AIR_PRO_4_NOISE_MODES, EARFUN_AIR_S_NOISE_MODES, EARFUN_DEVICE_PROFILES,
-    supported_earfun_codecs,
+    EARFUN_FIRMWARE_PROFILES, EarFunFirmwareProfile, supported_earfun_codecs,
 };
 #[allow(unused_imports)]
 pub use earfun_equalizer::{
@@ -35,6 +35,7 @@ pub use earfun_equalizer::{
 };
 #[allow(unused_imports)]
 pub use earfun_gestures::{
-    EARFUN_AIR_PRO_4_GESTURE_ROWS, EARFUN_AIR_S_GESTURE_ROWS, EARFUN_FREE_PRO_3_GESTURE_ROWS,
+    EARFUN_AIR_PRO_4_GESTURE_ROWS, EARFUN_AIR_PRO_4_PRODUCT_ID, EARFUN_AIR_S_GESTURE_ROWS,
+    EARFUN_AIR_S_PRODUCT_ID, EARFUN_FREE_PRO_3_GESTURE_ROWS, EARFUN_FREE_PRO_3_PRODUCT_ID,
     earfun_gesture_function_label_key, gesture_rows_for_product, is_earfun_product,
 };

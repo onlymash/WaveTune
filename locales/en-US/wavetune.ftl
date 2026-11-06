@@ -257,6 +257,7 @@ noise-mode-vocal-enhancement = Vocal Enhancement
 noise-mode-not-returned = Noise Mode: Device did not return a recognized current mode
 noise-mode-blocked = Noise control is not enabled for this model; command blocked
 noise-mode-confirmed-and-readback = Noise mode confirmed and read back
+noise-mode-command-sent = Noise mode command sent
 noise-mode-readback-unrecognized = Noise mode setting confirmed, but headset readback format was unrecognized
 noise-mode-confirmed = Headset confirmed noise mode: { $param0 }
 noise-mode-reported = Headset reported noise mode: { $param0 }
@@ -461,6 +462,7 @@ feature-readback-mismatch = Headset confirmed setting, but readback { $param0 } 
 # ==============================================================================
 audio-codec-title = Audio Codec
 audio-codec-summary = Select Bluetooth audio codec profile (earbuds will restart to apply)
+audio-codec-blocked = Audio codec control is not enabled for this model; command blocked
 codec-stable-connection = SBC/AAC
 codec-aptx = aptX
 codec-aptx-adaptive = aptX Adaptive

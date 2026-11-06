@@ -100,7 +100,7 @@ impl DesktopServices {
             connected: state.connected,
             device_name: &state.device_name,
             noise_controls_enabled: state.noise.enabled,
-            supports_wear_detection: state.supports_wear_detection,
+            supports_wear_status: state.supports_wear_status,
             wear: &state.wear,
             battery: &state.battery,
             case_battery_stale: state.case_battery_is_stale,

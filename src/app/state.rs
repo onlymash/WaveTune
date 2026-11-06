@@ -32,10 +32,12 @@ pub struct HeadsetSessionState {
     pub connected: bool,
     pub device_name: String,
     pub product_id: Option<u32>,
+    pub firmware_model_code: Option<String>,
     pub artwork_path: Option<PathBuf>,
     pub battery: BatteryState,
     pub case_battery_is_stale: bool,
     pub wear: WearState,
+    pub supports_wear_status: bool,
     pub supports_wear_detection: bool,
 
     pub noise: NoiseState,
@@ -50,10 +52,12 @@ impl Default for HeadsetSessionState {
             connected: false,
             device_name: String::new(),
             product_id: None,
+            firmware_model_code: None,
             artwork_path: None,
             battery: BatteryState::default(),
             case_battery_is_stale: false,
             wear: WearState::default(),
+            supports_wear_status: false,
             supports_wear_detection: true,
             noise: NoiseState::default(),
             sound: SoundState::default(),
@@ -73,8 +77,10 @@ impl HeadsetSessionState {
         self.connected = false;
         self.battery = BatteryState::default();
         self.case_battery_is_stale = false;
+        self.supports_wear_status = false;
         self.supports_wear_detection = true;
         self.product_id = None;
+        self.firmware_model_code = None;
         self.artwork_path = None;
 
         self.noise.reset_on_disconnect();
@@ -88,9 +94,11 @@ impl HeadsetSessionState {
         self.connected = true;
         self.device_name = snapshot.identity.name.clone();
         self.product_id = Some(snapshot.identity.product_id);
+        self.firmware_model_code = snapshot.identity.firmware_model_code.clone();
         self.battery = snapshot.battery.clone();
         self.case_battery_is_stale = false;
         self.wear = snapshot.wear.wear.clone();
+        self.supports_wear_status = snapshot.wear.supports_wear_status;
         self.supports_wear_detection = snapshot.wear.supports_wear_detection;
 
         // Noise
@@ -167,6 +175,7 @@ impl HeadsetSessionState {
 pub struct NoiseState {
     pub enabled: bool,
     pub current_mode: Option<u8>,
+    pub pending_mode: Option<u8>,
     pub last_non_off_mode: Option<u8>,
     pub supported_indices: Vec<u8>,
     pub modes: Vec<NoiseMode>,
@@ -178,6 +187,7 @@ impl Default for NoiseState {
         Self {
             enabled: false,
             current_mode: None,
+            pending_mode: None,
             last_non_off_mode: None,
             supported_indices: Vec::new(),
             modes: Vec::new(),
@@ -187,9 +197,45 @@ impl Default for NoiseState {
 }
 
 impl NoiseState {
+    pub fn observe_mode(&mut self, mode: u8) -> bool {
+        if self.pending_mode.is_some() {
+            return false;
+        }
+        self.current_mode = Some(mode);
+        true
+    }
+
+    pub fn complete_write(&mut self, mode: u8) {
+        self.current_mode = Some(mode);
+        self.pending_mode = None;
+    }
+
     pub fn reset_on_disconnect(&mut self) {
         self.enabled = false;
         self.current_mode = None;
+        self.pending_mode = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NoiseState;
+
+    #[test]
+    fn stale_mode_observation_does_not_clear_pending_mode() {
+        let mut state = NoiseState {
+            current_mode: Some(0),
+            pending_mode: Some(1),
+            ..NoiseState::default()
+        };
+
+        assert!(!state.observe_mode(0));
+        assert_eq!(state.current_mode, Some(0));
+        assert_eq!(state.pending_mode, Some(1));
+
+        state.complete_write(4);
+        assert_eq!(state.current_mode, Some(4));
+        assert_eq!(state.pending_mode, None);
     }
 }
 

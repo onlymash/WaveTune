@@ -33,7 +33,7 @@ use crate::protocol::brands::earfun::{
     parse_earfun_firmware_version, parse_earfun_game_mode, parse_earfun_in_ear_detection,
     parse_earfun_transparency_sub_mode,
 };
-use crate::protocol::{BatteryState, FirmwareVersions, WearPart, WearState};
+use crate::protocol::{BatteryState, FirmwareVersions, WearState};
 
 use super::driver::EarFunDriver;
 use super::features::{
@@ -64,6 +64,16 @@ pub fn parse_earfun_product_id_from_firmware(fw: &str) -> Option<u32> {
     } else {
         None
     }
+}
+
+pub fn parse_earfun_model_code_from_firmware(fw: &str) -> Option<&'static str> {
+    crate::compatibility::brands::earfun::EARFUN_FIRMWARE_PROFILES
+        .iter()
+        .find(|entry| {
+            fw.strip_prefix(entry.firmware_prefix)
+                .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(['-', '_']))
+        })
+        .map(|entry| entry.firmware_prefix)
 }
 
 #[allow(dead_code)]
@@ -128,12 +138,18 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
         }
     };
 
-    let product_id = discovered_product_id.or_else(|| {
-        raw_firmware_string
-            .as_deref()
-            .and_then(parse_earfun_product_id_from_firmware)
-    });
-    let profile = product_id.and_then(compatibility::profile_for_product_id);
+    let firmware_model_code = raw_firmware_string
+        .as_deref()
+        .and_then(parse_earfun_model_code_from_firmware);
+    let firmware_product_id = raw_firmware_string
+        .as_deref()
+        .and_then(parse_earfun_product_id_from_firmware);
+    let product_id = discovered_product_id
+        .filter(|id| compatibility::profile_for_product_id(*id).is_some())
+        .or(firmware_product_id)
+        .or(discovered_product_id)
+        .unwrap_or_default();
+    let profile = compatibility::profile_for_identity(product_id, firmware_model_code);
     let is_known_model = profile.is_some();
     let read_only = profile.is_none_or(|profile| !profile.supports_controls());
     let model = profile.map_or_else(
@@ -173,9 +189,10 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
         let snapshot = DeviceSnapshot {
             identity: DeviceIdentitySnapshot {
                 name: device_name.to_string(),
-                product_id: product_id.unwrap_or(0),
+                product_id,
                 color_id: None,
                 model,
+                firmware_model_code: firmware_model_code.map(str::to_string),
                 is_known_model,
                 read_only: true,
                 firmware,
@@ -187,6 +204,7 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
             },
             wear: WearSnapshot {
                 wear: WearState::default(),
+                supports_wear_status: false,
                 supports_wear_detection: false,
             },
             noise: NoiseSnapshot {
@@ -236,7 +254,8 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
     }
 
     let profile = profile.unwrap();
-    let pid = product_id.unwrap();
+    let pid = product_id;
+    let behavior_pid = compatibility::earfun_behavior_product_id(pid, firmware_model_code);
     let noise_modes = profile.noise_modes;
     let has_submodes = noise_modes.iter().any(|m| m.parent.is_some());
     let noise_mode_indices: Vec<u8> = noise_modes.iter().map(|m| m.index).collect();
@@ -251,7 +270,7 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
     let supports_find_device_sides = profile.supports_find_device_sides();
     let supports_prompt_volume = profile.supports_prompt_volume();
     let supports_microphone_mode = profile.supports_microphone_mode();
-    let available_codecs: Vec<u8> = compatibility::supported_earfun_codecs(pid)
+    let available_codecs: Vec<u8> = compatibility::supported_earfun_codecs(behavior_pid)
         .iter()
         .map(|c| c.as_u8())
         .collect();
@@ -266,16 +285,20 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
     )
     .ok()
     .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
-    let right_bat = request(
-        stream,
-        &mut decoder,
-        EarFunCommands::BATTERY_RIGHT,
-        vec![],
-        updates,
-    )
-    .ok()
-    .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten());
-    let case_bat = if pid != EARFUN_AIR_S_PRODUCT_ID {
+    let right_bat = if compatibility::earfun_is_headphones(pid, firmware_model_code) {
+        None
+    } else {
+        request(
+            stream,
+            &mut decoder,
+            EarFunCommands::BATTERY_RIGHT,
+            vec![],
+            updates,
+        )
+        .ok()
+        .and_then(|pkt| parse_earfun_battery_component(&pkt.payload).ok().flatten())
+    };
+    let case_bat = if compatibility::earfun_has_case_battery(pid, firmware_model_code) {
         request(
             stream,
             &mut decoder,
@@ -300,16 +323,20 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
     };
 
     // 3. Audio & Noise Modes
-    let ambient_mode = request(
-        stream,
-        &mut decoder,
-        EarFunCommands::GET_AMBIENT_SOUND,
-        vec![],
-        updates,
-    )
-    .ok()
-    .and_then(|pkt| parse_earfun_ambient_mode(&pkt.payload).ok())
-    .unwrap_or(0);
+    let ambient_mode = if profile.supports_noise_control() {
+        request(
+            stream,
+            &mut decoder,
+            EarFunCommands::GET_AMBIENT_SOUND,
+            vec![],
+            updates,
+        )
+        .ok()
+        .and_then(|pkt| parse_earfun_ambient_mode(&pkt.payload).ok())
+        .unwrap_or(0)
+    } else {
+        0
+    };
 
     let anc_sub = if ambient_mode == 1 && has_submodes {
         request(
@@ -450,7 +477,7 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
     };
 
     let gesture_rows = if supports_touch_customization {
-        compatibility::gesture_rows_for_product(pid).to_vec()
+        compatibility::gesture_rows_for_identity(pid, firmware_model_code).to_vec()
     } else {
         vec![]
     };
@@ -510,34 +537,19 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
         detected_features.push("microphone-mode".to_string());
     }
 
-    // When connected via RFCOMM, earbuds are active and in-ear
-    let wear = if supports_wear_detection {
-        WearState {
-            left: Some(WearPart {
-                out_of_case: true,
-                in_ear: true,
-                raw_flags: 0,
-            }),
-            right: Some(WearPart {
-                out_of_case: true,
-                in_ear: true,
-                raw_flags: 0,
-            }),
-            case_open: Some(true),
-        }
-    } else {
-        WearState::default()
-    };
+    let wear = WearState::default();
 
-    let presets = compatibility::equalizer_presets_for_product(pid).to_vec();
+    let presets = compatibility::equalizer_presets_for_product(behavior_pid).to_vec();
     let supports_custom_equalizer = profile.supports_custom_equalizer();
     let mut custom_equalizers = if supports_custom_equalizer {
-        crate::resources::get_saved_custom_equalizers(pid, device_address)
+        crate::resources::get_saved_custom_equalizers(behavior_pid, device_address)
     } else {
         vec![]
     };
     let equalizer_preset = if supports_equalizer {
-        Some(crate::resources::get_saved_equalizer_preset(pid, device_address).unwrap_or(0))
+        Some(
+            crate::resources::get_saved_equalizer_preset(behavior_pid, device_address).unwrap_or(0),
+        )
     } else {
         None
     };
@@ -553,6 +565,7 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
             product_id: pid,
             color_id: None,
             model,
+            firmware_model_code: firmware_model_code.map(str::to_string),
             is_known_model: true,
             read_only: false,
             firmware,
@@ -560,10 +573,13 @@ pub fn initialize_earfun_session_with_lap<T: Read + Write>(
         battery,
         wear: WearSnapshot {
             wear,
+            supports_wear_status: false,
             supports_wear_detection,
         },
         noise: NoiseSnapshot {
-            current_mode: Some(current_protocol_index),
+            current_mode: profile
+                .supports_noise_control()
+                .then_some(current_protocol_index),
             supported_indices: noise_mode_indices,
             modes: noise_modes,
             support_note: "EarFun GAIA V3 Noise Architecture".to_string(),

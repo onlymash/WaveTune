@@ -257,6 +257,7 @@ noise-mode-vocal-enhancement = 人声增强
 noise-mode-not-returned = 降噪模式：设备未返回可识别的当前模式
 noise-mode-blocked = 该型号未开放降噪控制，已阻止发送
 noise-mode-confirmed-and-readback = 降噪模式已确认并回读
+noise-mode-command-sent = 已发送降噪模式命令
 noise-mode-readback-unrecognized = 降噪设置已确认，但耳机回读格式无法识别
 noise-mode-confirmed = 耳机已确认降噪模式：{ $param0 }
 noise-mode-reported = 耳机已上报降噪模式：{ $param0 }
@@ -461,6 +462,7 @@ feature-readback-mismatch = 耳机已确认设置，但回读{ $param0 }状态�
 # ==============================================================================
 audio-codec-title = 音频编码
 audio-codec-summary = 选择蓝牙高保真音频编码（切换后耳机将自动重启生效）
+audio-codec-blocked = 该型号未开放音频编码控制，已阻止发送
 codec-stable-connection = SBC/AAC
 codec-aptx = aptX
 codec-aptx-adaptive = aptX Adaptive

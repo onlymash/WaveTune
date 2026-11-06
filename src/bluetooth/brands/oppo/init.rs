@@ -159,6 +159,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
                     product_id,
                     color_id,
                     model,
+                    firmware_model_code: None,
                     is_known_model,
                     read_only: true,
                     firmware,
@@ -166,6 +167,8 @@ pub fn initialize_oppo_session<T: Read + Write>(
                 battery,
                 wear: WearSnapshot {
                     wear,
+                    supports_wear_status: profile
+                        .is_some_and(|profile| profile.supports_wear_detection()),
                     supports_wear_detection: profile
                         .is_some_and(|profile| profile.supports_wear_detection()),
                 },
@@ -531,6 +534,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
                 product_id,
                 color_id,
                 model: profile.model.to_string(),
+                firmware_model_code: None,
                 is_known_model: true,
                 read_only: false,
                 firmware,
@@ -538,6 +542,7 @@ pub fn initialize_oppo_session<T: Read + Write>(
             battery,
             wear: WearSnapshot {
                 wear,
+                supports_wear_status: profile.supports_wear_detection(),
                 supports_wear_detection: profile.supports_wear_detection(),
             },
             noise: NoiseSnapshot {

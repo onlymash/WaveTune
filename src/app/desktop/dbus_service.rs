@@ -174,7 +174,11 @@ impl QuickSettingsSnapshot {
 
 fn format_battery_part(label: &str, part: Option<BatteryPart>, stale: bool) -> Option<String> {
     let part = part?;
-    let charging_mark = if part.charging && !stale { "⚡" } else { "" };
+    let charging_mark = if part.charging == Some(true) && !stale {
+        "⚡"
+    } else {
+        ""
+    };
     if label.is_empty() {
         Some(format!("{}%{charging_mark}", part.percentage))
     } else {
@@ -250,7 +254,7 @@ pub(crate) struct DesktopSnapshotInput<'a> {
     pub connected: bool,
     pub device_name: &'a str,
     pub noise_controls_enabled: bool,
-    pub supports_wear_detection: bool,
+    pub supports_wear_status: bool,
     pub wear: &'a WearState,
     pub battery: &'a BatteryState,
     pub case_battery_stale: bool,
@@ -264,7 +268,7 @@ pub(crate) fn build_snapshot(input: &DesktopSnapshotInput) -> QuickSettingsSnaps
         return QuickSettingsSnapshot::default();
     }
 
-    let worn = !input.supports_wear_detection || input.wear.any_earbud_in_ear();
+    let worn = !input.supports_wear_status || input.wear.any_earbud_in_ear();
     let mut primary_modes = Vec::new();
     for index in compatibility::catalog_noise_indices() {
         if let Some(mode) = compatibility::noise_mode_for(input.modes, index)
@@ -332,7 +336,7 @@ pub(crate) fn build_snapshot(input: &DesktopSnapshotInput) -> QuickSettingsSnaps
 
     let pack_part = |part: Option<BatteryPart>, stale: bool| -> (i32, bool) {
         match part {
-            Some(p) => (i32::from(p.percentage), p.charging && !stale),
+            Some(p) => (i32::from(p.percentage), p.charging == Some(true) && !stale),
             None => (-1, false),
         }
     };
@@ -613,11 +617,11 @@ mod tests {
         let battery = BatteryState {
             left: Some(BatteryPart {
                 percentage: 80,
-                charging: false,
+                charging: Some(false),
             }),
             right: Some(BatteryPart {
                 percentage: 75,
-                charging: true,
+                charging: Some(true),
             }),
             case: None,
         };
@@ -628,7 +632,7 @@ mod tests {
             connected: true,
             device_name: "OPPO Enco X4",
             noise_controls_enabled: true,
-            supports_wear_detection: true,
+            supports_wear_status: true,
             wear: &worn_wear,
             battery: &battery,
             case_battery_stale: false,
@@ -655,7 +659,7 @@ mod tests {
             connected: true,
             device_name: "OPPO Enco X4",
             noise_controls_enabled: true,
-            supports_wear_detection: true,
+            supports_wear_status: true,
             wear: &worn_wear,
             battery: &battery,
             case_battery_stale: false,
@@ -673,7 +677,7 @@ mod tests {
             connected: true,
             device_name: "OPPO Enco X4",
             noise_controls_enabled: true,
-            supports_wear_detection: true,
+            supports_wear_status: true,
             wear: &unworn_wear,
             battery: &battery,
             case_battery_stale: false,
@@ -686,6 +690,20 @@ mod tests {
         assert!(!unworn_snap.noise_control_active);
         assert_eq!(unworn_snap.active_mode_label, "关闭");
         assert_eq!(unworn_snap.active_mode_icon, "audio-volume-muted-symbolic");
+
+        let unknown_wear_snap = build_snapshot(&DesktopSnapshotInput {
+            connected: true,
+            device_name: "EarFun Air Pro 4",
+            noise_controls_enabled: true,
+            supports_wear_status: false,
+            wear: &WearState::default(),
+            battery: &battery,
+            case_battery_stale: false,
+            current_noise_mode: Some(0),
+            supported_indices: &supported,
+            modes,
+        });
+        assert!(unknown_wear_snap.controls_enabled);
 
         crate::i18n::reset_locale();
     }
@@ -722,15 +740,15 @@ mod tests {
         let tws_equal = BatteryState {
             left: Some(BatteryPart {
                 percentage: 80,
-                charging: false,
+                charging: Some(false),
             }),
             right: Some(BatteryPart {
                 percentage: 80,
-                charging: false,
+                charging: Some(false),
             }),
             case: Some(BatteryPart {
                 percentage: 100,
-                charging: true,
+                charging: Some(true),
             }),
         };
         assert_eq!(
@@ -742,11 +760,11 @@ mod tests {
         let tws_diff = BatteryState {
             left: Some(BatteryPart {
                 percentage: 90,
-                charging: false,
+                charging: Some(false),
             }),
             right: Some(BatteryPart {
                 percentage: 85,
-                charging: true,
+                charging: Some(true),
             }),
             case: None,
         };
@@ -756,7 +774,7 @@ mod tests {
         let headphone = BatteryState {
             left: Some(BatteryPart {
                 percentage: 70,
-                charging: false,
+                charging: Some(false),
             }),
             right: None,
             case: None,
@@ -766,7 +784,7 @@ mod tests {
         let headphone_charging = BatteryState {
             left: Some(BatteryPart {
                 percentage: 70,
-                charging: true,
+                charging: Some(true),
             }),
             right: None,
             case: None,

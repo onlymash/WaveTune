@@ -61,8 +61,10 @@ pub(crate) fn print_snapshot(snapshot: &DeviceSnapshot) {
         println!("{}", crate::t!("probe-color-id", color_id));
     }
     print_battery(&snapshot.battery);
-    if snapshot.wear.supports_wear_detection {
+    if snapshot.wear.supports_wear_status {
         print_wear(&snapshot.wear.wear);
+    } else if snapshot.wear.supports_wear_detection {
+        println!("{}", crate::t!("wear-status-no-data"));
     } else {
         println!("{}", crate::t!("wear-status-not-supported"));
     }
@@ -272,7 +274,7 @@ fn print_battery(state: &BatteryState) {
 
     if is_headphone {
         if let Some(part) = state.left.or(state.right) {
-            let charging_suffix = if part.charging {
+            let charging_suffix = if part.charging == Some(true) {
                 format!(" ({})", crate::t!("battery-charging"))
             } else {
                 String::new()
@@ -293,7 +295,7 @@ fn print_battery(state: &BatteryState) {
     ] {
         match part {
             Some(part) => {
-                let charging_suffix = if part.charging {
+                let charging_suffix = if part.charging == Some(true) {
                     format!(" ({})", crate::t!("battery-charging"))
                 } else {
                     String::new()

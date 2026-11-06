@@ -358,7 +358,16 @@ impl SoundController {
                 true
             }
             UiUpdate::ProductId { product_id, .. } => {
-                let profile = crate::compatibility::profile_for_product_id(*product_id);
+                let firmware_model_code = self
+                    .context
+                    .session_state
+                    .borrow()
+                    .firmware_model_code
+                    .clone();
+                let profile = crate::compatibility::profile_for_identity(
+                    *product_id,
+                    firmware_model_code.as_deref(),
+                );
                 let supports_eq = profile.is_some_and(|p| p.supports_equalizer());
                 let supports_custom_eq = profile.is_some_and(|p| p.supports_custom_equalizer());
                 let supports_spatial = profile.is_some_and(|p| p.supports_spatial_audio());
@@ -367,10 +376,17 @@ impl SoundController {
                 let supports_bass = profile.is_some_and(|p| p.supports_bass_engine());
                 let supports_hires = profile.is_some_and(|p| p.supports_hi_res());
                 let supports_codec = profile.is_some_and(|p| p.supports_audio_codec());
-                let available_codecs =
-                    crate::compatibility::supported_codecs_for_product(*product_id).to_vec();
-                let presets =
-                    crate::compatibility::equalizer_presets_for_product(*product_id).to_vec();
+                let available_codecs = crate::compatibility::supported_codecs_for_identity(
+                    *product_id,
+                    firmware_model_code.as_deref(),
+                );
+                let presets = crate::compatibility::equalizer_presets_for_product(
+                    crate::compatibility::earfun_behavior_product_id(
+                        *product_id,
+                        firmware_model_code.as_deref(),
+                    ),
+                )
+                .to_vec();
 
                 {
                     let mut st = self.context.session_state.borrow_mut();

@@ -125,8 +125,15 @@ impl DeviceComponent {
         self.battery.reset();
     }
 
-    pub fn render_wear(&self, wear: &WearState, supports_wear_detection: bool) {
-        if !supports_wear_detection {
+    pub fn render_wear(
+        &self,
+        wear: &WearState,
+        supports_wear_status: bool,
+        supports_wear_detection: bool,
+    ) {
+        if !supports_wear_status && supports_wear_detection {
+            self.device.wear.set_text(&crate::t!("wear-status-no-data"));
+        } else if !supports_wear_status {
             self.device
                 .wear
                 .set_text(&crate::t!("wear-status-not-supported"));

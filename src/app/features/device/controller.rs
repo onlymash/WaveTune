@@ -189,8 +189,11 @@ impl DeviceController {
                 ));
                 self.component.render_firmware(&snapshot.identity.firmware);
                 self.component.render_battery(&snapshot.battery, false);
-                self.component
-                    .render_wear(&snapshot.wear.wear, snapshot.wear.supports_wear_detection);
+                self.component.render_wear(
+                    &snapshot.wear.wear,
+                    snapshot.wear.supports_wear_status,
+                    snapshot.wear.supports_wear_detection,
+                );
                 self.component
                     .paired
                     .set_visible(snapshot.dual_device.supports_dual_device);
@@ -343,20 +346,33 @@ impl DeviceController {
                 true
             }
             UiUpdate::Wear(update) => {
-                let supports_wear = self.context.session_state.borrow().supports_wear_detection;
+                let (supports_wear_status, supports_wear_detection) = {
+                    let state = self.context.session_state.borrow();
+                    (state.supports_wear_status, state.supports_wear_detection)
+                };
                 {
                     let mut st = self.context.session_state.borrow_mut();
                     crate::ui::home_state::merge_wear(&mut st.wear, update.clone());
                 }
                 let st = self.context.session_state.borrow();
-                self.component.render_wear(&st.wear, supports_wear);
+                self.component
+                    .render_wear(&st.wear, supports_wear_status, supports_wear_detection);
                 true
             }
             UiUpdate::ProductId {
                 product_id,
                 color_id,
             } => {
-                let profile = crate::compatibility::profile_for_product_id(*product_id);
+                let firmware_model_code = self
+                    .context
+                    .session_state
+                    .borrow()
+                    .firmware_model_code
+                    .clone();
+                let profile = crate::compatibility::profile_for_identity(
+                    *product_id,
+                    firmware_model_code.as_deref(),
+                );
                 let supports_wear = profile.is_none_or(|p| p.supports_wear_detection());
                 let supports_dual = profile.is_some_and(|p| p.supports_dual_device());
 

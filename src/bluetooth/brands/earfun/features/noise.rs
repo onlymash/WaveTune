@@ -25,6 +25,7 @@ use std::{
 use crate::app::events::UiUpdate;
 use crate::bluetooth::brands::earfun::transport::{drain_stream, send_command};
 use crate::compatibility;
+use crate::protocol::WearState;
 use crate::protocol::brands::earfun::{EarFunCommands, EarFunFrameDecoder};
 
 pub fn earfun_mode_to_protocol_index(master: u8, anc_sub: u8, transp_sub: u8) -> u8 {
@@ -67,16 +68,32 @@ pub fn set_noise_mode<T: Read + Write>(
     stream: &mut T,
     decoder: &mut EarFunFrameDecoder,
     product_id: u32,
+    firmware_model_code: Option<&str>,
     protocol_index: u8,
     last_anc_sub: &mut u8,
     last_transp_sub: &mut u8,
+    wear: &WearState,
+    supports_wear_status: bool,
     updates: &Sender<UiUpdate>,
 ) -> Result<u8, String> {
-    let profile = compatibility::profile_for_product_id(product_id);
-    let has_submodes = profile
-        .map(|p| p.noise_modes.iter().any(|m| m.parent.is_some()))
-        .unwrap_or(false);
+    let profile = compatibility::profile_for_identity(product_id, firmware_model_code)
+        .filter(|profile| profile.supports_controls())
+        .ok_or_else(|| crate::t!("noise-mode-blocked"))?;
+    if !profile
+        .noise_modes
+        .iter()
+        .any(|mode| mode.index == protocol_index)
+    {
+        return Err(crate::t!(
+            "noise-mode-not-enabled-in-profile",
+            protocol_index
+        ));
+    }
+    if supports_wear_status && !wear.any_earbud_in_ear() {
+        return Err(crate::t!("wear-earbuds-not-in-ear"));
+    }
 
+    let has_submodes = profile.noise_modes.iter().any(|mode| mode.parent.is_some());
     if !has_submodes {
         send_command(
             stream,
@@ -87,14 +104,12 @@ pub fn set_noise_mode<T: Read + Write>(
         return Ok(protocol_index);
     }
 
-    let confirmed_index = match protocol_index {
+    let mode_index = match protocol_index {
         0 => {
-            // Off: set master mode to 0
             send_command(stream, EarFunCommands::SET_AMBIENT_SOUND, vec![0])?;
             0
         }
         1 => {
-            // ANC primary button clicked: activate master 1 + last ANC submode
             send_command(stream, EarFunCommands::SET_AMBIENT_SOUND, vec![1])?;
             thread::sleep(Duration::from_millis(20));
             send_command(
@@ -105,7 +120,6 @@ pub fn set_noise_mode<T: Read + Write>(
             earfun_mode_to_protocol_index(1, *last_anc_sub, *last_transp_sub)
         }
         2 => {
-            // Transparency primary button clicked: activate master 2 + last Transparency submode
             send_command(stream, EarFunCommands::SET_AMBIENT_SOUND, vec![2])?;
             thread::sleep(Duration::from_millis(20));
             send_command(
@@ -116,7 +130,6 @@ pub fn set_noise_mode<T: Read + Write>(
             earfun_mode_to_protocol_index(2, *last_anc_sub, *last_transp_sub)
         }
         sub_index => {
-            // Specific submode selected from dropdown
             let (target_master, target_sub, is_anc) = protocol_index_to_earfun_mode(sub_index);
             send_command(
                 stream,
@@ -138,5 +151,5 @@ pub fn set_noise_mode<T: Read + Write>(
     };
 
     drain_stream(stream, decoder, Some(updates), Duration::from_millis(100));
-    Ok(confirmed_index)
+    Ok(mode_index)
 }

@@ -129,8 +129,12 @@ impl SessionRunner {
                     return Ok(());
                 }
                 Ok(command) => {
+                    let reset_poll_timer = matches!(command, WorkerCommand::SetNoiseMode(_));
                     if let Err(error) = driver.handle_command(stream, command, updates) {
                         let _ = updates.send(UiUpdate::Status(error));
+                    }
+                    if reset_poll_timer {
+                        last_poll = Instant::now();
                     }
                 }
                 Err(TryRecvError::Empty) => {}
@@ -231,6 +235,7 @@ mod tests {
         bytes_received: Vec<Vec<u8>>,
         tick_count: usize,
         poll_interval: Option<Duration>,
+        command_delay: Option<Duration>,
     }
 
     impl MockDriver {
@@ -242,6 +247,7 @@ mod tests {
                 bytes_received: Vec::new(),
                 tick_count: 0,
                 poll_interval: None,
+                command_delay: None,
             }
         }
     }
@@ -267,6 +273,7 @@ mod tests {
                 product_id: 0x123456,
                 color_id: None,
                 model: "Mock Headset".to_string(),
+                firmware_model_code: None,
                 is_known_model: true,
                 read_only: self.read_only,
                 firmware: Default::default(),
@@ -286,6 +293,11 @@ mod tests {
             command: WorkerCommand,
             _updates: &Sender<UiUpdate>,
         ) -> Result<(), String> {
+            if matches!(command, WorkerCommand::SetNoiseMode(_))
+                && let Some(delay) = self.command_delay
+            {
+                thread::sleep(delay);
+            }
             self.commands_received.push(command);
             Ok(())
         }
@@ -419,6 +431,31 @@ mod tests {
         // Verify driver received the bytes from the stream
         assert_eq!(driver.bytes_received.len(), 1);
         assert_eq!(driver.bytes_received[0], vec![0xAA, 0xBB, 0xCC]);
+    }
+
+    #[test]
+    fn noise_mode_command_defers_an_overdue_periodic_poll() {
+        let (updates_tx, _updates_rx) = mpsc::channel();
+        let (commands_tx, commands_rx) = mpsc::channel();
+        let mut stream = MockStream::new(vec![]);
+        let mut driver = MockDriver::new("earfun", false);
+        driver.poll_interval = Some(Duration::from_millis(5));
+        driver.command_delay = Some(Duration::from_millis(10));
+        let device = mock_device();
+
+        commands_tx.send(WorkerCommand::SetNoiseMode(1)).unwrap();
+        commands_tx.send(WorkerCommand::Disconnect).unwrap();
+
+        let result = SessionRunner::run_with_stream(
+            &mut stream,
+            &device,
+            &mut driver,
+            &updates_tx,
+            &commands_rx,
+        );
+
+        assert!(result.is_ok());
+        assert_eq!(driver.tick_count, 0);
     }
 
     #[test]

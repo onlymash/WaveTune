@@ -106,7 +106,7 @@ fn noise_control_circular_buttons_and_combobox_row() {
             supported_indices: &supported_indices,
             support_note: "",
             capability_enabled: true,
-            supports_wear_detection: true,
+            supports_wear_status: true,
             wear: &wear,
             current_mode: Some(0),
             modes,
@@ -131,7 +131,7 @@ fn noise_control_circular_buttons_and_combobox_row() {
             supported_indices: &supported_indices,
             support_note: "",
             capability_enabled: true,
-            supports_wear_detection: true,
+            supports_wear_status: true,
             wear: &wear,
             current_mode: Some(7),
             modes,
@@ -153,6 +153,21 @@ fn noise_control_circular_buttons_and_combobox_row() {
         &crate::t!("noise-mode-level")
     );
 
+    // Unknown physical wear state does not disable a device without a wear-status feed.
+    crate::ui::home_state::update_noise_controls(
+        &widgets,
+        &crate::ui::pages::home::noise::NoiseControlsViewState {
+            supported_indices: &supported_indices,
+            support_note: "",
+            capability_enabled: true,
+            supports_wear_status: false,
+            wear: &crate::protocol::WearState::default(),
+            current_mode: Some(0),
+            modes,
+        },
+    );
+    assert!(off_ctrl.button.is_sensitive());
+
     // 3. Unsupported headset (empty noise modes): mode_group card must be hidden
     crate::ui::home_state::update_noise_controls(
         &widgets,
@@ -160,7 +175,7 @@ fn noise_control_circular_buttons_and_combobox_row() {
             supported_indices: &[],
             support_note: "",
             capability_enabled: false,
-            supports_wear_detection: false,
+            supports_wear_status: false,
             wear: &wear,
             current_mode: None,
             modes: &[],
@@ -1102,15 +1117,15 @@ fn test_battery_banner_adaptive_headphone() {
     let tws_battery = BatteryState {
         left: Some(BatteryPart {
             percentage: 80,
-            charging: false,
+            charging: Some(false),
         }),
         right: Some(BatteryPart {
             percentage: 75,
-            charging: true,
+            charging: Some(true),
         }),
         case: Some(BatteryPart {
             percentage: 90,
-            charging: false,
+            charging: Some(false),
         }),
     };
     banner.render_battery(&tws_battery, false);
@@ -1123,7 +1138,7 @@ fn test_battery_banner_adaptive_headphone() {
     let hp_battery = BatteryState {
         left: Some(BatteryPart {
             percentage: 85,
-            charging: true,
+            charging: Some(true),
         }),
         right: None,
         case: None,

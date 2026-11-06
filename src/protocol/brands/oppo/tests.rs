@@ -116,11 +116,11 @@ fn parses_x4_battery_response_and_retains_missing_case_as_unknown() {
         BatteryState {
             left: Some(BatteryPart {
                 percentage: 70,
-                charging: true,
+                charging: Some(true),
             }),
             right: Some(BatteryPart {
                 percentage: 90,
-                charging: false,
+                charging: Some(false),
             }),
             case: None,
         }
@@ -135,11 +135,11 @@ fn treats_zero_unplugged_case_battery_as_unreported_while_preserving_charging_ze
         BatteryState {
             left: Some(BatteryPart {
                 percentage: 80,
-                charging: false,
+                charging: Some(false),
             }),
             right: Some(BatteryPart {
                 percentage: 80,
-                charging: false,
+                charging: Some(false),
             }),
             case: None,
         }
@@ -153,7 +153,7 @@ fn treats_zero_unplugged_case_battery_as_unreported_while_preserving_charging_ze
         charging_zero.case,
         Some(BatteryPart {
             percentage: 0,
-            charging: true,
+            charging: Some(true),
         })
     );
 }

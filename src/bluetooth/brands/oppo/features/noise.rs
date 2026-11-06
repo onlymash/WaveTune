@@ -140,7 +140,7 @@ pub fn handle_noise_command<T: Read + Write>(
             );
             match result {
                 Ok(actual) => {
-                    let _ = ctx.updates.send(UiUpdate::NoiseMode(actual));
+                    let _ = ctx.updates.send(UiUpdate::NoiseModeConfirmed(actual));
                     let _ = ctx.updates.send(UiUpdate::Status(crate::t!(
                         "noise-mode-confirmed-and-readback"
                     )));

@@ -55,7 +55,7 @@ fn parse_battery_components(payload: &[u8]) -> Result<BatteryState, OppoProtocol
     for record in records.chunks_exact(2) {
         let part = BatteryPart {
             percentage: record[1] & 0x7f,
-            charging: record[1] & 0x80 != 0,
+            charging: Some(record[1] & 0x80 != 0),
         };
         if part.percentage > 100 {
             return Err(OppoProtocolError::InvalidPacketLength);

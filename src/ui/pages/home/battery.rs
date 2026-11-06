@@ -78,7 +78,9 @@ impl BatteryBannerWidgets {
             indicator
                 .percentage
                 .set_text(&format!("{}%", part.percentage));
-            indicator.charging.set_visible(part.charging && !stale);
+            indicator
+                .charging
+                .set_visible(part.charging == Some(true) && !stale);
             let stale_tooltip = crate::t!("battery-last-read");
             indicator
                 .percentage

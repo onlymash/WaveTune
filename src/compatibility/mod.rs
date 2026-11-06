@@ -140,6 +140,73 @@ pub fn supported_codecs_for_product(product_id: u32) -> Vec<u8> {
         .collect()
 }
 
+pub fn supported_codecs_for_identity(
+    product_id: u32,
+    firmware_model_code: Option<&str>,
+) -> Vec<u8> {
+    let behavior_product_id = earfun_behavior_product_id(product_id, firmware_model_code);
+    supported_codecs_for_product(behavior_product_id)
+}
+
+pub fn earfun_firmware_profile(
+    firmware_model_code: &str,
+) -> Option<&'static brands::earfun::EarFunFirmwareProfile> {
+    brands::earfun::EARFUN_FIRMWARE_PROFILES
+        .iter()
+        .find(|entry| entry.firmware_prefix == firmware_model_code)
+}
+
+fn earfun_profile_for_product_id(product_id: u32) -> Option<&'static DeviceProfile> {
+    brands::earfun::EARFUN_DEVICE_PROFILES
+        .iter()
+        .find(|profile| profile.product_id == Some(product_id))
+}
+
+pub fn earfun_behavior_product_id(product_id: u32, firmware_model_code: Option<&str>) -> u32 {
+    if firmware_model_code.is_none() || earfun_profile_for_product_id(product_id).is_some() {
+        return product_id;
+    }
+    firmware_model_code
+        .and_then(earfun_firmware_profile)
+        .map_or(product_id, |entry| entry.behavior_product_id)
+}
+
+pub fn earfun_has_case_battery(product_id: u32, firmware_model_code: Option<&str>) -> bool {
+    if firmware_model_code.is_none() || earfun_profile_for_product_id(product_id).is_some() {
+        product_id != brands::earfun::EARFUN_AIR_S_PRODUCT_ID
+    } else {
+        firmware_model_code
+            .and_then(earfun_firmware_profile)
+            .map_or(
+                product_id != brands::earfun::EARFUN_AIR_S_PRODUCT_ID,
+                |entry| entry.has_case_battery,
+            )
+    }
+}
+
+pub fn earfun_is_headphones(product_id: u32, firmware_model_code: Option<&str>) -> bool {
+    if firmware_model_code.is_none() || earfun_profile_for_product_id(product_id).is_some() {
+        false
+    } else {
+        firmware_model_code
+            .and_then(earfun_firmware_profile)
+            .is_some_and(|entry| entry.headphones)
+    }
+}
+
+pub fn earfun_dual_device_restart_required(
+    product_id: u32,
+    firmware_model_code: Option<&str>,
+) -> bool {
+    if firmware_model_code.is_none() || earfun_profile_for_product_id(product_id).is_some() {
+        product_id == brands::earfun::EARFUN_AIR_PRO_4_PRODUCT_ID
+    } else {
+        firmware_model_code
+            .and_then(earfun_firmware_profile)
+            .is_some_and(|entry| entry.dual_device_restart)
+    }
+}
+
 pub fn equalizer_preset_key(index: u8, presets: &[EqualizerPreset]) -> Option<&'static str> {
     presets
         .iter()
@@ -213,6 +280,13 @@ pub fn gesture_rows_for_product(product_id: u32) -> &'static [GestureRow] {
     } else {
         brands::oppo::gesture_rows_for_product(product_id)
     }
+}
+
+pub fn gesture_rows_for_identity(
+    product_id: u32,
+    firmware_model_code: Option<&str>,
+) -> &'static [GestureRow] {
+    gesture_rows_for_product(earfun_behavior_product_id(product_id, firmware_model_code))
 }
 
 #[allow(dead_code)]
@@ -348,6 +422,18 @@ impl DeviceProfile {
 
 pub fn profile_for_product_id(product_id: u32) -> Option<&'static DeviceProfile> {
     registry::builtin_profiles().find(|profile| profile.product_id == Some(product_id))
+}
+
+pub fn profile_for_identity(
+    product_id: u32,
+    firmware_model_code: Option<&str>,
+) -> Option<&'static DeviceProfile> {
+    if let Some(firmware_model_code) = firmware_model_code {
+        earfun_profile_for_product_id(product_id)
+            .or_else(|| earfun_firmware_profile(firmware_model_code).map(|entry| &entry.profile))
+    } else {
+        profile_for_product_id(product_id)
+    }
 }
 
 pub fn noise_mode_for(modes: &[NoiseMode], index: u8) -> Option<&NoiseMode> {

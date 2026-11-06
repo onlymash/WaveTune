@@ -53,21 +53,13 @@ pub fn set_find_mode<T: Read + Write>(
     mode: EarFunFindMode,
     updates: Option<&Sender<UiUpdate>>,
 ) -> Result<EarFunFindMode, String> {
-    request(
+    send_command(
         stream,
-        decoder,
         EarFunCommands::SET_FIND_DEVICE,
         encode_earfun_set_find_mode(mode),
-        updates,
     )?;
-    let actual = query_find_mode(stream, decoder, updates)?;
-    if actual != mode {
-        return Err(format!(
-            "Find Device readback mismatch: requested {}, received {}",
-            mode as u8, actual as u8
-        ));
-    }
-    Ok(actual)
+    drain_stream(stream, decoder, updates, Duration::from_millis(50));
+    Ok(mode)
 }
 
 pub fn query_prompt_volume<T: Read + Write>(

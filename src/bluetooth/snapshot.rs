@@ -40,6 +40,7 @@ pub struct DeviceSnapshot {
 pub struct DeviceIdentitySnapshot {
     pub name: String,
     pub model: String,
+    pub firmware_model_code: Option<String>,
     pub product_id: u32,
     pub color_id: Option<u8>,
     pub is_known_model: bool,
@@ -50,6 +51,9 @@ pub struct DeviceIdentitySnapshot {
 #[derive(Clone, Debug, Default)]
 pub struct WearSnapshot {
     pub wear: WearState,
+    /// Whether this protocol reports the physical in-ear / case state.
+    pub supports_wear_status: bool,
+    /// Whether the device supports the automatic in-ear detection setting.
     pub supports_wear_detection: bool,
 }
 

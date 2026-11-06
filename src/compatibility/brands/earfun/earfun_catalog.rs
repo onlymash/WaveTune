@@ -47,6 +47,204 @@ pub fn supported_earfun_codecs(product_id: u32) -> &'static [EarFunAudioCodec] {
     }
 }
 
+pub struct EarFunFirmwareProfile {
+    pub firmware_prefix: &'static str,
+    pub behavior_product_id: u32,
+    pub has_case_battery: bool,
+    pub headphones: bool,
+    pub dual_device_restart: bool,
+    pub profile: DeviceProfile,
+}
+
+const EARFUN_GAIA_TWS_FEATURES: &[&str] = &[
+    features::WEAR_DETECTION,
+    features::DUAL_DEVICE,
+    features::GAME_MODE,
+    features::EQUALIZER,
+    features::CUSTOM_EQUALIZER,
+    features::TOUCH_CUSTOMIZATION,
+    features::TOUCH_LOCK,
+    features::FIND_DEVICE,
+    features::FIND_DEVICE_SIDES,
+    features::PROMPT_VOLUME,
+    features::MICROPHONE_MODE,
+    features::AUDIO_CODEC,
+];
+
+const EARFUN_GAIA_BASIC_FEATURES: &[&str] = &[
+    features::GAME_MODE,
+    features::EQUALIZER,
+    features::CUSTOM_EQUALIZER,
+    features::TOUCH_CUSTOMIZATION,
+    features::TOUCH_LOCK,
+];
+
+const EARFUN_GAIA_NOISE_MODES: &[NoiseMode] = &[
+    NoiseMode {
+        index: 0,
+        kind: NoiseModeKind::Off,
+        parent: None,
+    },
+    NoiseMode {
+        index: 1,
+        kind: NoiseModeKind::NoiseCancellation,
+        parent: None,
+    },
+    NoiseMode {
+        index: 2,
+        kind: NoiseModeKind::Transparency,
+        parent: None,
+    },
+];
+
+const fn gaia_profile(
+    model: &'static str,
+    noise_modes: &'static [NoiseMode],
+    features: &'static [&'static str],
+) -> DeviceProfile {
+    DeviceProfile {
+        model,
+        product_id: None,
+        uuid: Some("00001107-D102-11E1-9B23-00025B00A5A5"),
+        noise_modes,
+        features,
+    }
+}
+
+const EARFUN_GAIA_TW700_FEATURES: &[&str] = EARFUN_GAIA_TWS_FEATURES;
+const EARFUN_GAIA_QCC_FEATURES: &[&str] = &[
+    features::WEAR_DETECTION,
+    features::DUAL_DEVICE,
+    features::GAME_MODE,
+    features::EQUALIZER,
+    features::CUSTOM_EQUALIZER,
+    features::TOUCH_CUSTOMIZATION,
+    features::TOUCH_LOCK,
+    features::FIND_DEVICE,
+    features::FIND_DEVICE_SIDES,
+    features::PROMPT_VOLUME,
+    features::MICROPHONE_MODE,
+    features::AUDIO_CODEC,
+];
+const EARFUN_AIR_S_LIKE_FEATURES: &[&str] = &[
+    features::GAME_MODE,
+    features::EQUALIZER,
+    features::CUSTOM_EQUALIZER,
+    features::TOUCH_CUSTOMIZATION,
+    features::TOUCH_LOCK,
+];
+const EARFUN_WAVE_PRO_X_FEATURES: &[&str] = &[
+    features::DUAL_DEVICE,
+    features::GAME_MODE,
+    features::EQUALIZER,
+    features::CUSTOM_EQUALIZER,
+    features::PROMPT_VOLUME,
+    features::AUDIO_CODEC,
+];
+
+pub static EARFUN_FIRMWARE_PROFILES: &[EarFunFirmwareProfile] = &[
+    EarFunFirmwareProfile {
+        firmware_prefix: "TW700AI",
+        behavior_product_id: 0x004535,
+        has_case_battery: true,
+        headphones: false,
+        dual_device_restart: true,
+        profile: gaia_profile(
+            "EarFun Air Pro 4+AI",
+            EARFUN_GAIA_NOISE_MODES,
+            EARFUN_GAIA_TW700_FEATURES,
+        ),
+    },
+    EarFunFirmwareProfile {
+        firmware_prefix: "TW700",
+        behavior_product_id: 0x004535,
+        has_case_battery: true,
+        headphones: false,
+        dual_device_restart: true,
+        profile: gaia_profile(
+            "EarFun Air Pro 4+",
+            EARFUN_GAIA_NOISE_MODES,
+            EARFUN_GAIA_TW700_FEATURES,
+        ),
+    },
+    EarFunFirmwareProfile {
+        firmware_prefix: "TW800",
+        behavior_product_id: 0x004535,
+        has_case_battery: true,
+        headphones: false,
+        dual_device_restart: true,
+        profile: gaia_profile(
+            "EarFun Air Pro 5",
+            EARFUN_GAIA_NOISE_MODES,
+            EARFUN_GAIA_TW700_FEATURES,
+        ),
+    },
+    EarFunFirmwareProfile {
+        firmware_prefix: "TW500_3072",
+        behavior_product_id: 0x004534,
+        has_case_battery: true,
+        headphones: false,
+        dual_device_restart: false,
+        profile: gaia_profile(
+            "EarFun Air Pro 3 (3072)",
+            EARFUN_GAIA_NOISE_MODES,
+            EARFUN_GAIA_QCC_FEATURES,
+        ),
+    },
+    EarFunFirmwareProfile {
+        firmware_prefix: "TW500",
+        behavior_product_id: 0x004534,
+        has_case_battery: true,
+        headphones: false,
+        dual_device_restart: false,
+        profile: gaia_profile(
+            "EarFun Air Pro 3",
+            EARFUN_GAIA_NOISE_MODES,
+            EARFUN_GAIA_QCC_FEATURES,
+        ),
+    },
+    EarFunFirmwareProfile {
+        firmware_prefix: "TWA01",
+        behavior_product_id: 0x004C45,
+        has_case_battery: false,
+        headphones: false,
+        dual_device_restart: false,
+        profile: gaia_profile(
+            "EarFun Air S",
+            EARFUN_AIR_S_NOISE_MODES,
+            EARFUN_AIR_S_LIKE_FEATURES,
+        ),
+    },
+    EarFunFirmwareProfile {
+        firmware_prefix: "ATVEL_TW201",
+        behavior_product_id: 0x004C45,
+        has_case_battery: false,
+        headphones: false,
+        dual_device_restart: false,
+        profile: gaia_profile("ATVEL Tune S5 ProX", &[], EARFUN_AIR_S_LIKE_FEATURES),
+    },
+    EarFunFirmwareProfile {
+        firmware_prefix: "TW101S",
+        behavior_product_id: 0x004C45,
+        has_case_battery: true,
+        headphones: false,
+        dual_device_restart: false,
+        profile: gaia_profile("EarFun Free 2S", &[], EARFUN_GAIA_BASIC_FEATURES),
+    },
+    EarFunFirmwareProfile {
+        firmware_prefix: "HP1000",
+        behavior_product_id: 0x004535,
+        has_case_battery: false,
+        headphones: true,
+        dual_device_restart: true,
+        profile: gaia_profile(
+            "EarFun Wave Pro X",
+            EARFUN_GAIA_NOISE_MODES,
+            EARFUN_WAVE_PRO_X_FEATURES,
+        ),
+    },
+];
+
 /// 3 basic noise modes supported by EarFun Air S (Off, ANC, Transparency)
 pub static EARFUN_AIR_S_NOISE_MODES: &[NoiseMode] = &[
     NoiseMode {

@@ -30,6 +30,42 @@ mod tests {
         EarFunAudioCodec, EarFunCommands, EarFunFrameDecoder, EarFunPacket,
     };
 
+    #[test]
+    fn firmware_model_codes_resolve_gaia_profiles_without_manufacturer_product_ids() {
+        assert_eq!(
+            parse_earfun_product_id_from_firmware("TW600-3091_20250919_v0.4.1"),
+            Some(EARFUN_AIR_PRO_4_PRODUCT_ID)
+        );
+        assert_eq!(
+            parse_earfun_product_id_from_firmware("TW400_v0.2.0"),
+            Some(EARFUN_FREE_PRO_3_PRODUCT_ID)
+        );
+        assert_eq!(
+            parse_earfun_product_id_from_firmware("TW201_v0.1.2"),
+            Some(EARFUN_AIR_S_PRODUCT_ID)
+        );
+        assert_eq!(
+            parse_earfun_model_code_from_firmware("TW700-1234_v1"),
+            Some("TW700")
+        );
+        assert_eq!(parse_earfun_product_id_from_firmware("TW700-1234_v1"), None);
+        assert_eq!(
+            parse_earfun_model_code_from_firmware("TW700AI-1234_v1"),
+            Some("TW700AI")
+        );
+        assert_eq!(
+            parse_earfun_model_code_from_firmware("TW800_1234_v1"),
+            Some("TW800")
+        );
+        assert_eq!(
+            parse_earfun_model_code_from_firmware("TW500_3072_1234"),
+            Some("TW500_3072")
+        );
+        assert_eq!(parse_earfun_model_code_from_firmware("TW700X-1234"), None);
+        assert_eq!(parse_earfun_model_code_from_firmware("TW220-1234"), None);
+        assert_eq!(parse_earfun_model_code_from_firmware("unknown"), None);
+    }
+
     fn read_mock_request(stream: &mut UnixStream) -> EarFunPacket {
         thread_local! {
             static STATE: std::cell::RefCell<(EarFunFrameDecoder, Vec<EarFunPacket>)> =
@@ -215,6 +251,9 @@ mod tests {
         assert_eq!(snapshot.noise.current_mode, Some(3)); // AI Environment Adaptive
         assert_eq!(snapshot.sound.game_mode_enabled, Some(true));
         assert_eq!(snapshot.controls.in_ear_detection_enabled, Some(true));
+        assert!(snapshot.wear.supports_wear_detection);
+        assert!(!snapshot.wear.supports_wear_status);
+        assert!(!snapshot.wear.wear.any_earbud_in_ear());
         assert_eq!(snapshot.dual_device.dual_device_enabled, Some(true));
         assert!(snapshot.dual_device.supports_dual_device);
         assert!(snapshot.sound.supports_audio_codec);
@@ -349,7 +388,7 @@ mod tests {
     }
 
     #[test]
-    fn test_earfun_set_noise_mode_and_readback() {
+    fn test_earfun_set_noise_mode_uses_original_gaia_command_sequence() {
         let (mut client, mut device) = UnixStream::pair().unwrap();
         client
             .set_read_timeout(Some(Duration::from_secs(2)))
@@ -360,34 +399,164 @@ mod tests {
 
         let device_thread = thread::spawn(move || {
             // Set noise mode 4 (Strong ANC: master 1, submode 2)
-            // 1. SET_AMBIENT_SOUND 0x0314 with [1]
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::SET_AMBIENT_SOUND);
             assert_eq!(req.payload, vec![1]);
 
-            // 2. SET_ANC_SUB_MODE 0x033A with [2]
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::SET_ANC_SUB_MODE);
             assert_eq!(req.payload, vec![2]);
+            device.shutdown(std::net::Shutdown::Write).unwrap();
         });
 
         let (tx, _rx) = mpsc::channel();
         let mut decoder = EarFunFrameDecoder::default();
         let mut last_anc = 2;
         let mut last_transp = 0;
+        let wear = crate::protocol::WearState::default();
         let actual = set_noise_mode(
             &mut client,
             &mut decoder,
             EARFUN_AIR_PRO_4_PRODUCT_ID,
+            None,
             4,
             &mut last_anc,
             &mut last_transp,
+            &wear,
+            false,
             &tx,
         )
         .expect("set noise mode should succeed");
 
         assert_eq!(actual, 4); // Strong ANC mapped index
         assert_eq!(last_anc, 2);
+        device_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_earfun_air_s_noise_mode_uses_set_without_ack_readback() {
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let device_thread = thread::spawn(move || {
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_AMBIENT_SOUND);
+            assert_eq!(req.payload, vec![1]);
+            device.shutdown(std::net::Shutdown::Write).unwrap();
+        });
+
+        let (tx, _rx) = mpsc::channel();
+        let actual = set_noise_mode(
+            &mut client,
+            &mut EarFunFrameDecoder::default(),
+            EARFUN_AIR_S_PRODUCT_ID,
+            None,
+            1,
+            &mut 2,
+            &mut 0,
+            &crate::protocol::WearState::default(),
+            false,
+            &tx,
+        )
+        .expect("Air S noise mode command should be sent");
+        assert_eq!(actual, 1);
+        device_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_earfun_noise_mode_requires_wear_only_when_status_is_reported() {
+        let (mut client, _device) = UnixStream::pair().unwrap();
+        let (tx, _rx) = mpsc::channel();
+        let result = set_noise_mode(
+            &mut client,
+            &mut EarFunFrameDecoder::default(),
+            EARFUN_AIR_PRO_4_PRODUCT_ID,
+            None,
+            4,
+            &mut 2,
+            &mut 0,
+            &crate::protocol::WearState::default(),
+            true,
+            &tx,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_earfun_noise_mode_does_not_wait_for_set_ack() {
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let device_thread = thread::spawn(move || {
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_AMBIENT_SOUND);
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_ANC_SUB_MODE);
+            device.shutdown(std::net::Shutdown::Write).unwrap();
+        });
+
+        let (tx, _rx) = mpsc::channel();
+        let result = set_noise_mode(
+            &mut client,
+            &mut EarFunFrameDecoder::default(),
+            EARFUN_AIR_PRO_4_PRODUCT_ID,
+            None,
+            4,
+            &mut 2,
+            &mut 0,
+            &crate::protocol::WearState::default(),
+            false,
+            &tx,
+        );
+        assert_eq!(result.unwrap(), 4);
+        device_thread.join().unwrap();
+    }
+
+    #[test]
+    fn test_earfun_noise_mode_selection_updates_cached_submode() {
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let device_thread = thread::spawn(move || {
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_AMBIENT_SOUND);
+            assert_eq!(req.payload, vec![1]);
+            thread::sleep(Duration::from_millis(25));
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::SET_ANC_SUB_MODE);
+            assert_eq!(req.payload, vec![3]);
+            device.shutdown(std::net::Shutdown::Write).unwrap();
+        });
+
+        let (tx, _rx) = mpsc::channel();
+        let mut last_anc = 2;
+        let mut last_transp = 0;
+        let result = set_noise_mode(
+            &mut client,
+            &mut EarFunFrameDecoder::default(),
+            EARFUN_AIR_PRO_4_PRODUCT_ID,
+            None,
+            5,
+            &mut last_anc,
+            &mut last_transp,
+            &crate::protocol::WearState::default(),
+            false,
+            &tx,
+        );
+        assert_eq!(result.unwrap(), 5);
+        assert_eq!(last_anc, 3);
         device_thread.join().unwrap();
     }
 
@@ -634,6 +803,91 @@ mod tests {
     }
 
     #[test]
+    fn test_earfun_tw700_profile_is_selected_from_firmware_prefix() {
+        let (mut client, mut device) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        device
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+
+        let device_thread = thread::spawn(move || {
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::FIRMWARE_VERSION);
+            let mut firmware = vec![0x00];
+            firmware.extend_from_slice(b"TW700-1234_v1.0");
+            send_mock_response(&mut device, req.command, firmware);
+
+            for (command, payload) in [
+                (EarFunCommands::BATTERY_LEFT, vec![0x00, 80]),
+                (EarFunCommands::BATTERY_RIGHT, vec![0x00, 81]),
+                (EarFunCommands::BATTERY_CASE, vec![0x00, 90]),
+                (EarFunCommands::GET_AMBIENT_SOUND, vec![0x00, 1]),
+                (EarFunCommands::GET_GAME_MODE, vec![0x00, 1]),
+                (EarFunCommands::GET_IN_EAR_DETECTION, vec![0x00, 0]),
+                (EarFunCommands::GET_CONNECT_TWO_DEVICES, vec![0x00, 0]),
+            ] {
+                let req = read_mock_request(&mut device);
+                assert_eq!(req.command, command);
+                send_mock_response(&mut device, req.command, payload);
+            }
+
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_CONNECTED_DEVICES);
+            for slot in 0..10 {
+                send_mock_032c(&mut device, slot, b"", [0, 0, slot], false);
+            }
+
+            for (command, payload) in [(EarFunCommands::GET_AUDIO_CODEC, vec![0x00, 8])] {
+                let req = read_mock_request(&mut device);
+                assert_eq!(req.command, command);
+                send_mock_response(&mut device, req.command, payload);
+            }
+
+            let req = read_mock_request(&mut device);
+            assert_eq!(req.command, EarFunCommands::GET_TOUCH_ACTION);
+            send_mock_gestures_030b(&mut device);
+
+            for (command, payload) in [
+                (EarFunCommands::GET_TOUCH_MODE, vec![0x00, 0]),
+                (EarFunCommands::GET_FIND_DEVICE, vec![0x00, 0]),
+                (EarFunCommands::GET_VOICE_PROMPT_VOLUME, vec![0x00, 0]),
+                (EarFunCommands::GET_MICROPHONE_MODE, vec![0x00, 0]),
+            ] {
+                let req = read_mock_request(&mut device);
+                assert_eq!(req.command, command);
+                send_mock_response(&mut device, req.command, payload);
+            }
+        });
+
+        let (snapshot, _) =
+            initialize_earfun_session(&mut client, "Renamed headset", None, Some(0x123456), None)
+                .expect("TW700 profile should initialize over the GAIA path");
+
+        assert_eq!(
+            snapshot.identity.firmware_model_code.as_deref(),
+            Some("TW700")
+        );
+        assert_eq!(snapshot.identity.model, "EarFun Air Pro 4+");
+        assert_eq!(snapshot.identity.product_id, 0x123456);
+        assert!(snapshot.identity.is_known_model);
+        assert!(!snapshot.identity.read_only);
+        assert!(snapshot.sound.supports_audio_codec);
+        assert!(snapshot.sound.available_codecs.contains(&8));
+        assert!(snapshot.controls.supports_touch_customization);
+        assert!(snapshot.controls.supports_touch_lock);
+        assert!(snapshot.controls.supports_find_device);
+        assert!(snapshot.controls.supports_prompt_volume);
+        assert!(snapshot.controls.supports_microphone_mode);
+        assert!(snapshot.dual_device.supports_dual_device);
+        assert!(snapshot.wear.supports_wear_detection);
+        assert_eq!(snapshot.noise.modes.len(), 3);
+
+        device_thread.join().unwrap();
+    }
+
+    #[test]
     fn test_earfun_unknown_model_session_initialization() {
         let (mut client, mut device) = UnixStream::pair().unwrap();
         client
@@ -809,6 +1063,7 @@ mod tests {
             EARFUN_AIR_PRO_4_PRODUCT_ID,
             true,
             Some(EarFunAudioCodec::Ldac.as_u8()), // current codec is LDAC
+            true,
             &tx,
         )
         .expect("set dual device should succeed");
@@ -1019,7 +1274,7 @@ mod tests {
     }
 
     #[test]
-    fn test_earfun_controls_require_ack_and_matching_readback() {
+    fn test_earfun_find_device_is_write_only_while_other_controls_read_back() {
         use crate::bluetooth::brands::earfun::features::controls::{
             set_find_mode, set_microphone_mode, set_prompt_volume,
         };
@@ -1027,7 +1282,7 @@ mod tests {
 
         let (mut client, mut device) = UnixStream::pair().unwrap();
         client
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_millis(20)))
             .unwrap();
         device
             .set_read_timeout(Some(Duration::from_secs(2)))
@@ -1037,20 +1292,11 @@ mod tests {
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::SET_FIND_DEVICE);
             assert_eq!(req.payload, vec![3]);
-            send_mock_response(&mut device, req.command, vec![0]);
-            let req = read_mock_request(&mut device);
-            assert_eq!(req.command, EarFunCommands::GET_FIND_DEVICE);
-            send_mock_response(&mut device, req.command, vec![0, 3]);
 
-            for (mode, payload) in [(1, vec![0, 1]), (2, vec![0, 2]), (0, vec![0, 0])] {
+            for mode in [1, 2, 0] {
                 let req = read_mock_request(&mut device);
                 assert_eq!(req.command, EarFunCommands::SET_FIND_DEVICE);
                 assert_eq!(req.payload, vec![mode]);
-                send_mock_response(&mut device, req.command, vec![0]);
-
-                let req = read_mock_request(&mut device);
-                assert_eq!(req.command, EarFunCommands::GET_FIND_DEVICE);
-                send_mock_response(&mut device, req.command, payload);
             }
 
             let req = read_mock_request(&mut device);

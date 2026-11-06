@@ -24,6 +24,7 @@ use crate::protocol::core::types::{
 /// EarFun payload format: [0x00 (status), level (0..=100)].
 /// When a component is disconnected or unavailable (e.g. charging case when earbuds
 /// are out of the case or lid is closed), the headset reports 0xFF (255) or values > 100.
+/// GAIA battery queries do not include charging state, so it remains unknown.
 pub fn parse_earfun_battery_component(
     payload: &[u8],
 ) -> Result<Option<BatteryPart>, EarFunProtocolError> {
@@ -36,7 +37,7 @@ pub fn parse_earfun_battery_component(
     }
     Ok(Some(BatteryPart {
         percentage,
-        charging: false,
+        charging: None,
     }))
 }
 

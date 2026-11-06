@@ -2,7 +2,7 @@
 
 This document records the private control protocols used by EarFun wireless headphones and earbuds. It covers the existing GAIA V3 support (including the **EarFun Air Pro 4**, **EarFun Air S**, and **EarFun Free Pro 3**) and newer GAIA/EF model information analyzed from the local EncoDeck source, including the **EarFun Air Pro 4+**.
 
-The GAIA models use Qualcomm GAIA-family frames over Bluetooth Classic RFCOMM/SPP; the newer EF models use a separate `0xEF` frame format. The frame families and model-specific command maps are not interchangeable. This document distinguishes hardware-tested facts from client-source-derived behavior; EncoDeck's newer-model support is not evidence of successful hardware operation on a particular model or firmware.
+The GAIA models use Qualcomm GAIA-family frames over Bluetooth Classic RFCOMM/SPP; the newer EF models use a separate `0xEF` frame format. The frame families and model-specific command maps are not interchangeable. This document distinguishes hardware-tested facts from client-source-derived behavior. Hardware-validation status records evidence only; it is not an additional gate for exposing features on models in WaveTune's predefined compatibility catalog. For a registered model, the profile's declared capabilities determine which implemented controls are available. Runtime safety preconditions and missing protocol/feature implementations still apply.
 
 Reference implementations and hardware validation:
 - **Client Reference**: Freeyourgadget / Gadgetbridge (PR #4635 / commit `d9d0573812`, `cab12149d6`, `1473364031`).
@@ -47,6 +47,7 @@ EarFun hardware identification resolves through two objective hardware-level mec
    - Starts with `TW600` (e.g., `TW600-3091_...`) $\to$ Product ID `0x004535` (Air Pro 4)
    - Starts with `TW400` / `TW400B` $\to$ Product ID `0x004534` (Free Pro 3)
    - Starts with `TW201` $\to$ Product ID `0x004C45` (Air S)
+   - The returned firmware string is also used directly as a model identity when no registered numeric Product ID exists. Current GAIA profile prefixes include `TW700AI`, `TW700`, `TW800`, `TW500_3072`, `TW500`, `TWA01`, `ATVEL_TW201`, `TW101S`, and `HP1000`. A prefix must be followed by `-`, `_`, or end-of-string; the profile code is not treated as a numeric manufacturer Product ID.
 3. **Safety Fallback**:
    If neither source identifies a recognized Product ID, the session enters safe **Read-Only Mode** (`is_known_model: false`, `read_only: true`), displaying `Unknown Model` and disabling all control writes.
 
@@ -74,7 +75,7 @@ The current EncoDeck EarFun profile table contains 23 model records. The identif
 | `HP220` | EarFun Tune Pro | EF / `head` |
 | `HP300` | EarFun Wave Pro 2 | EF / `head` |
 
-This table reproduces EncoDeck's source profile IDs and names. In the inspected implementation, `Named()` uses the Bluetooth name to select a profile before its controller queries firmware, so the profile ID alone does not prove that the earbuds return the same project code. A synthetic test fixture contains a `TW700_...` firmware string, but it is not a hardware capture. WaveTune must not use a display name or alias as a hardware discriminator: before registering any new writable profile, establish a stable identity path from observed manufacturer data and/or a validated firmware project code. No numeric manufacturer Product ID for `TW700`, `TW700AI`, or `TW800` is established by the inspected source.
+This table reproduces EncoDeck's source profile IDs and names. WaveTune does not use `Named()` or any Bluetooth display name to select a model. After the GAIA firmware query succeeds, the exact returned firmware prefix selects a GAIA compatibility profile for the codes listed in Section 1.2; the model code remains separate from the numeric manufacturer Product ID, which is still unknown for these profiles. This path is source-derived and covered by synthetic tests, not by a new hardware capture. Registration in WaveTune's compatibility catalog, rather than a prior real-device test, determines whether the matching profile's implemented features are exposed. EF models are not yet in WaveTune's supported runtime catalog because the EF bootstrap and frame driver are not implemented.
 
 ---
 
@@ -168,6 +169,7 @@ When connecting over RFCOMM Channel 11, Gadgetbridge's Air Pro 4 and Free Pro 3 
   - When the earbuds are removed from the charging case, the case lid is closed, or the charging case is not in a physical communication state with the earbuds, the earbud chipset cannot read the case battery level. Querying the case battery (`0x0317`) returns `[0x00, 0xFF]` (decimal 255).
   - `0xFF` (255) is an unavailable/offline sentinel value (Unavailable / Disconnected). Clients parsing this response must detect and treat it as `None` or unreported; displaying `255%` directly in the UI is strictly invalid.
   - A reading is only considered a valid battery percentage when `0 <= level <= 100`.
+- **Charging status**: The tested Air Pro 4 GAIA replies to `0x0306`, `0x0307`, and `0x0317` contain only a status byte and battery percentage. These commands do not report whether either earbud or the case is charging; WaveTune represents charging state as unknown instead of reporting false.
 
 *Example (live tested)*:
 - Request Left: `FF 04 00 00 00 0A 03 06` $\to$ Response: `FF 03 00 02 00 0A 83 06 00 5A` (90%)
@@ -209,6 +211,9 @@ When Master Mode is `2` (Transparency):
   - `0`: **Default**
   - `1`: **Natural**
 
+#### WaveTune Noise-Mode Write Behavior
+WaveTune preserves its original GAIA noise-mode sequence: send the master-mode command, wait 20 ms before a sub-mode command when needed, then drain incoming frames for up to 100 ms (50 ms for flat-mode profiles) so device events can be processed. It does not require a SET ACK or immediate GET readback for these noise writes; those requirements were removed because this operation must retain the existing EarFun-compatible command flow. The UI mode update is derived from the selected mode and cached sub-mode, then may be refreshed by the normal mode poll. This describes client behavior, not a claim that every model/firmware acknowledges or applies every command identically. The documented `0x034A` command reports whether the automatic in-ear detection setting is enabled, not the current physical wear state. No GAIA physical wear-state query/event is established in this API record, so WaveTune displays physical wear as unavailable and does not use that missing status to block noise controls.
+
 ---
 
 ### 4.3 Low Latency / Game Mode
@@ -218,11 +223,12 @@ When Master Mode is `2` (Transparency):
 
 ---
 
-### 4.4 In-Ear Detection (Wear State)
-- **Supported Models**: EarFun Air Pro 4 (Hardware-verified). EarFun Free Pro 3 and EarFun Air S do not have wear sensors and skip wear detection.
+### 4.4 In-Ear Detection Setting
+- **Supported Models**: EarFun Air Pro 4 (Hardware-verified). EarFun Free Pro 3 and EarFun Air S do not have wear sensors and skip this setting.
 - **Query**: `0x034A` $\to$ Response `0x834A [00, val]`
 - **Set**: `0x0349 [val]` $\to$ Response `0x8349 [00]`
 - Values: `0` = In-Ear Detection Enabled, `1` = Disabled.
+- This setting controls whether automatic in-ear detection is enabled; it is not itself the current left/right wear state. No separate current-wear query or notification is established by the available GAIA evidence. WaveTune leaves physical wear unknown rather than infer it from an open RFCOMM connection; this unknown state does not disable noise controls.
 
 ---
 
@@ -516,7 +522,9 @@ stateDiagram-v2
 
 ### 4.11 Newer EarFun model profiles in EncoDeck (source-derived)
 
-The following details are transcribed from EncoDeck's EarFun profile, settings, gesture, equalizer, and controller code. They describe what that client attempts to expose; they are not hardware validation. Existing WaveTune entries for Air Pro 4 (`TW600`), Free Pro 3 (`TW400`), and Air S (`TWA01`/`TW201`) remain documented above. EncoDeck's expanded profile set is listed in Section 1.3.
+The following details are transcribed from EncoDeck's EarFun profile, settings, gesture, equalizer, and controller code. They describe what that client attempts to expose; they are not hardware validation. WaveTune resolves the known GAIA firmware codes from `0x0309` and uses these model-specific compatibility profiles: Air Pro 4+ (`TW700`), Air Pro 4+AI (`TW700AI`), Air Pro 5 (`TW800`), Air Pro 3 (`TW500`, `TW500_3072`), Air S (`TWA01`), ATVEL Tune S5 ProX (`ATVEL_TW201`), Free 2S (`TW101S`), and Wave Pro X (`HP1000`). Existing numeric Product ID profiles remain unchanged. For every registered profile, hardware validation is not a prerequisite: the predefined profile capability list controls feature availability, limited to commands and UI that WaveTune currently implements.
+
+The current WaveTune GAIA driver exposes only commands already implemented in its GAIA feature slices and only when the selected profile declares the corresponding capability; real-device testing is not an extra enablement condition. New source-derived profiles currently expose top-level noise modes only; the TW700-family manual ANC level selector, automatic power-off, and player-activity report are not implemented. A physical-wear gate is used only for protocols that report current wear state. EarFun GAIA's `0x034A` is only the detection-setting toggle, so it is not treated as physical wear telemetry and does not gate noise writes.
 
 #### Air Pro 4+ (`TW700`) profile
 
@@ -553,7 +561,7 @@ EncoDeck's profile feature tokens imply the following broad groups, subject to p
 - EF records (`TW220`, `TW220_VDL`, `TW205`, `TW230`, `OW100`, `OW100_NEW`, `CW100`, `CW200`, `HP201`, `HP220`, `HP300`) use the `0xEF` frame family and model-specific variants. EncoDeck maps settings such as noise, game, multipoint, prompt volume, find, spatial audio, ANC/ambient sub-modes, auto-off, microphone and codec quality only where each profile declares the corresponding token.
 - EncoDeck declares a write-only custom EQ curve and factory-reset capability across its EarFun profiles. EQ layout differs by model: most use ten bands at 0.5 dB steps within ±6 dB, while Air S / Free 2S / ATVEL Tune S5 ProX use six editable bands at whole-dB steps within ±10 dB. EQ is never read back. Factory reset clears all pairings and is destructive; it is not authorized by this protocol note and is excluded from the WaveTune model-support plan.
 
-Do not infer a feature from a shared command ID or a shared profile variant alone. In particular, the 23 EncoDeck records include source-derived capability declarations, not a WaveTune-supported-device list.
+Do not infer a feature from a shared command ID or a shared profile variant alone. In particular, the 23 EncoDeck records are not automatically WaveTune-supported devices: only models registered in WaveTune's compatibility catalog are considered supported, and their declared capabilities determine the corresponding implemented features. Hardware-test status is tracked separately and does not gate those features.
 
 ---
 

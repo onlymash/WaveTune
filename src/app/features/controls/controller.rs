@@ -476,7 +476,14 @@ impl ControlsController {
                 true
             }
             UiUpdate::ProductId { product_id, .. } => {
-                let profile = crate::compatibility::profile_for_product_id(*product_id);
+                let profile = crate::compatibility::profile_for_identity(
+                    *product_id,
+                    self.context
+                        .session_state
+                        .borrow()
+                        .firmware_model_code
+                        .as_deref(),
+                );
                 let supports_dual_device =
                     profile.is_some_and(|profile| profile.supports_dual_device());
                 self.context
