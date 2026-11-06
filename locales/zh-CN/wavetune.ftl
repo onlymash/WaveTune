@@ -264,6 +264,7 @@ noise-mode-readback-unrecognized = 降噪设置已确认，但耳机回读格式
 noise-mode-confirmed = 耳机已确认降噪模式：{ $param0 }
 noise-mode-reported = 耳机已上报降噪模式：{ $param0 }
 noise-mode-waiting-confirm = 正在等待耳机确认降噪模式…
+noise-mode-write-in-progress = 另一个降噪模式切换仍在进行中
 noise-mode-send-failed = 无法发送降噪设置命令：{ $param0 }
 noise-mode-switch-failed = 切换降噪模式失败：{ $param0 }
 noise-mode-reading-and-wear = 正在读取降噪模式和佩戴状态…

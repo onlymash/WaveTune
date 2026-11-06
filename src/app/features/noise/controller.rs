@@ -47,17 +47,33 @@ impl NoiseController {
             if !st.noise.enabled {
                 return Err(crate::t!("noise-mode-blocked"));
             }
+            // Only one noise-mode write may be in flight at a time. A repeated
+            // request for the mode that is already pending is a no-op, so a
+            // spurious widget notification can never re-send the same write.
+            if let Some(pending) = st.noise.pending_mode {
+                if pending == protocol_index {
+                    return Ok(());
+                }
+                return Err(crate::t!("noise-mode-write-in-progress"));
+            }
         }
 
         let cmd = WorkerCommand::SetNoiseMode(protocol_index);
         match self.context.send_command(cmd) {
             Ok(()) => {
-                {
-                    let mut st = self.context.session_state.borrow_mut();
-                    st.noise.pending_mode = Some(protocol_index);
-                }
-                self.component.render(&self.context.session_state.borrow());
+                self.context.session_state.borrow_mut().noise.pending_mode = Some(protocol_index);
                 self.component.set_controls_sensitive(false);
+                // Defer the optimistic re-render to the next main-loop iteration.
+                // `send_mode` is commonly invoked from inside the combo row's
+                // `notify::selected` handler; rebuilding that row's model while the
+                // notification is still being dispatched leaks a second `selected`
+                // notification outside the reentrancy guard, which re-enters
+                // `send_mode` and makes the headset switch modes repeatedly.
+                let component = self.component.clone();
+                let session_state = self.context.session_state.clone();
+                gtk::glib::idle_add_local_once(move || {
+                    component.render(&session_state.borrow());
+                });
                 Ok(())
             }
             Err(error) => {
@@ -78,6 +94,18 @@ impl NoiseController {
 
         let this = self.clone();
         self.component.widgets.connect_option_selected(move |mode| {
+            // Ignore selection notifications while a write is in flight; reporting
+            // them as a `SettingError` would clear the pending write state.
+            if this
+                .context
+                .session_state
+                .borrow()
+                .noise
+                .pending_mode
+                .is_some()
+            {
+                return;
+            }
             if let Err(msg) = this.send_mode(mode) {
                 this.context
                     .send_setting_error(SettingDomain::NoiseMode, msg);

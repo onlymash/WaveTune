@@ -264,6 +264,7 @@ noise-mode-readback-unrecognized = Noise mode setting confirmed, but headset rea
 noise-mode-confirmed = Headset confirmed noise mode: { $param0 }
 noise-mode-reported = Headset reported noise mode: { $param0 }
 noise-mode-waiting-confirm = Waiting for headset to confirm noise mode…
+noise-mode-write-in-progress = Another noise mode change is still in progress
 noise-mode-send-failed = Failed to send noise mode command: { $param0 }
 noise-mode-switch-failed = Failed to switch noise mode: { $param0 }
 noise-mode-reading-and-wear = Reading noise mode and wear state…
