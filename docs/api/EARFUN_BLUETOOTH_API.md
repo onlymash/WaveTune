@@ -1,12 +1,13 @@
-# EarFun Wireless Headset Control Protocol (GAIA V3 Variant)
+# EarFun Wireless Headset Control Protocol (GAIA and EF Variants)
 
-This document describes the private control protocol used by EarFun wireless headphones and earbuds (such as the **EarFun Air Pro 4**, **EarFun Air S**, and **EarFun Free Pro 3**).
+This document records the private control protocols used by EarFun wireless headphones and earbuds. It covers the existing GAIA V3 support (including the **EarFun Air Pro 4**, **EarFun Air S**, and **EarFun Free Pro 3**) and newer GAIA/EF model information analyzed from the local EncoDeck source, including the **EarFun Air Pro 4+**.
 
-The protocol is a variant of Qualcomm GAIA (Generic Access Profile Interface Architecture) v3, operating over a standard Bluetooth RFCOMM (Serial Port Profile) link without checksumming.
+The GAIA models use Qualcomm GAIA-family frames over Bluetooth Classic RFCOMM/SPP; the newer EF models use a separate `0xEF` frame format. The frame families and model-specific command maps are not interchangeable. This document distinguishes hardware-tested facts from client-source-derived behavior; EncoDeck's newer-model support is not evidence of successful hardware operation on a particular model or firmware.
 
 Reference implementations and hardware validation:
 - **Client Reference**: Freeyourgadget / Gadgetbridge (PR #4635 / commit `d9d0573812`, `cab12149d6`, `1473364031`).
 - **Hardware Validation**: Tested live on real **EarFun Air Pro 4** (Hardware/Firmware `TW600-3091_20250919_v0.4.1`, Product ID `45 35`, connected to Arch Linux via RFCOMM channel 11).
+- **Additional Client Reference**: EncoDeck local source revision `f893e15` (EarFun protocol implementation); its source attributes model/protocol facts to EarKit commit `a77acd18890a5f28746c2303bfff0e23fff8d8ca` (MIT). EncoDeck's compatibility notes say further real-device feedback is pending.
 
 ---
 
@@ -49,6 +50,32 @@ EarFun hardware identification resolves through two objective hardware-level mec
 3. **Safety Fallback**:
    If neither source identifies a recognized Product ID, the session enters safe **Read-Only Mode** (`is_known_model: false`, `read_only: true`), displaying `Unknown Model` and disabling all control writes.
 
+### 1.3 Additional model identifiers in EncoDeck
+
+The current EncoDeck EarFun profile table contains 23 model records. The identifiers below are EncoDeck profile IDs; they are not necessarily firmware project codes. EncoDeck selects a profile using the Bluetooth device name, then reads firmware. Its source does not establish a numeric manufacturer Product ID for the new models.
+
+| EncoDeck profile ID(s) | EncoDeck model name(s) | Protocol family / behavior variant |
+|---|---|---|
+| `TW600` | EarFun Air Pro 4 | GAIA / `tw600` |
+| `TW700` | EarFun Air Pro 4+; EarFun Air Pro 4+AI | GAIA / `tw700` |
+| `TW800` | EarFun Air Pro 5 | GAIA / `tw700` behavior variant |
+| `TW500`, `TW500_3072` | EarFun Air Pro 3; Air Pro 3 (3072) | GAIA / `qcc` |
+| `TW400` | EarFun Free Pro 3 | GAIA / `qcc` |
+| `TWA01`, `TW201` | EarFun Air S; Air S (TW201) | GAIA / `qcc` |
+| `ATVEL_TW201` | ATVEL Tune S5 ProX | GAIA / `qcc` |
+| `TW101S` | EarFun Free 2S | GAIA / `qcc` |
+| `HP1000` | EarFun Wave Pro X | GAIA / `hp1000` |
+| `TW220`, `TW220_VDL` | EarFun Air 2 NC; Air 2 NC (VDL) | EF / `ef` |
+| `TW205` | EarFun Air Life | EF / `tw205` |
+| `TW230` | EarFun Air Pro 4i | EF / `tw230` |
+| `OW100`, `OW100_NEW` | EarFun OpenJump; OpenJump (new variant) | EF / `ef` |
+| `CW100`, `CW200` | EarFun Clip; Clip 2 | EF / `cw100`, `cw200` |
+| `HP201` | EarFun Wave Life | EF / `head` |
+| `HP220` | EarFun Tune Pro | EF / `head` |
+| `HP300` | EarFun Wave Pro 2 | EF / `head` |
+
+This table reproduces EncoDeck's source profile IDs and names. In the inspected implementation, `Named()` uses the Bluetooth name to select a profile before its controller queries firmware, so the profile ID alone does not prove that the earbuds return the same project code. A synthetic test fixture contains a `TW700_...` firmware string, but it is not a hardware capture. WaveTune must not use a display name or alias as a hardware discriminator: before registering any new writable profile, establish a stable identity path from observed manufacturer data and/or a validated firmware project code. No numeric manufacturer Product ID for `TW700`, `TW700AI`, or `TW800` is established by the inspected source.
+
 ---
 
 ## 2. Frame Architecture
@@ -77,6 +104,21 @@ Bit 7..0    : Command Code
 
 - When the host sends a request or setting command (e.g., `0x0306`), the earbuds respond with `Command ID | 0x8000` (e.g., `0x8306`).
 - In EarFun responses, the first payload byte is typically a **Status Code** (`0x00` = Success / OK), followed by the reported value(s).
+
+### 2.3 EF frame family (source-derived)
+
+EncoDeck's non-GAIA profiles use a distinct frame format rather than the GAIA `0xFF` packet:
+
+| Offset | Field |
+|---|---|
+| `0` | Start byte `0xEF` |
+| `1..2` | Command ID, big-endian |
+| `3` | Payload length `N` |
+| `4..4+N-1` | Payload |
+| `4+N` | Check byte: `(N + sum(payload)) & 0xFF` |
+| `5+N` | End byte `0xFE` |
+
+For these profiles, the inspected EncoDeck codec validates the additive check byte and `0xFE` terminator; response status/value semantics are command-specific and must not be assumed to match GAIA's leading status byte. EncoDeck maps EF commands by model/setting; see Section 4.11. This format and its model mappings are source-derived and have not been independently hardware-validated by WaveTune.
 
 ---
 
@@ -472,6 +514,47 @@ stateDiagram-v2
   - **EarFun Air Pro 4 & Free Pro 3**: Support Touch Lock Mode (`0x0334`/`0x0335`), full 13 action codes, and 4 gestures (Single, Double, Triple, Long Press) on both Left and Right earbuds.
   - **EarFun Air S**: Does not support Touch Lock Mode; supports basic 9 action codes (`16`, `1`–`8`); does not support sub-mode noise cycle pairs (`9`–`11`) or Redial (`13`).
 
+### 4.11 Newer EarFun model profiles in EncoDeck (source-derived)
+
+The following details are transcribed from EncoDeck's EarFun profile, settings, gesture, equalizer, and controller code. They describe what that client attempts to expose; they are not hardware validation. Existing WaveTune entries for Air Pro 4 (`TW600`), Free Pro 3 (`TW400`), and Air S (`TWA01`/`TW201`) remain documented above. EncoDeck's expanded profile set is listed in Section 1.3.
+
+#### Air Pro 4+ (`TW700`) profile
+
+EncoDeck classifies the Air Pro 4+ as a GAIA model with `tw700` behavior. The same behavior variant is assigned to Air Pro 4+AI (`TW700AI`) and Air Pro 5 (`TW800`); this is a source-side profile grouping, not proof that all firmware revisions behave identically.
+
+| Setting | Query / response | Set command | EncoDeck profile behavior |
+|---|---|---|---|
+| Firmware query | `0x0309` | — | A synthetic EncoDeck test fixture uses `TW700_...`; this is not a captured device response. EncoDeck selects the profile by name before querying firmware, so firmware-only identification is not demonstrated. |
+| Battery | Left `0x0306`, right `0x0307`, case `0x0317` | — | Case byte is treated as packed: low 7 bits are level, high bit is charging; `0xFF` is unavailable. |
+| Main noise mode | `0x0315` | `0x0314 [mode]` | GAIA values: `0` off, `1` ANC, `2` transparency. |
+| ANC sub-mode | `0x033B` | `0x033A [mode]` | TW700 options: `0` ear adaptive, `4` adaptive, `6/5/3/2` manual levels 1–4, `1` wind reduction. Manual levels are represented as one “Manual” choice plus a level selector in EncoDeck. |
+| Transparency sub-mode | `0x033D` | `0x033C [mode]` | GAIA profile offers `0` default and `1` natural/voice-enhanced. |
+| Game mode | `0x0313` | `0x0312 [0|1]` | Profile feature `game`. |
+| Multipoint | `0x0326` | `0x0327 [0|1]` | Profile feature `dual`; enabling is marked as a restart-required transition. |
+| Wear detection | `0x034A` | `0x0349 [flags]` | Profile feature `ear`; low four bits are interpreted as flags, and all four bits set means disabled. EncoDeck writes `0` to enable and `15` to disable. |
+| Prompt volume | `0x0339` | `0x0338 [value]` | Feature `prompt`; GAIA wire value is reversed (`0` maximum through `4` off). |
+| Find earbuds | `0x0333` | `0x0332 [0..3]` | Feature `find`; values are off, left, right, both. |
+| Microphone mode | `0x0331` | `0x0330 [0..2]` | Feature `mic`; values are auto, left, right. |
+| Touch actions / lock | `0x030B`, `0x0335` | `0x030A`, `0x0334` | Feature `keys`; GAIA interaction/action layout from Section 4.10, with long press interaction `0x11`. TWS profile logic also exposes touch lock. |
+| Codec flags | `0x032F` | `0x032E [flags]` | Feature `quality`; LDAC bit `0x08`, aptX Adaptive bit `0x02`, aptX Lossless bit `0x10`; bit `0x01` is preserved, not offered as a toggle. |
+| Paired hosts | `0x032C` | Connect `0x0329`, disconnect `0x032A` | Feature `list`; response is one host entry per frame. Entries contain a truncated name and partial Bluetooth address. The earbuds do not provide a forget/remove command. |
+| User EQ curve | `0x0E01` writes ten GAIA EQ bands | — | Feature `custom EQ`; the firmware does not report the active curve. EncoDeck displays its locally retained curve, not confirmed headset state. |
+
+EncoDeck marks LDAC and dual-device connection as mutually exclusive. Its controller disables one before enabling the other, and treats connection loss during marked restart transitions as expected; its confirmation process tolerates missing write ACKs and retries readback for up to six seconds. This is not sufficient evidence to weaken WaveTune's existing per-command ACK/readback safety contract. For WaveTune, any supported write must be gated by the registered profile and confirmed by authoritative state; restart-based settings require a separately designed reconnect-and-readback flow before being enabled.
+
+The EncoDeck profile also declares automatic power-off (`0x0348` query / `0x0347` set) for the TW700 behavior variant. Its choices include never and 5, 10, 30, 60, and 120 minutes, with wire `0` interpreted as never. This feature is not part of WaveTune's current UI/command model.
+
+#### Profile feature coverage
+
+EncoDeck's profile feature tokens imply the following broad groups, subject to per-model flags and protocol variant:
+
+- GAIA/TW700 family records (`TW700`, `TW700AI`, `TW800`) use the newer manual ANC mode values above, report player activity (`0x0358`), and expose automatic power-off in addition to the GAIA settings.
+- Other GAIA records (`TW500`, `TW500_3072`, `TW400`, `TWA01`, `TW201`, `ATVEL_TW201`, `TW101S`, `HP1000`) use their own feature strings. `HP1000` is an over-ear model and has a distinct ANC mapping; it must not inherit TWS-only touch-lock or battery assumptions.
+- EF records (`TW220`, `TW220_VDL`, `TW205`, `TW230`, `OW100`, `OW100_NEW`, `CW100`, `CW200`, `HP201`, `HP220`, `HP300`) use the `0xEF` frame family and model-specific variants. EncoDeck maps settings such as noise, game, multipoint, prompt volume, find, spatial audio, ANC/ambient sub-modes, auto-off, microphone and codec quality only where each profile declares the corresponding token.
+- EncoDeck declares a write-only custom EQ curve and factory-reset capability across its EarFun profiles. EQ layout differs by model: most use ten bands at 0.5 dB steps within ±6 dB, while Air S / Free 2S / ATVEL Tune S5 ProX use six editable bands at whole-dB steps within ±10 dB. EQ is never read back. Factory reset clears all pairings and is destructive; it is not authorized by this protocol note and is excluded from the WaveTune model-support plan.
+
+Do not infer a feature from a shared command ID or a shared profile variant alone. In particular, the 23 EncoDeck records include source-derived capability declarations, not a WaveTune-supported-device list.
+
 ---
 
 ## 5. Live Verification Summary on EarFun Air Pro 4
@@ -510,7 +593,7 @@ RFCOMM Connection to Channel 11: SUCCESS
 [RX] Query Rejected:    FF 03 00 01 00 1D 0F 82 01 (Error 0x0F82, STATUS_NOT_SUPPORTED)
 ```
 
-## 6. Gadgetbridge Source Evidence and Validation Boundary
+## 6. Client Source Evidence and Validation Boundary
 
 The command names, client-side enum values, request encoding, response handling, and model-specific settings described in Sections 4.7.3 and 4.9–4.9.2 are based on the local Gadgetbridge checkout at revision `86703c8006`:
 
@@ -521,3 +604,16 @@ The command names, client-side enum values, request encoding, response handling,
 - `app/src/main/java/nodomain/freeyourgadget/gadgetbridge/devices/earfun/EarFunAirPro4Coordinator.java` and `EarFunFreePro3Coordinator.java`, plus their respective settings XML.
 
 These are **client-source references**, not hardware-validated protocol facts. Gadgetbridge exposes the find-device setting for Air Pro 4 and Free Pro 3, and voice-prompt volume, microphone mode, and advanced audio mode in the Air Pro 4 settings. Its Air Pro 4 and Free Pro 3 protocols request the extended settings, while Air S does not. The documented Air Pro 4 live verification above does not include successful tests of these controls; no firmware-specific evidence for them or working LE Audio / Google Fast Pair switching was found. Treat all such on-device behavior as unverified until separately tested and recorded.
+
+The additional model matrix and GAIA/EF details in Sections 1.3, 2.3, and 4.11 are based on the local EncoDeck checkout at revision `f893e15`, principally:
+
+- `src/EncoDeck.Protocol/Brands/EarFun/EarFunProfiles.cs`
+- `src/EncoDeck.Protocol/Brands/EarFun/EarFunSettings.cs`
+- `src/EncoDeck.Protocol/Brands/EarFun/EarFunFrameCodec.cs`
+- `src/EncoDeck.Protocol/Brands/EarFun/EarFunDeviceController.cs`
+- `src/EncoDeck.Protocol/Brands/EarFun/EarFunGestures.cs`
+- `src/EncoDeck.Protocol/Brands/EarFun/EarFunEqualizer.cs`
+- `docs/COMPATIBILITY.md`
+- `tests/EncoDeck.Tests/Protocol/EarFunTests.cs`
+
+EncoDeck attributes its model/protocol facts to EarKit commit `a77acd18890a5f28746c2303bfff0e23fff8d8ca` (MIT). Its compatibility document says hardware verification/feedback for the newly added EarFun profiles is pending. The TW700 test fixture is explicitly synthetic and contains assumptions about missing write acknowledgements; it is not a captured Air Pro 4+ device trace. Therefore, the only hardware validation claimed in this document remains the Air Pro 4 test recorded in Section 5. Do not treat source profiles, synthetic tests, settings UI, or inferred product names as proof of hardware support.
