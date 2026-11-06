@@ -5,7 +5,7 @@
 本项目目标是将 [EncoDeck](https://github.com/TIANLI0/EncoDeck) 移植到 Linux 桌面，使用 Rust 与 GTK4/Libadwaita
 构建现代化的原生界面，通过 BlueZ 与各品牌已配对的蓝牙无线耳机通信。
 
-项目初期针对欧加体系（OPPO、OnePlus 和 realme）耳机完成适配，并已成功接入首个扩展品牌 EarFun（GAIA V3 架构，涵盖 EarFun Air Pro 4、Free Pro 3、Air S）。当前界面聚焦设备状态、降噪、EQ 预设及耳机已配对设备管理。
+项目初期针对欧加体系（OPPO、OnePlus 和 realme）耳机完成适配，随后接入 EarFun GAIA V3 与 EF 两类协议。EF 当前仅接入有限的状态查询及控制能力；其型号身份解析仍需 EF 固件前缀证据，不能借用蓝牙名称识别。当前界面聚焦设备状态、降噪、EQ 预设及耳机已配对设备管理。
 底层架构已全面完成多品牌隔离重构，使用品牌名称作为分类，将协议、配置与会话区隔在独立命名空间中，为未来扩展华为、小米、
 vivo、漫步者等多品牌耳机支持奠定基础。
 
@@ -62,6 +62,7 @@ vivo、漫步者等多品牌耳机支持奠定基础。
   Edifier 等多品牌耳机建立了清晰的可扩展边界。
 - 已完成控制页面（Controls Page）完整功能移植：
   包括左右耳手势触控定制（单击/双击/三击/长按/滑动/通话控制）、长按噪声控制模式循环（Noise Cycle）、双设备连接开关与首选连接设备下拉（Preferred Device）、佩戴检测自动暂停恢复开关、入睡检测开关、头部动作接听控制、耳机实用工具（查找耳机，支持的型号可直接在卡片内选择左耳/右耳/双耳并停止，持续展示大音量警告；另含耳塞贴合度气密性测试 Fit Test）以及提示音音量滑块防抖控制。  EarFun Air Pro 4 另有麦克风模式选择（自动/左耳/右耳）；EarFun 的查找、提示音音量与麦克风功能按型号 profile 开放。提示音音量与麦克风模式按其实现等待响应并进行读回校验；查找设备保留原有发送后排空流程，不依赖设备 ACK/回读。相关自动化协议/会话测试通过，但新增 EarFun 控件尚未真机验证，详见 [EarFun 高级控制开发计划](EARFUN_ADVANCED_CONTROLS_DEVELOPMENT_PLAN.md)。
+- 已加入 EarFun EF 独立帧编解码、SPP/RFCOMM 启动探测、11 个 EncoDeck EF 型号 profile，以及按 profile 开放的部分状态查询、降噪、游戏模式、提示音音量、查找和空间音频功能；设置以 EF 命令发送并按读回确认。双设备管理、EQ、触控、自动关机、麦克风、编解码器及恢复出厂等未实现能力不会在 EF profile 中开放。EncoDeck 根据蓝牙名称选 profile，未证明 `0x1010` 固件响应含有型号前缀；WaveTune 不以名称识别，只有严格匹配固件前缀才选择 EF profile，否则保持只读。EF 功能目前只有源码依据和模拟协议测试，没有真机验证；真机验证不是已注册 profile 功能开放的额外门槛。
 - 已完成后台驻留、系统托盘与 GNOME 快捷设置面板（Quick Settings）集成：
   应用支持 `--background` 静默启动、关闭主窗口隐藏驻留（`Ctrl+Q` / 主菜单完全退出）及可选登录后台自启，并在耳机断开后重新武装自动重连；通过内置 `gtk::gio` 在 Session D-Bus（`io.github.onlymash.WaveTune` -> `/io/github/onlymash/WaveTune/QuickSettings`）暴露经确认的只读设备状态与降噪切换方法（不含任何蓝牙地址等隐私信息）；同时导出 StatusNotifierItem（`/StatusNotifierItem`）与 DBusMenu（`/io/github/onlymash/WaveTune/Menu`），在后台模式下提供单色符号托盘图标、设备/电量摘要、仅在协议提供物理佩戴状态时门控的降噪切换及打开/退出菜单项，兼容 GNOME AppIndicator 扩展、KDE Plasma、XFCE、Waybar 等 SNI 宿主；配套 GNOME 45–51 ESM 扩展 `wavetune@onlymash.github.com` 以非乐观更新方式集成到右上角快捷面板，并随打包脚本一并分发。
 

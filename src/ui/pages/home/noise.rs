@@ -212,6 +212,8 @@ pub(crate) fn noise_mode_icon_name(kind: NoiseModeKind) -> &'static str {
         NoiseModeKind::LessNoise => "audio-volume-low-symbolic",
         NoiseModeKind::MoreNoise => "audio-volume-high-symbolic",
         NoiseModeKind::VocalEnhancement => "audio-input-microphone-symbolic",
+        NoiseModeKind::WindReduction => "weather-windy-symbolic",
+        NoiseModeKind::NoiseCancellationLevel1 => "security-low-symbolic",
     }
 }
 

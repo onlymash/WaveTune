@@ -31,6 +31,55 @@ mod tests {
     };
 
     #[test]
+    fn gaia_device_identity_skips_ef_protocol_probe() {
+        let mut device = crate::bluetooth::DeviceChoice {
+            address: bluer::Address::new([0; 6]),
+            name: "headset".to_string(),
+            brand: crate::bluetooth::DeviceBrand::EarFun,
+            product_id: None,
+            has_control_service: true,
+            control_service_uuids: vec![],
+            has_earfun_gaia_vendor_service: true,
+        };
+        assert!(super::super::driver::has_gaia_identity(&device));
+
+        device.product_id = Some(EARFUN_AIR_PRO_4_PRODUCT_ID);
+        assert!(super::super::driver::has_gaia_identity(&device));
+
+        device.product_id = None;
+        device.has_earfun_gaia_vendor_service = false;
+        assert!(!super::super::driver::has_gaia_identity(&device));
+    }
+
+    #[test]
+    fn gaia_rfcomm_uses_discovered_control_services_before_falling_back() {
+        let mut device = crate::bluetooth::DeviceChoice {
+            address: bluer::Address::new([0; 6]),
+            name: "headset".to_string(),
+            brand: crate::bluetooth::DeviceBrand::EarFun,
+            product_id: None,
+            has_control_service: false,
+            control_service_uuids: vec![
+                bluer::Uuid::parse_str(
+                    crate::protocol::brands::oppo::OPPO_CONTROL_SERVICE_CANDIDATES[1],
+                )
+                .unwrap(),
+            ],
+            has_earfun_gaia_vendor_service: false,
+        };
+        assert_eq!(
+            super::super::transport::rfcomm_service_uuids(&device).unwrap(),
+            device.control_service_uuids
+        );
+
+        device.control_service_uuids.clear();
+        assert_eq!(
+            super::super::transport::rfcomm_service_uuids(&device).unwrap(),
+            vec![bluer::Uuid::parse_str(super::super::transport::GAIA_SERVICE_UUID).unwrap()]
+        );
+    }
+
+    #[test]
     fn firmware_model_codes_resolve_gaia_profiles_without_manufacturer_product_ids() {
         assert_eq!(
             parse_earfun_product_id_from_firmware("TW600-3091_20250919_v0.4.1"),
@@ -62,7 +111,22 @@ mod tests {
             Some("TW500_3072")
         );
         assert_eq!(parse_earfun_model_code_from_firmware("TW700X-1234"), None);
-        assert_eq!(parse_earfun_model_code_from_firmware("TW220-1234"), None);
+        assert_eq!(
+            parse_earfun_model_code_from_firmware("TW220_VDL-1234"),
+            Some("TW220_VDL")
+        );
+        assert_eq!(
+            parse_earfun_model_code_from_firmware("TW220-1234"),
+            Some("TW220")
+        );
+        assert_eq!(
+            parse_earfun_model_code_from_firmware("TW230_1234"),
+            Some("TW230")
+        );
+        assert_eq!(
+            parse_earfun_model_code_from_firmware("HP300-1.0"),
+            Some("HP300")
+        );
         assert_eq!(parse_earfun_model_code_from_firmware("unknown"), None);
     }
 
@@ -413,7 +477,6 @@ mod tests {
         let mut decoder = EarFunFrameDecoder::default();
         let mut last_anc = 2;
         let mut last_transp = 0;
-        let wear = crate::protocol::WearState::default();
         let actual = set_noise_mode(
             &mut client,
             &mut decoder,
@@ -422,8 +485,6 @@ mod tests {
             4,
             &mut last_anc,
             &mut last_transp,
-            &wear,
-            false,
             &tx,
         )
         .expect("set noise mode should succeed");
@@ -458,8 +519,6 @@ mod tests {
             1,
             &mut 2,
             &mut 0,
-            &crate::protocol::WearState::default(),
-            false,
             &tx,
         )
         .expect("Air S noise mode command should be sent");
@@ -468,29 +527,10 @@ mod tests {
     }
 
     #[test]
-    fn test_earfun_noise_mode_requires_wear_only_when_status_is_reported() {
-        let (mut client, _device) = UnixStream::pair().unwrap();
-        let (tx, _rx) = mpsc::channel();
-        let result = set_noise_mode(
-            &mut client,
-            &mut EarFunFrameDecoder::default(),
-            EARFUN_AIR_PRO_4_PRODUCT_ID,
-            None,
-            4,
-            &mut 2,
-            &mut 0,
-            &crate::protocol::WearState::default(),
-            true,
-            &tx,
-        );
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_earfun_noise_mode_does_not_wait_for_set_ack() {
         let (mut client, mut device) = UnixStream::pair().unwrap();
         client
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(Duration::from_millis(100)))
             .unwrap();
         device
             .set_read_timeout(Some(Duration::from_secs(2)))
@@ -500,10 +540,11 @@ mod tests {
             assert_eq!(req.command, EarFunCommands::SET_AMBIENT_SOUND);
             let req = read_mock_request(&mut device);
             assert_eq!(req.command, EarFunCommands::SET_ANC_SUB_MODE);
-            device.shutdown(std::net::Shutdown::Write).unwrap();
+            thread::sleep(Duration::from_millis(300));
         });
 
         let (tx, _rx) = mpsc::channel();
+        let started = std::time::Instant::now();
         let result = set_noise_mode(
             &mut client,
             &mut EarFunFrameDecoder::default(),
@@ -512,11 +553,10 @@ mod tests {
             4,
             &mut 2,
             &mut 0,
-            &crate::protocol::WearState::default(),
-            false,
             &tx,
         );
         assert_eq!(result.unwrap(), 4);
+        assert!(started.elapsed() < Duration::from_secs(1));
         device_thread.join().unwrap();
     }
 
@@ -551,8 +591,6 @@ mod tests {
             5,
             &mut last_anc,
             &mut last_transp,
-            &crate::protocol::WearState::default(),
-            false,
             &tx,
         );
         assert_eq!(result.unwrap(), 5);

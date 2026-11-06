@@ -116,6 +116,12 @@ async fn find_device_async() -> Result<Vec<DeviceChoice>, String> {
         let Some(brand) = identify_brand(&manufacturer_data, &uuids) else {
             continue;
         };
+        let has_earfun_gaia_vendor_service = brand == DeviceBrand::EarFun
+            && uuids.iter().any(|uuid| {
+                crate::bluetooth::brands::earfun::GAIA_VENDOR_SERVICE_UUIDS
+                    .iter()
+                    .any(|candidate| uuid.to_string().eq_ignore_ascii_case(candidate))
+            });
         let product_id = if brand == DeviceBrand::EarFun {
             extract_earfun_product_id(&address, &manufacturer_data)
         } else {
@@ -128,6 +134,7 @@ async fn find_device_async() -> Result<Vec<DeviceChoice>, String> {
             product_id,
             has_control_service: has_control_service || brand == DeviceBrand::EarFun,
             control_service_uuids,
+            has_earfun_gaia_vendor_service,
         });
     }
     candidates.sort_by(|left, right| {

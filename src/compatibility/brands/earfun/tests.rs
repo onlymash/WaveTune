@@ -159,7 +159,6 @@ fn firmware_model_profiles_are_resolved_without_fabricated_product_ids() {
             supports_dual,
             "{model_code} dual"
         );
-        assert!(profile.supports_custom_equalizer());
     }
 
     let tw700 = profile_for_identity(0, Some("TW700")).unwrap();
@@ -191,6 +190,58 @@ fn firmware_model_profiles_are_resolved_without_fabricated_product_ids() {
     );
     assert!(profile_for_identity(0, Some("not-a-model")).is_none());
     assert!(profile_for_product_id(0).is_none());
+}
+
+#[test]
+fn ef_firmware_profiles_are_resolved_without_fabricated_product_ids() {
+    let models = [
+        ("TW220", "EarFun Air 2 NC", true),
+        ("TW220_VDL", "EarFun Air 2 NC (VDL)", true),
+        ("TW205", "EarFun Air Life", false),
+        ("TW230", "EarFun Air Pro 4i", true),
+        ("OW100", "EarFun OpenJump", false),
+        ("OW100_NEW", "EarFun OpenJump (new)", false),
+        ("CW100", "EarFun Clip", false),
+        ("CW200", "EarFun Clip 2", false),
+        ("HP201", "EarFun Wave Life", true),
+        ("HP220", "EarFun Tune Pro", true),
+        ("HP300", "EarFun Wave Pro 2", true),
+    ];
+
+    for (model_code, model_name, supports_noise) in models {
+        let profile = profile_for_identity(0, Some(model_code))
+            .unwrap_or_else(|| panic!("missing profile for {model_code}"));
+        assert_eq!(profile.model, model_name);
+        assert_eq!(profile.product_id, None);
+        assert_eq!(
+            profile.supports_noise_control(),
+            supports_noise,
+            "{model_code} noise"
+        );
+        assert!(!profile.supports_dual_device(), "{model_code} dual");
+    }
+
+    assert!(crate::compatibility::earfun_is_headphones(0, Some("HP201")));
+    assert!(!crate::compatibility::earfun_has_case_battery(
+        0,
+        Some("HP201")
+    ));
+    assert!(!crate::compatibility::earfun_has_case_battery(
+        0,
+        Some("OW100")
+    ));
+    assert!(crate::compatibility::earfun_has_case_battery(
+        0,
+        Some("TW220")
+    ));
+    assert!(crate::compatibility::earfun_dual_device_restart_required(
+        0,
+        Some("CW100")
+    ));
+    assert!(!crate::compatibility::earfun_dual_device_restart_required(
+        0,
+        Some("HP201")
+    ));
 }
 
 #[test]

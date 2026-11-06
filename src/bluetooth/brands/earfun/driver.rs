@@ -27,7 +27,7 @@ use crate::app::events::{SettingDomain, UiUpdate, WorkerCommand};
 use crate::bluetooth::{DeviceChoice, DeviceSnapshot, driver::HeadsetDriver};
 use crate::compatibility;
 use crate::protocol::brands::earfun::{
-    EarFunCommands, EarFunFindMode, EarFunFrameDecoder, EarFunMicrophoneMode,
+    EarFunCommands, EarFunEfFrameDecoder, EarFunFindMode, EarFunFrameDecoder, EarFunMicrophoneMode,
     parse_earfun_ambient_mode, parse_earfun_anc_sub_mode, parse_earfun_battery_component,
     parse_earfun_transparency_sub_mode,
 };
@@ -44,12 +44,15 @@ use super::features::{
 };
 use super::init::initialize_earfun_session_with_lap;
 use super::transport::{
+    EARFUN_AIR_PRO_4_PRODUCT_ID, EARFUN_AIR_S_PRODUCT_ID, EARFUN_FREE_PRO_3_PRODUCT_ID,
     POLL_INTERVAL, get_local_rfcomm_lap, open_earfun_rfcomm, request, send_command,
 };
 use super::unsolicited::handle_unsolicited;
 
 pub struct EarFunDriver {
     decoder: EarFunFrameDecoder,
+    ef_decoder: EarFunEfFrameDecoder,
+    ef_protocol: bool,
     snapshot: Option<DeviceSnapshot>,
     anc_sub: u8,
     transp_sub: u8,
@@ -58,10 +61,29 @@ pub struct EarFunDriver {
     custom_equalizers: Vec<CustomEqualizer>,
 }
 
+pub(super) fn has_gaia_identity(device: &DeviceChoice) -> bool {
+    let has_gaia_product_id = device.product_id.is_some_and(|product_id| {
+        [
+            EARFUN_AIR_PRO_4_PRODUCT_ID,
+            EARFUN_FREE_PRO_3_PRODUCT_ID,
+            EARFUN_AIR_S_PRODUCT_ID,
+        ]
+        .contains(&product_id)
+    });
+    let has_gaia_control_service = device.control_service_uuids.iter().any(|uuid| {
+        let uuid = uuid.to_string();
+        uuid.eq_ignore_ascii_case(super::transport::GAIA_SERVICE_UUID)
+    });
+
+    has_gaia_product_id || has_gaia_control_service || device.has_earfun_gaia_vendor_service
+}
+
 impl EarFunDriver {
     pub fn new() -> Self {
         Self {
             decoder: EarFunFrameDecoder::default(),
+            ef_decoder: EarFunEfFrameDecoder::default(),
+            ef_protocol: false,
             snapshot: None,
             anc_sub: 2,
             transp_sub: 0,
@@ -106,6 +128,15 @@ impl HeadsetDriver for EarFunDriver {
     ) -> Result<DeviceSnapshot, String> {
         let mac_str = device.address.to_string();
         self.device_address = Some(mac_str.clone());
+        if !has_gaia_identity(device)
+            && let Some(firmware_payload) = super::ef::probe_firmware(stream, &mut self.ef_decoder)
+        {
+            self.ef_protocol = true;
+            let snapshot =
+                super::ef::initialize(stream, &mut self.ef_decoder, device, firmware_payload)?;
+            self.snapshot = Some(snapshot.clone());
+            return Ok(snapshot);
+        }
         let (snapshot, decoder) = initialize_earfun_session_with_lap(
             stream,
             &device.name,
@@ -159,6 +190,12 @@ impl HeadsetDriver for EarFunDriver {
         stream: &mut T,
         updates: &Sender<UiUpdate>,
     ) -> Result<(), String> {
+        if self.ef_protocol {
+            let Some(snapshot) = &self.snapshot else {
+                return Ok(());
+            };
+            return super::ef::poll(stream, &mut self.ef_decoder, snapshot, updates);
+        }
         let Some(snapshot) = &self.snapshot else {
             return Ok(());
         };
@@ -266,6 +303,18 @@ impl HeadsetDriver for EarFunDriver {
         command: WorkerCommand,
         updates: &Sender<UiUpdate>,
     ) -> Result<(), String> {
+        if self.ef_protocol {
+            let Some(snapshot) = &mut self.snapshot else {
+                return Ok(());
+            };
+            return super::ef::handle_command(
+                stream,
+                &mut self.ef_decoder,
+                snapshot,
+                command,
+                updates,
+            );
+        }
         let Some(snapshot) = &self.snapshot else {
             return Ok(());
         };
@@ -275,11 +324,8 @@ impl HeadsetDriver for EarFunDriver {
         let behavior_pid = compatibility::earfun_behavior_product_id(pid, firmware_model_code);
         let current_dual_device = snapshot.dual_device.dual_device_enabled;
         let current_audio_codec = snapshot.sound.audio_codec;
-        let wear = snapshot.wear.wear.clone();
-        let supports_wear_status = snapshot.wear.supports_wear_status;
-        let noise_controls_enabled = !snapshot.identity.read_only
-            && !snapshot.noise.modes.is_empty()
-            && (!supports_wear_status || wear.any_earbud_in_ear());
+        let noise_controls_enabled =
+            !snapshot.identity.read_only && !snapshot.noise.modes.is_empty();
 
         match command {
             WorkerCommand::Disconnect => Ok(()),
@@ -292,8 +338,6 @@ impl HeadsetDriver for EarFunDriver {
                     protocol_index,
                     &mut self.anc_sub,
                     &mut self.transp_sub,
-                    &wear,
-                    supports_wear_status,
                     updates,
                 ) {
                     Ok(actual) => {
@@ -1033,6 +1077,15 @@ impl HeadsetDriver for EarFunDriver {
         bytes: &[u8],
         updates: &Sender<UiUpdate>,
     ) -> Result<(), String> {
+        if self.ef_protocol {
+            super::ef::handle_incoming_bytes(
+                &mut self.ef_decoder,
+                &mut self.snapshot,
+                bytes,
+                updates,
+            );
+            return Ok(());
+        }
         let packets = self.decoder.push(bytes);
         for packet in packets {
             handle_unsolicited(&packet, Some(updates));

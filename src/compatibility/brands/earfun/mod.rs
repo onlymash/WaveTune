@@ -25,7 +25,8 @@ mod tests;
 #[allow(unused_imports)]
 pub use earfun_catalog::{
     EARFUN_AIR_PRO_4_NOISE_MODES, EARFUN_AIR_S_NOISE_MODES, EARFUN_DEVICE_PROFILES,
-    EARFUN_FIRMWARE_PROFILES, EarFunFirmwareProfile, supported_earfun_codecs,
+    EARFUN_EF_FIRMWARE_PROFILES, EARFUN_FIRMWARE_PROFILES, EarFunEfFirmwareProfile,
+    EarFunFirmwareProfile, supported_earfun_codecs,
 };
 #[allow(unused_imports)]
 pub use earfun_equalizer::{

@@ -25,7 +25,6 @@ use std::{
 use crate::app::events::UiUpdate;
 use crate::bluetooth::brands::earfun::transport::{drain_stream, send_command};
 use crate::compatibility;
-use crate::protocol::WearState;
 use crate::protocol::brands::earfun::{EarFunCommands, EarFunFrameDecoder};
 
 pub fn earfun_mode_to_protocol_index(master: u8, anc_sub: u8, transp_sub: u8) -> u8 {
@@ -72,8 +71,6 @@ pub fn set_noise_mode<T: Read + Write>(
     protocol_index: u8,
     last_anc_sub: &mut u8,
     last_transp_sub: &mut u8,
-    wear: &WearState,
-    supports_wear_status: bool,
     updates: &Sender<UiUpdate>,
 ) -> Result<u8, String> {
     let profile = compatibility::profile_for_identity(product_id, firmware_model_code)
@@ -89,10 +86,6 @@ pub fn set_noise_mode<T: Read + Write>(
             protocol_index
         ));
     }
-    if supports_wear_status && !wear.any_earbud_in_ear() {
-        return Err(crate::t!("wear-earbuds-not-in-ear"));
-    }
-
     let has_submodes = profile.noise_modes.iter().any(|mode| mode.parent.is_some());
     if !has_submodes {
         send_command(

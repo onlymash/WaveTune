@@ -145,6 +145,8 @@ pub struct DeviceChoice {
     pub has_control_service: bool,
     /// Control service UUIDs reported by BlueZ for this device, ordered by catalog priority.
     pub(crate) control_service_uuids: Vec<bluer::Uuid>,
+    /// EarFun's vendor GAIA service is used for protocol routing, not RFCOMM channel selection.
+    pub(crate) has_earfun_gaia_vendor_service: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

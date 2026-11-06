@@ -65,6 +65,8 @@ pub enum NoiseModeKind {
     LessNoise,
     MoreNoise,
     VocalEnhancement,
+    WindReduction,
+    NoiseCancellationLevel1,
 }
 
 impl NoiseModeKind {
@@ -82,6 +84,8 @@ impl NoiseModeKind {
             Self::LessNoise => "noise-mode-less-noise",
             Self::MoreNoise => "noise-mode-more-noise",
             Self::VocalEnhancement => "noise-mode-vocal-enhancement",
+            Self::WindReduction => "noise-mode-wind-reduction",
+            Self::NoiseCancellationLevel1 => "noise-mode-noise-cancellation-level-1",
         }
     }
 
@@ -156,6 +160,14 @@ pub fn earfun_firmware_profile(
         .find(|entry| entry.firmware_prefix == firmware_model_code)
 }
 
+pub fn earfun_ef_firmware_profile(
+    firmware_model_code: &str,
+) -> Option<&'static brands::earfun::EarFunEfFirmwareProfile> {
+    brands::earfun::EARFUN_EF_FIRMWARE_PROFILES
+        .iter()
+        .find(|entry| entry.firmware_prefix == firmware_model_code)
+}
+
 fn earfun_profile_for_product_id(product_id: u32) -> Option<&'static DeviceProfile> {
     brands::earfun::EARFUN_DEVICE_PROFILES
         .iter()
@@ -163,6 +175,12 @@ fn earfun_profile_for_product_id(product_id: u32) -> Option<&'static DeviceProfi
 }
 
 pub fn earfun_behavior_product_id(product_id: u32, firmware_model_code: Option<&str>) -> u32 {
+    if firmware_model_code
+        .and_then(earfun_ef_firmware_profile)
+        .is_some()
+    {
+        return 0;
+    }
     if firmware_model_code.is_none() || earfun_profile_for_product_id(product_id).is_some() {
         return product_id;
     }
@@ -172,7 +190,9 @@ pub fn earfun_behavior_product_id(product_id: u32, firmware_model_code: Option<&
 }
 
 pub fn earfun_has_case_battery(product_id: u32, firmware_model_code: Option<&str>) -> bool {
-    if firmware_model_code.is_none() || earfun_profile_for_product_id(product_id).is_some() {
+    if let Some(profile) = firmware_model_code.and_then(earfun_ef_firmware_profile) {
+        profile.has_case_battery
+    } else if firmware_model_code.is_none() || earfun_profile_for_product_id(product_id).is_some() {
         product_id != brands::earfun::EARFUN_AIR_S_PRODUCT_ID
     } else {
         firmware_model_code
@@ -185,7 +205,9 @@ pub fn earfun_has_case_battery(product_id: u32, firmware_model_code: Option<&str
 }
 
 pub fn earfun_is_headphones(product_id: u32, firmware_model_code: Option<&str>) -> bool {
-    if firmware_model_code.is_none() || earfun_profile_for_product_id(product_id).is_some() {
+    if let Some(profile) = firmware_model_code.and_then(earfun_ef_firmware_profile) {
+        profile.headphones
+    } else if firmware_model_code.is_none() || earfun_profile_for_product_id(product_id).is_some() {
         false
     } else {
         firmware_model_code
@@ -198,7 +220,9 @@ pub fn earfun_dual_device_restart_required(
     product_id: u32,
     firmware_model_code: Option<&str>,
 ) -> bool {
-    if firmware_model_code.is_none() || earfun_profile_for_product_id(product_id).is_some() {
+    if let Some(profile) = firmware_model_code.and_then(earfun_ef_firmware_profile) {
+        profile.dual_device_restart
+    } else if firmware_model_code.is_none() || earfun_profile_for_product_id(product_id).is_some() {
         product_id == brands::earfun::EARFUN_AIR_PRO_4_PRODUCT_ID
     } else {
         firmware_model_code
@@ -429,8 +453,13 @@ pub fn profile_for_identity(
     firmware_model_code: Option<&str>,
 ) -> Option<&'static DeviceProfile> {
     if let Some(firmware_model_code) = firmware_model_code {
-        earfun_profile_for_product_id(product_id)
-            .or_else(|| earfun_firmware_profile(firmware_model_code).map(|entry| &entry.profile))
+        earfun_ef_firmware_profile(firmware_model_code)
+            .map(|entry| &entry.profile)
+            .or_else(|| {
+                earfun_profile_for_product_id(product_id).or_else(|| {
+                    earfun_firmware_profile(firmware_model_code).map(|entry| &entry.profile)
+                })
+            })
     } else {
         profile_for_product_id(product_id)
     }

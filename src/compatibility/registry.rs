@@ -19,7 +19,8 @@
 
 use super::{
     DeviceProfile, brands::earfun::EARFUN_DEVICE_PROFILES,
-    brands::earfun::EARFUN_FIRMWARE_PROFILES, brands::oppo::OPPO_DEVICE_PROFILES,
+    brands::earfun::EARFUN_EF_FIRMWARE_PROFILES, brands::earfun::EARFUN_FIRMWARE_PROFILES,
+    brands::oppo::OPPO_DEVICE_PROFILES,
 };
 
 /// Returns an iterator over all built-in device profiles across all supported brands.
@@ -30,6 +31,11 @@ pub fn builtin_profiles() -> impl Iterator<Item = &'static DeviceProfile> {
         .chain(EARFUN_DEVICE_PROFILES.iter())
         .chain(
             EARFUN_FIRMWARE_PROFILES
+                .iter()
+                .map(|firmware_profile| &firmware_profile.profile),
+        )
+        .chain(
+            EARFUN_EF_FIRMWARE_PROFILES
                 .iter()
                 .map(|firmware_profile| &firmware_profile.profile),
         )

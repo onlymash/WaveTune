@@ -37,6 +37,12 @@ pub const EARFUN_AIR_S_PRODUCT_ID: u32 = 0x004c45;
 
 pub const EARFUN_FALLBACK_RFCOMM_CHANNEL: u8 = 11;
 pub const GAIA_SERVICE_UUID: &str = "00001107-d102-11e1-9b23-00025b00a5a5";
+pub const GAIA_VENDOR_SERVICE_UUIDS: &[&str] = &[
+    "0000eb04-d102-11e1-9b23-00025b00a5a5",
+    "0000eb05-d102-11e1-9b23-00025b00a5a5",
+    "0000eb06-d102-11e1-9b23-00025b00a5a5",
+    "0000eb07-d102-11e1-9b23-00025b00a5a5",
+];
 pub const EARFUN_PRIMARY_SPP_NAMES: &[&str] = &[];
 pub const EARFUN_SECONDARY_SPP_NAMES: &[&str] = &["gaia", "earfun", "spp", "serial port"];
 
@@ -44,12 +50,7 @@ pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 pub const POLL_INTERVAL: Duration = Duration::from_secs(15);
 
 pub fn open_earfun_rfcomm(device: &DeviceChoice) -> std::io::Result<std::fs::File> {
-    // BlueZ may omit both manufacturer Product ID data and service UUIDs for an
-    // already-paired device. EarFun devices are identified before reaching this
-    // driver; preserve the GAIA UUID and channel-11 fallback in that case.
-    let service_uuids = [bluer::Uuid::parse_str(GAIA_SERVICE_UUID).map_err(|error| {
-        std::io::Error::other(format!("invalid EarFun GAIA service UUID: {error}"))
-    })?];
+    let service_uuids = rfcomm_service_uuids(device)?;
     let query = RfcommServiceQuery {
         service_uuids: &service_uuids,
         primary_spp_names: EARFUN_PRIMARY_SPP_NAMES,
@@ -57,6 +58,16 @@ pub fn open_earfun_rfcomm(device: &DeviceChoice) -> std::io::Result<std::fs::Fil
         fallback_channel: Some(EARFUN_FALLBACK_RFCOMM_CHANNEL),
     };
     open_rfcomm(device.address, &query)
+}
+
+pub(super) fn rfcomm_service_uuids(device: &DeviceChoice) -> std::io::Result<Vec<bluer::Uuid>> {
+    if device.control_service_uuids.is_empty() {
+        bluer::Uuid::parse_str(GAIA_SERVICE_UUID)
+            .map(|uuid| vec![uuid])
+            .map_err(|error| std::io::Error::other(format!("invalid EarFun service UUID: {error}")))
+    } else {
+        Ok(device.control_service_uuids.clone())
+    }
 }
 
 pub fn send_command<T: Write>(

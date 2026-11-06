@@ -74,6 +74,15 @@ pub fn parse_earfun_model_code_from_firmware(fw: &str) -> Option<&'static str> {
                 .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(['-', '_']))
         })
         .map(|entry| entry.firmware_prefix)
+        .or_else(|| {
+            crate::compatibility::brands::earfun::EARFUN_EF_FIRMWARE_PROFILES
+                .iter()
+                .find(|entry| {
+                    fw.strip_prefix(entry.firmware_prefix)
+                        .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(['-', '_']))
+                })
+                .map(|entry| entry.firmware_prefix)
+        })
 }
 
 #[allow(dead_code)]

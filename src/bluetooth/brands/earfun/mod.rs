@@ -16,6 +16,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 pub mod driver;
+pub mod ef;
 pub mod features;
 pub mod init;
 pub mod transport;
@@ -58,8 +59,8 @@ pub use init::{
 pub use transport::{
     EARFUN_AIR_PRO_4_PRODUCT_ID, EARFUN_AIR_S_PRODUCT_ID, EARFUN_FALLBACK_RFCOMM_CHANNEL,
     EARFUN_FREE_PRO_3_PRODUCT_ID, EARFUN_PRIMARY_SPP_NAMES, EARFUN_SECONDARY_SPP_NAMES,
-    GAIA_SERVICE_UUID, POLL_INTERVAL, REQUEST_TIMEOUT, get_local_rfcomm_lap, open_earfun_rfcomm,
-    request, send_command,
+    GAIA_SERVICE_UUID, GAIA_VENDOR_SERVICE_UUIDS, POLL_INTERVAL, REQUEST_TIMEOUT,
+    get_local_rfcomm_lap, open_earfun_rfcomm, request, send_command,
 };
 
 #[allow(dead_code)]
@@ -81,13 +82,13 @@ pub mod earfun_session {
     pub use super::{
         EARFUN_AIR_PRO_4_PRODUCT_ID, EARFUN_AIR_S_PRODUCT_ID, EARFUN_FALLBACK_RFCOMM_CHANNEL,
         EARFUN_FREE_PRO_3_PRODUCT_ID, EARFUN_PRIMARY_SPP_NAMES, EARFUN_SECONDARY_SPP_NAMES,
-        EarFunDriver, GAIA_SERVICE_UUID, POLL_INTERVAL, REQUEST_TIMEOUT, apply_custom_equalizer,
-        apply_equalizer_preset, earfun_mode_to_protocol_index, get_local_rfcomm_lap,
-        initialize_earfun_session, initialize_earfun_session_with_lap, open_earfun_rfcomm,
-        parse_earfun_model_code_from_firmware, parse_earfun_product_id_from_firmware, probe_earfun,
-        protocol_index_to_earfun_mode, read_earfun_paired_devices, request, send_command,
-        send_equalizer_bands, set_audio_codec, set_dual_device, set_game_mode,
-        set_in_ear_detection, set_noise_mode, set_touch_action, set_touch_lock,
-        spawn_earfun_monitor,
+        EarFunDriver, GAIA_SERVICE_UUID, GAIA_VENDOR_SERVICE_UUIDS, POLL_INTERVAL, REQUEST_TIMEOUT,
+        apply_custom_equalizer, apply_equalizer_preset, earfun_mode_to_protocol_index,
+        get_local_rfcomm_lap, initialize_earfun_session, initialize_earfun_session_with_lap,
+        open_earfun_rfcomm, parse_earfun_model_code_from_firmware,
+        parse_earfun_product_id_from_firmware, probe_earfun, protocol_index_to_earfun_mode,
+        read_earfun_paired_devices, request, send_command, send_equalizer_bands, set_audio_codec,
+        set_dual_device, set_game_mode, set_in_ear_detection, set_noise_mode, set_touch_action,
+        set_touch_lock, spawn_earfun_monitor,
     };
 }

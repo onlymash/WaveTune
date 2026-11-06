@@ -28,7 +28,7 @@ EarFun devices advertise standard Bluetooth Classic audio and serial profiles:
 - **Service UUIDs**:
   - Standard SPP UUID: `00001101-0000-1000-8000-00805F9B34FB`
   - Qualcomm GAIA UUID: `00001107-D102-11E1-9B23-00025B00A5A5`
-  - Vendor Specific UUIDs: `0000eb04-d102-11e1-9b23-00025b00a5a5` ... `eb07`
+  - Vendor Specific UUIDs: `0000eb04-d102-11e1-9b23-00025b00a5a5` ... `eb07`; WaveTune recognizes these for EarFun/GAIA routing and avoids EF probing. They are not used as RFCOMM service candidates; channel lookup preserves the discovered control-service candidate list and falls back to the GAIA UUID (`0x1107`) only when BlueZ reports no candidates.
 - **RFCOMM Channel**:
   - Live probe on EarFun Air Pro 4 confirms that **RFCOMM Channel 11** accepts the GAIA control connection.
   - (Channel 22 is also exposed for raw diagnostic/telemetry streams).
@@ -75,7 +75,9 @@ The current EncoDeck EarFun profile table contains 23 model records. The identif
 | `HP220` | EarFun Tune Pro | EF / `head` |
 | `HP300` | EarFun Wave Pro 2 | EF / `head` |
 
-This table reproduces EncoDeck's source profile IDs and names. WaveTune does not use `Named()` or any Bluetooth display name to select a model. After the GAIA firmware query succeeds, the exact returned firmware prefix selects a GAIA compatibility profile for the codes listed in Section 1.2; the model code remains separate from the numeric manufacturer Product ID, which is still unknown for these profiles. This path is source-derived and covered by synthetic tests, not by a new hardware capture. Registration in WaveTune's compatibility catalog, rather than a prior real-device test, determines whether the matching profile's implemented features are exposed. EF models are not yet in WaveTune's supported runtime catalog because the EF bootstrap and frame driver are not implemented.
+This table reproduces EncoDeck's source profile IDs and names. WaveTune does not use `Named()` or any Bluetooth display name to select a model. After the GAIA firmware query succeeds, the exact returned firmware prefix selects a GAIA compatibility profile for the codes listed in Section 1.2; the model code remains separate from the numeric manufacturer Product ID, which is still unknown for these profiles. This path is source-derived and covered by synthetic tests, not by a new hardware capture.
+
+WaveTune now has an EF frame codec, an EF bootstrap path, and compatibility entries for the EF IDs listed above. It tries to resolve an EF profile from the strict prefix of the `0x1010` firmware response, without consulting the Bluetooth display name. **EncoDeck itself selects these profiles by device name and does not establish that `0x1010` returns those model prefixes.** Therefore, this identity path is not independently confirmed: if the response does not contain a matching prefix, WaveTune keeps the EF session read-only rather than guessing a model. The entries are catalog configuration, not a hardware validation claim.
 
 ---
 
@@ -119,7 +121,7 @@ EncoDeck's non-GAIA profiles use a distinct frame format rather than the GAIA `0
 | `4+N` | Check byte: `(N + sum(payload)) & 0xFF` |
 | `5+N` | End byte `0xFE` |
 
-For these profiles, the inspected EncoDeck codec validates the additive check byte and `0xFE` terminator; response status/value semantics are command-specific and must not be assumed to match GAIA's leading status byte. EncoDeck maps EF commands by model/setting; see Section 4.11. This format and its model mappings are source-derived and have not been independently hardware-validated by WaveTune.
+For these profiles, the inspected EncoDeck codec validates the additive check byte and `0xFE` terminator; response status/value semantics are command-specific and must not be assumed to match GAIA's leading status byte. WaveTune implements this as a separate incremental decoder with bounded frame length and checksum/terminator validation. EncoDeck maps EF commands by model/setting; see Section 4.11. This format and its model mappings are source-derived and have not been independently hardware-validated by WaveTune.
 
 ---
 
@@ -562,6 +564,26 @@ EncoDeck's profile feature tokens imply the following broad groups, subject to p
 - EncoDeck declares a write-only custom EQ curve and factory-reset capability across its EarFun profiles. EQ layout differs by model: most use ten bands at 0.5 dB steps within ±6 dB, while Air S / Free 2S / ATVEL Tune S5 ProX use six editable bands at whole-dB steps within ±10 dB. EQ is never read back. Factory reset clears all pairings and is destructive; it is not authorized by this protocol note and is excluded from the WaveTune model-support plan.
 
 Do not infer a feature from a shared command ID or a shared profile variant alone. In particular, the 23 EncoDeck records are not automatically WaveTune-supported devices: only models registered in WaveTune's compatibility catalog are considered supported, and their declared capabilities determine the corresponding implemented features. Hardware-test status is tracked separately and does not gate those features.
+
+### 4.12 WaveTune EF implementation scope
+
+The current WaveTune EF path is deliberately narrower than EncoDeck. The profiles are registered for `TW220`, `TW220_VDL`, `TW205`, `TW230`, `OW100`, `OW100_NEW`, `CW100`, `CW200`, `HP201`, `HP220`, and `HP300`. Model lookup uses an exact firmware-code prefix from the EF `0x1010` response, not a Bluetooth name. As noted in Section 1.3, EncoDeck does not demonstrate that this firmware response contains those IDs. A non-matching response therefore remains an unknown, read-only model; these profiles do not establish device identity by themselves.
+
+If the firmware prefix does not match a registered EF profile, WaveTune records the firmware response and performs no additional model-dependent queries or writes. For a recognized profile, only the profile-declared features that WaveTune currently implements are exposed:
+
+| EF profile IDs | Implemented controls |
+|---|---|
+| `TW220`, `TW220_VDL` | Noise modes, game mode, prompt volume, find earbuds, spatial audio |
+| `TW205` | Game mode, find earbuds |
+| `TW230` | Noise modes, game mode, prompt volume, find earbuds |
+| `OW100`, `OW100_NEW` | Game mode, prompt volume, find earbuds, spatial audio |
+| `CW100`, `CW200` | Game mode, prompt volume, find earbuds |
+| `HP201` | Noise modes, game mode |
+| `HP220`, `HP300` | Noise modes, game mode, spatial audio |
+
+Implemented reads use the EF command pairs in Section 4.11: firmware `0x1010`, battery `0x1014`, case battery `0x1018`, charging flags `0x1016` / `0x1020`, noise `0x2080`/`0x2085`, game `0x2030`/`0x2035`, prompt volume `0x2120`/`0x2125`, find `0x2050`/`0x2055`, and spatial audio `0x2190`/`0x2195`. Settings are sent one at a time and accepted only after matching readback. Optional initialization read failures are reported as diagnostics; unavailable or invalid values remain unknown rather than being fabricated.
+
+EF multipoint/paired-host management, EQ, touch customization/lock, automatic power-off, microphone selection, codec controls, and factory reset are not implemented or exposed in WaveTune. In particular, WaveTune does not send the destructive reset command. None of the newly added EF paths has been hardware-validated; source-derived profiles and synthetic protocol tests are not hardware evidence.
 
 ---
 

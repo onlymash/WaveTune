@@ -56,6 +56,14 @@ pub struct EarFunFirmwareProfile {
     pub profile: DeviceProfile,
 }
 
+pub struct EarFunEfFirmwareProfile {
+    pub firmware_prefix: &'static str,
+    pub has_case_battery: bool,
+    pub headphones: bool,
+    pub dual_device_restart: bool,
+    pub profile: DeviceProfile,
+}
+
 const EARFUN_GAIA_TWS_FEATURES: &[&str] = &[
     features::WEAR_DETECTION,
     features::DUAL_DEVICE,
@@ -140,6 +148,247 @@ const EARFUN_WAVE_PRO_X_FEATURES: &[&str] = &[
     features::CUSTOM_EQUALIZER,
     features::PROMPT_VOLUME,
     features::AUDIO_CODEC,
+];
+
+const EARFUN_EF_NOISE_MODES: &[NoiseMode] = &[
+    NoiseMode {
+        index: 1,
+        kind: NoiseModeKind::Off,
+        parent: None,
+    },
+    NoiseMode {
+        index: 2,
+        kind: NoiseModeKind::Transparency,
+        parent: None,
+    },
+    NoiseMode {
+        index: 3,
+        kind: NoiseModeKind::WindReduction,
+        parent: None,
+    },
+    NoiseMode {
+        index: 4,
+        kind: NoiseModeKind::NoiseCancellation,
+        parent: None,
+    },
+    NoiseMode {
+        index: 5,
+        kind: NoiseModeKind::Adaptive,
+        parent: None,
+    },
+];
+
+const EARFUN_EF_TW230_NOISE_MODES: &[NoiseMode] = &[
+    NoiseMode {
+        index: 1,
+        kind: NoiseModeKind::Off,
+        parent: None,
+    },
+    NoiseMode {
+        index: 2,
+        kind: NoiseModeKind::Transparency,
+        parent: None,
+    },
+    NoiseMode {
+        index: 3,
+        kind: NoiseModeKind::NoiseCancellation,
+        parent: None,
+    },
+];
+
+const EARFUN_EF_HEAD_NOISE_MODES: &[NoiseMode] = &[
+    NoiseMode {
+        index: 1,
+        kind: NoiseModeKind::Off,
+        parent: None,
+    },
+    NoiseMode {
+        index: 2,
+        kind: NoiseModeKind::Transparency,
+        parent: None,
+    },
+    NoiseMode {
+        index: 3,
+        kind: NoiseModeKind::WindReduction,
+        parent: None,
+    },
+    NoiseMode {
+        index: 4,
+        kind: NoiseModeKind::NoiseCancellation,
+        parent: None,
+    },
+];
+
+const EARFUN_EF_HEAD_EXTENDED_NOISE_MODES: &[NoiseMode] = &[
+    NoiseMode {
+        index: 1,
+        kind: NoiseModeKind::Off,
+        parent: None,
+    },
+    NoiseMode {
+        index: 2,
+        kind: NoiseModeKind::Transparency,
+        parent: None,
+    },
+    NoiseMode {
+        index: 3,
+        kind: NoiseModeKind::WindReduction,
+        parent: None,
+    },
+    NoiseMode {
+        index: 4,
+        kind: NoiseModeKind::NoiseCancellation,
+        parent: None,
+    },
+    NoiseMode {
+        index: 5,
+        kind: NoiseModeKind::NoiseCancellationLevel1,
+        parent: None,
+    },
+];
+
+const EARFUN_EF_TW220_FEATURES: &[&str] = &[
+    features::GAME_MODE,
+    features::PROMPT_VOLUME,
+    features::FIND_DEVICE,
+    features::SPATIAL_AUDIO,
+];
+const EARFUN_EF_TW205_FEATURES: &[&str] = &[features::GAME_MODE, features::FIND_DEVICE];
+const EARFUN_EF_TW230_FEATURES: &[&str] = &[
+    features::GAME_MODE,
+    features::PROMPT_VOLUME,
+    features::FIND_DEVICE,
+];
+const EARFUN_EF_OW100_FEATURES: &[&str] = &[
+    features::GAME_MODE,
+    features::PROMPT_VOLUME,
+    features::FIND_DEVICE,
+    features::SPATIAL_AUDIO,
+];
+const EARFUN_EF_CLIP_FEATURES: &[&str] = &[
+    features::GAME_MODE,
+    features::PROMPT_VOLUME,
+    features::FIND_DEVICE,
+];
+const EARFUN_EF_HEAD_FEATURES: &[&str] = &[features::GAME_MODE];
+const EARFUN_EF_HEAD_SPATIAL_FEATURES: &[&str] = &[features::GAME_MODE, features::SPATIAL_AUDIO];
+
+const fn ef_profile(
+    model: &'static str,
+    noise_modes: &'static [NoiseMode],
+    profile_features: &'static [&'static str],
+) -> DeviceProfile {
+    DeviceProfile {
+        model,
+        product_id: None,
+        uuid: Some("00001101-0000-1000-8000-00805F9B34FB"),
+        noise_modes,
+        features: profile_features,
+    }
+}
+
+pub static EARFUN_EF_FIRMWARE_PROFILES: &[EarFunEfFirmwareProfile] = &[
+    EarFunEfFirmwareProfile {
+        firmware_prefix: "TW220_VDL",
+        has_case_battery: true,
+        headphones: false,
+        dual_device_restart: false,
+        profile: ef_profile(
+            "EarFun Air 2 NC (VDL)",
+            EARFUN_EF_NOISE_MODES,
+            EARFUN_EF_TW220_FEATURES,
+        ),
+    },
+    EarFunEfFirmwareProfile {
+        firmware_prefix: "TW220",
+        has_case_battery: true,
+        headphones: false,
+        dual_device_restart: false,
+        profile: ef_profile(
+            "EarFun Air 2 NC",
+            EARFUN_EF_NOISE_MODES,
+            EARFUN_EF_TW220_FEATURES,
+        ),
+    },
+    EarFunEfFirmwareProfile {
+        firmware_prefix: "TW205",
+        has_case_battery: true,
+        headphones: false,
+        dual_device_restart: false,
+        profile: ef_profile("EarFun Air Life", &[], EARFUN_EF_TW205_FEATURES),
+    },
+    EarFunEfFirmwareProfile {
+        firmware_prefix: "TW230",
+        has_case_battery: true,
+        headphones: false,
+        dual_device_restart: true,
+        profile: ef_profile(
+            "EarFun Air Pro 4i",
+            EARFUN_EF_TW230_NOISE_MODES,
+            EARFUN_EF_TW230_FEATURES,
+        ),
+    },
+    EarFunEfFirmwareProfile {
+        firmware_prefix: "OW100_NEW",
+        has_case_battery: false,
+        headphones: false,
+        dual_device_restart: false,
+        profile: ef_profile("EarFun OpenJump (new)", &[], EARFUN_EF_OW100_FEATURES),
+    },
+    EarFunEfFirmwareProfile {
+        firmware_prefix: "OW100",
+        has_case_battery: false,
+        headphones: false,
+        dual_device_restart: false,
+        profile: ef_profile("EarFun OpenJump", &[], EARFUN_EF_OW100_FEATURES),
+    },
+    EarFunEfFirmwareProfile {
+        firmware_prefix: "CW100",
+        has_case_battery: false,
+        headphones: false,
+        dual_device_restart: true,
+        profile: ef_profile("EarFun Clip", &[], EARFUN_EF_CLIP_FEATURES),
+    },
+    EarFunEfFirmwareProfile {
+        firmware_prefix: "CW200",
+        has_case_battery: false,
+        headphones: false,
+        dual_device_restart: true,
+        profile: ef_profile("EarFun Clip 2", &[], EARFUN_EF_CLIP_FEATURES),
+    },
+    EarFunEfFirmwareProfile {
+        firmware_prefix: "HP201",
+        has_case_battery: false,
+        headphones: true,
+        dual_device_restart: false,
+        profile: ef_profile(
+            "EarFun Wave Life",
+            EARFUN_EF_HEAD_NOISE_MODES,
+            EARFUN_EF_HEAD_FEATURES,
+        ),
+    },
+    EarFunEfFirmwareProfile {
+        firmware_prefix: "HP220",
+        has_case_battery: false,
+        headphones: true,
+        dual_device_restart: false,
+        profile: ef_profile(
+            "EarFun Tune Pro",
+            EARFUN_EF_HEAD_EXTENDED_NOISE_MODES,
+            EARFUN_EF_HEAD_SPATIAL_FEATURES,
+        ),
+    },
+    EarFunEfFirmwareProfile {
+        firmware_prefix: "HP300",
+        has_case_battery: false,
+        headphones: true,
+        dual_device_restart: false,
+        profile: ef_profile(
+            "EarFun Wave Pro 2",
+            EARFUN_EF_HEAD_EXTENDED_NOISE_MODES,
+            EARFUN_EF_HEAD_SPATIAL_FEATURES,
+        ),
+    },
 ];
 
 pub static EARFUN_FIRMWARE_PROFILES: &[EarFunFirmwareProfile] = &[

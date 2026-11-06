@@ -334,6 +334,7 @@ mod tests {
             product_id: None,
             has_control_service: true,
             control_service_uuids: vec![],
+            has_earfun_gaia_vendor_service: false,
         }
     }
 

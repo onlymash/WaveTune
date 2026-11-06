@@ -55,6 +55,42 @@ mod tests {
     }
 
     #[test]
+    fn ef_packet_encoding_and_incremental_decoding() {
+        let packet = EarFunEfPacket::new(0x1010, vec![0x31, 0x32]).unwrap();
+        let frame = packet.encode().unwrap();
+        assert_eq!(frame, [0xEF, 0x10, 0x10, 2, 0x31, 0x32, 0x65, 0xFE]);
+
+        let mut decoder = EarFunEfFrameDecoder::default();
+        assert!(decoder.push(&[0xAA, 0xEF, 0x10]).is_empty());
+        assert!(decoder.push(&frame[2..6]).is_empty());
+        let packets = decoder.push(&frame[6..]);
+        assert_eq!(packets, vec![packet]);
+    }
+
+    #[test]
+    fn ef_decoder_handles_coalesced_frames_and_recovers_from_bad_checksum() {
+        let first = EarFunEfPacket::new(0x1014, vec![1, 2])
+            .unwrap()
+            .encode()
+            .unwrap();
+        let second = EarFunEfPacket::new(0x2080, vec![3])
+            .unwrap()
+            .encode()
+            .unwrap();
+        let mut bad = first.clone();
+        let checksum_index = bad.len() - 2;
+        bad[checksum_index] ^= 0x01;
+
+        let mut decoder = EarFunEfFrameDecoder::default();
+        let mut stream = bad;
+        stream.extend_from_slice(&second);
+        let packets = decoder.push(&stream);
+        assert_eq!(packets.len(), 1);
+        assert_eq!(packets[0].command, 0x2080);
+        assert_eq!(packets[0].payload, [3]);
+    }
+
+    #[test]
     fn test_parse_real_hardware_capture() {
         // Real FW capture from EarFun Air Pro 4
         let raw_fw = [
