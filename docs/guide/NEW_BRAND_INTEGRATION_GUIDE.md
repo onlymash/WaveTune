@@ -323,7 +323,7 @@ impl HeadsetDriver for BrandDriver {
 ### 步骤 4：工厂分发与发现注册
 
 #### 1. 扩展 `DeviceBrand` 枚举
-在 [`src/protocol/core/types.rs`](file:///home/onlymash/Projects/WaveTune/src/protocol/core/types.rs) 中添加新品牌枚举变体：
+在 [`src/protocol/core/types.rs`](../../src/protocol/core/types.rs) 中添加新品牌枚举变体：
 ```rust
 pub enum DeviceBrand {
     OnePlus,
@@ -335,7 +335,7 @@ pub enum DeviceBrand {
 ```
 
 #### 2. 在驱动分发中心注册
-在 [`src/bluetooth/mod.rs`](file:///home/onlymash/Projects/WaveTune/src/bluetooth/mod.rs) 中的 `AnyDriver` 枚举与 `create_driver` 工厂中加入分支：
+在 [`src/bluetooth/mod.rs`](../../src/bluetooth/mod.rs) 中的 `AnyDriver` 枚举与 `create_driver` 工厂中加入分支：
 
 ```rust
 pub enum AnyDriver {
@@ -356,7 +356,7 @@ pub fn create_driver(brand: DeviceBrand) -> AnyDriver {
 ```
 
 #### 3. 注册 BlueZ 发现规则
-在 [`src/bluetooth/discovery.rs`](file:///home/onlymash/Projects/WaveTune/src/bluetooth/discovery.rs) 中：
+在 [`src/bluetooth/discovery.rs`](../../src/bluetooth/discovery.rs) 中：
 - 注册该品牌的 Bluetooth SIG Company Identifier（厂商 ID）或专有控制服务 UUID；
 - 确保系统启动或蓝牙扫描时能自动识别该品牌耳机并指派对应的 `DeviceBrand`。
 

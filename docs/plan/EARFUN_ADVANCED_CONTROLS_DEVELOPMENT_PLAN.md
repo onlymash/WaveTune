@@ -1,6 +1,6 @@
 # EarFun 查找、提示音与音频模式功能开发计划
 
-本文基于 WaveTune 代码、[EarFun GAIA V3 API 记录](../api/EARFUN_BLUETOOTH_API.md)及本地 Gadgetbridge EarFun 实现制定，并记录本轮实施结果与剩余验收项。真机验证状态只描述证据，不是已注册型号开放 profile 声明功能的前置条件；功能开放由 compatibility profile 能力及 WaveTune 的实现范围决定。
+本文基于 WaveTune 代码、[EarFun GAIA V3 API 记录](../api/EARFUN_BLUETOOTH_API.md)及 [Gadgetbridge 项目](https://codeberg.org/Freeyourgadget/Gadgetbridge) 的 EarFun 实现制定，并记录本轮实施结果与剩余验收项。真机验证状态只描述证据，不是已注册型号开放 profile 声明功能的前置条件；功能开放由 compatibility profile 能力及 WaveTune 的实现范围决定。
 
 ## 当前实施状态
 

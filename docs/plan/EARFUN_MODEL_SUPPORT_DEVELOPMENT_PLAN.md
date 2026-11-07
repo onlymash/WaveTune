@@ -1,6 +1,6 @@
 # EarFun 机型支持扩展开发计划
 
-本计划基于当前本地 EncoDeck 源码中新增的 EarFun 机型与协议资料，扩展 WaveTune 现有 EarFun 支持。协议依据见[更新后的 EarFun API 记录](../api/EARFUN_BLUETOOTH_API.md)。EncoDeck 将其实现归因于 EarKit commit `a77acd18890a5f28746c2303bfff0e23fff8d8ca`；这些是客户端源码证据，硬件验证状态单独记录，不作为预定义机型开放对应功能的前置条件。
+本计划基于 [EncoDeck 项目](https://github.com/TIANLI0/EncoDeck) 新增的 EarFun 机型与协议资料，扩展 WaveTune 现有 EarFun 支持。协议依据见[更新后的 EarFun API 记录](../api/EARFUN_BLUETOOTH_API.md)。EncoDeck 将其实现归因于 EarKit commit `a77acd18890a5f28746c2303bfff0e23fff8d8ca`；这些是客户端源码证据，硬件验证状态单独记录，不作为预定义机型开放对应功能的前置条件。
 
 实施须沿用 WaveTune 当前的 `DeviceProfile` / `compatibility::registry`、`HeadsetDriver` / `AnyDriver` / `SessionRunner`、EarFun 垂直 feature 切片和 MVI 状态事件流。该工作不是新建第二套品牌驱动或重写会话执行器；只在需要处给现有兼容层和 EarFun 驱动增加机型身份及协议族差异。
 

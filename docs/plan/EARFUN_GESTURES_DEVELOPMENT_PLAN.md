@@ -2,7 +2,7 @@
 
 本文档为 WaveTune 接入 **EarFun 品牌无线耳机（EarFun Air Pro 4、EarFun Free Pro 3、EarFun Air S）手势控制与触控锁定功能**的完整开发计划。
 
-设计参考了 Android 开源客户端 [Gadgetbridge](file:///home/onlymash/Projects/WaveTune/external/Gadgetbridge)（PR #4635）的底层实现及真实硬件通信规范，并严格遵循 WaveTune 的 [轻量 MVI 架构与分层设计规范](file:///home/onlymash/Projects/WaveTune/docs/guide/ARCHITECTURE_GUIDELINES.md) 与 [代码规范](file:///home/onlymash/Projects/WaveTune/AGENTS.md)。
+设计参考了 Android 开源客户端 [Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge)（PR #4635）的底层实现及真实硬件通信规范，并严格遵循 WaveTune 的 [轻量 MVI 架构与分层设计规范](../guide/ARCHITECTURE_GUIDELINES.md) 与 [代码规范](../../AGENTS.md)。
 
 ---
 
@@ -28,7 +28,7 @@
 
 ## 二、 协议规范与机型能力对比 (基于 Gadgetbridge 源码分析)
 
-经审计 `external/Gadgetbridge` 中 `EarFunProtocol.java`、`EarFunPacketEncoder.java`、`EarFunResponseHandler.java` 及各机型 XML 设置，EarFun 触控手势机制总结如下：
+经审计 [Gadgetbridge 项目](https://codeberg.org/Freeyourgadget/Gadgetbridge) 中的 `EarFunProtocol.java`、`EarFunPacketEncoder.java`、`EarFunResponseHandler.java` 及各机型 XML 设置，EarFun 触控手势机制总结如下：
 
 ### 2.1 指令与数据载荷规范
 

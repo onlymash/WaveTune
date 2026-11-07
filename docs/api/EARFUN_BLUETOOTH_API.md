@@ -1,13 +1,13 @@
 # EarFun Wireless Headset Control Protocol (GAIA and EF Variants)
 
-This document records the private control protocols used by EarFun wireless headphones and earbuds. It covers the existing GAIA V3 support (including the **EarFun Air Pro 4**, **EarFun Air S**, and **EarFun Free Pro 3**) and newer GAIA/EF model information analyzed from the local EncoDeck source, including the **EarFun Air Pro 4+**.
+This document records the private control protocols used by EarFun wireless headphones and earbuds. It covers the existing GAIA V3 support (including the **EarFun Air Pro 4**, **EarFun Air S**, and **EarFun Free Pro 3**) and newer GAIA/EF model information analyzed from the [EncoDeck project](https://github.com/TIANLI0/EncoDeck), including the **EarFun Air Pro 4+**.
 
 The GAIA models use Qualcomm GAIA-family frames over Bluetooth Classic RFCOMM/SPP; the newer EF models use a separate `0xEF` frame format. The frame families and model-specific command maps are not interchangeable. This document distinguishes hardware-tested facts from client-source-derived behavior. Hardware-validation status records evidence only; it is not an additional gate for exposing features on models in WaveTune's predefined compatibility catalog. For a registered model, the profile's declared capabilities determine which implemented controls are available. Runtime safety preconditions and missing protocol/feature implementations still apply.
 
 Reference implementations and hardware validation:
-- **Client Reference**: Freeyourgadget / Gadgetbridge (PR #4635 / commit `d9d0573812`, `cab12149d6`, `1473364031`).
+- **Client Reference**: [Freeyourgadget / Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge) (PR #4635 / commit `d9d0573812`, `cab12149d6`, `1473364031`).
 - **Hardware Validation**: Tested live on real **EarFun Air Pro 4** (Hardware/Firmware `TW600-3091_20250919_v0.4.1`, Product ID `45 35`, connected to Arch Linux via RFCOMM channel 11).
-- **Additional Client Reference**: EncoDeck local source revision `f893e15` (EarFun protocol implementation); its source attributes model/protocol facts to EarKit commit `a77acd18890a5f28746c2303bfff0e23fff8d8ca` (MIT). EncoDeck's compatibility notes say further real-device feedback is pending.
+- **Additional Client Reference**: [EncoDeck](https://github.com/TIANLI0/EncoDeck), source revision `f893e15` (EarFun protocol implementation); its source attributes model/protocol facts to EarKit commit `a77acd18890a5f28746c2303bfff0e23fff8d8ca` (MIT). EncoDeck's compatibility notes say further real-device feedback is pending.
 
 ---
 
@@ -625,25 +625,25 @@ RFCOMM Connection to Channel 11: SUCCESS
 
 ## 6. Client Source Evidence and Validation Boundary
 
-The command names, client-side enum values, request encoding, response handling, and model-specific settings described in Sections 4.7.3 and 4.9–4.9.2 are based on the local Gadgetbridge checkout at revision `86703c8006`:
+The command names, client-side enum values, request encoding, response handling, and model-specific settings described in Sections 4.7.3 and 4.9–4.9.2 are based on [Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge/src/commit/86703c8006) at revision `86703c8006`:
 
-- `app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunPacket.java`
-- `app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunPacketEncoder.java`
-- `app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunProtocol.java`
-- `app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunResponseHandler.java`
-- `app/src/main/java/nodomain/freeyourgadget/gadgetbridge/devices/earfun/EarFunAirPro4Coordinator.java` and `EarFunFreePro3Coordinator.java`, plus their respective settings XML.
+- [`EarFunPacket.java`](https://codeberg.org/Freeyourgadget/Gadgetbridge/src/commit/86703c8006/app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunPacket.java)
+- [`EarFunPacketEncoder.java`](https://codeberg.org/Freeyourgadget/Gadgetbridge/src/commit/86703c8006/app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunPacketEncoder.java)
+- [`EarFunProtocol.java`](https://codeberg.org/Freeyourgadget/Gadgetbridge/src/commit/86703c8006/app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunProtocol.java)
+- [`EarFunResponseHandler.java`](https://codeberg.org/Freeyourgadget/Gadgetbridge/src/commit/86703c8006/app/src/main/java/nodomain/freeyourgadget/gadgetbridge/service/devices/earfun/EarFunResponseHandler.java)
+- [`EarFunAirPro4Coordinator.java`](https://codeberg.org/Freeyourgadget/Gadgetbridge/src/commit/86703c8006/app/src/main/java/nodomain/freeyourgadget/gadgetbridge/devices/earfun/EarFunAirPro4Coordinator.java) and `EarFunFreePro3Coordinator.java`, plus their respective settings XML.
 
 These are **client-source references**, not hardware-validated protocol facts. Gadgetbridge exposes the find-device setting for Air Pro 4 and Free Pro 3, and voice-prompt volume, microphone mode, and advanced audio mode in the Air Pro 4 settings. Its Air Pro 4 and Free Pro 3 protocols request the extended settings, while Air S does not. The documented Air Pro 4 live verification above does not include successful tests of these controls; no firmware-specific evidence for them or working LE Audio / Google Fast Pair switching was found. Treat all such on-device behavior as unverified until separately tested and recorded.
 
-The additional model matrix and GAIA/EF details in Sections 1.3, 2.3, and 4.11 are based on the local EncoDeck checkout at revision `f893e15`, principally:
+The additional model matrix and GAIA/EF details in Sections 1.3, 2.3, and 4.11 are based on [EncoDeck](https://github.com/TIANLI0/EncoDeck/tree/f893e15) at revision `f893e15`, principally:
 
-- `src/EncoDeck.Protocol/Brands/EarFun/EarFunProfiles.cs`
-- `src/EncoDeck.Protocol/Brands/EarFun/EarFunSettings.cs`
-- `src/EncoDeck.Protocol/Brands/EarFun/EarFunFrameCodec.cs`
-- `src/EncoDeck.Protocol/Brands/EarFun/EarFunDeviceController.cs`
-- `src/EncoDeck.Protocol/Brands/EarFun/EarFunGestures.cs`
-- `src/EncoDeck.Protocol/Brands/EarFun/EarFunEqualizer.cs`
-- `docs/COMPATIBILITY.md`
-- `tests/EncoDeck.Tests/Protocol/EarFunTests.cs`
+- [`EarFunProfiles.cs`](https://github.com/TIANLI0/EncoDeck/blob/f893e15/src/EncoDeck.Protocol/Brands/EarFun/EarFunProfiles.cs)
+- [`EarFunSettings.cs`](https://github.com/TIANLI0/EncoDeck/blob/f893e15/src/EncoDeck.Protocol/Brands/EarFun/EarFunSettings.cs)
+- [`EarFunFrameCodec.cs`](https://github.com/TIANLI0/EncoDeck/blob/f893e15/src/EncoDeck.Protocol/Brands/EarFun/EarFunFrameCodec.cs)
+- [`EarFunDeviceController.cs`](https://github.com/TIANLI0/EncoDeck/blob/f893e15/src/EncoDeck.Protocol/Brands/EarFun/EarFunDeviceController.cs)
+- [`EarFunGestures.cs`](https://github.com/TIANLI0/EncoDeck/blob/f893e15/src/EncoDeck.Protocol/Brands/EarFun/EarFunGestures.cs)
+- [`EarFunEqualizer.cs`](https://github.com/TIANLI0/EncoDeck/blob/f893e15/src/EncoDeck.Protocol/Brands/EarFun/EarFunEqualizer.cs)
+- [`COMPATIBILITY.md`](https://github.com/TIANLI0/EncoDeck/blob/f893e15/docs/COMPATIBILITY.md)
+- [`EarFunTests.cs`](https://github.com/TIANLI0/EncoDeck/blob/f893e15/tests/EncoDeck.Tests/Protocol/EarFunTests.cs)
 
 EncoDeck attributes its model/protocol facts to EarKit commit `a77acd18890a5f28746c2303bfff0e23fff8d8ca` (MIT). Its compatibility document says hardware verification/feedback for the newly added EarFun profiles is pending. The TW700 test fixture is explicitly synthetic and contains assumptions about missing write acknowledgements; it is not a captured Air Pro 4+ device trace. Therefore, the only hardware validation claimed in this document remains the Air Pro 4 test recorded in Section 5. Do not treat source profiles, synthetic tests, settings UI, or inferred product names as proof of hardware support.

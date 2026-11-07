@@ -58,7 +58,9 @@ flowchart TD
 ## 二、 核心架构原则
 
 ### 1. 单一可信状态源（Single Source of Truth）
-- 全局业务与设备状态统一收敛于 [`src/app/state.rs`](file:///home/onlymash/Projects/WaveTune/src/app/state.rs) 中的 `HeadsetSessionState`；
+- 全局业务与设备状态统一收敛于 [`src/app/state.rs`](../../src/app/state.rs) 中的 `HeadsetSessionState`；
+所有业务特性均按垂直切片（Feature-First）组织在 [`src/app/features/`](../../src/app/features/) 目录下：
+遵循 [`AGENTS.md`](../../AGENTS.md) 与 [`docs/api/OPPO_BLUETOOTH_API.md`](../api/OPPO_BLUETOOTH_API.md) 的安全约束：
 - 禁止在控制器或视图中维护散落的业务状态变量，所有视图数据均派生自中心状态；
 - 设备断开时，通过 `state.reset_on_disconnect()` 统一重置状态树。
 
