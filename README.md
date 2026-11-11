@@ -40,6 +40,16 @@ Before launching WaveTune, make sure the system `bluetooth` service is running a
 sudo systemctl enable --now bluetooth
 ```
 
+### Flatpak
+
+WaveTune is not on Flathub yet, but a Flatpak can be built locally from the checkout (requires `flatpak` and `flatpak-builder`, plus the Flathub remote):
+
+```bash
+./packaging/flatpak/build.sh --run
+```
+
+The sandbox only gets Bluetooth sockets, BlueZ on the system bus, network access for device artwork, GPU access for the 3D preview, and the StatusNotifierItem watcher for the tray. "Start in Background on Login" has no effect inside the sandbox; use your desktop's autostart settings instead.
+
 ## GNOME Quick Settings Extension
 
 A companion extension for GNOME 45–51 is included at `gnome-shell/wavetune@onlymash.github.com` (automatically installed to the system extensions directory by distribution packages).
@@ -52,6 +62,12 @@ gnome-extensions enable wavetune@onlymash.github.com
 ```
 
 > In a Wayland session, if `gnome-extensions` does not recognize the UUID on first install, log out and back into your desktop session once before running the enable command.
+
+For the Flatpak build, the extension can be linked out of the installed app (Flatpak cannot export shell extensions itself):
+
+```bash
+./packaging/flatpak/install-gnome-extension.sh
+```
 
 When a supported headset is connected, a headset tile appears in the GNOME Quick Settings panel for toggling noise cancellation, checking live battery levels, switching noise-control sub-modes, or opening the main window. "Keep Running in Background" is enabled by default (closing the window hides it to the background; choose "Quit" from the main menu or press `Ctrl+Q` to exit completely), and "Start in Background on Login" can be toggled in Preferences.
 
@@ -92,6 +108,8 @@ packaging/package.sh            # Build Arch package if makepkg is available, ot
 packaging/package.sh arch       # Build Arch package from working tree snapshot
 packaging/package.sh git        # Build wavetune-git from local committed HEAD
 packaging/package.sh deb        # Build Debian/Ubuntu .deb package (requires dpkg-deb and libadwaita >= 1.9)
+packaging/flatpak/build.sh                  # Build and install the Flatpak from the working tree
+packaging/flatpak/update-cargo-sources.sh   # Regenerate cargo-sources.json after Cargo.lock changes
 ```
 
 Built packages are written to `target/dist/`. For AUR repository generation and publishing workflows, see [`packaging/arch/README.md`](packaging/arch/README.md).
