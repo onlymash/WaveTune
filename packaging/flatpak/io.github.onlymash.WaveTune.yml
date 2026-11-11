@@ -1,0 +1,73 @@
+app-id: io.github.onlymash.WaveTune
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: wavetune
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri                                  # 3D model preview (OpenGL)
+  - --share=network                               # device artwork from encoapi.vercel.app
+  - --allow=bluetooth                             # raw RFCOMM/SDP sockets to the earbuds
+  - --system-talk-name=org.bluez                  # BlueZ over system D-Bus
+  - --talk-name=org.kde.StatusNotifierWatcher     # tray icon (KDE, Waybar, AppIndicator ext...)
+
+modules:
+  # The app links against libbluetooth (SDP calls), which the GNOME runtime doesn't ship.
+  # Only build the library, skip bluetoothd and all the tools.
+  - name: libbluetooth
+    buildsystem: simple
+    build-commands:
+      - ./bootstrap
+      - ./configure --prefix=/app --enable-library --disable-tools --disable-client
+        --disable-monitor --disable-obex --disable-cups --disable-systemd --disable-udev
+        --disable-manpages --disable-mesh --disable-midi --disable-datafiles
+      - make -j$FLATPAK_BUILDER_N_JOBS install-libLTLIBRARIES install-pkgincludeHEADERS install-pkgconfigDATA
+      - install -Dm644 COPYING.LIB /app/share/licenses/$FLATPAK_ID/bluez/COPYING.LIB
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - '*.la'
+    sources:
+      - type: archive
+        url: https://github.com/bluez/bluez/archive/refs/tags/5.88.tar.gz
+        sha256: 667203f5dba91cf8b2094239dd9b415b487146cb00d4653179c11723dce52f19
+
+  - name: wavetune
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_HOME: /run/build/wavetune/cargo
+        CARGO_NET_OFFLINE: 'true'
+        RUSTFLAGS: -L native=/app/lib
+    build-commands:
+      - cargo --offline build --release --locked
+      - PREFIX=/app sh packaging/install.sh "" target/release/wavetune
+      - install -Dm644 LICENSE /app/share/licenses/$FLATPAK_ID/LICENSE
+      # On non-GNOME desktops GTK asks for the host icon theme (e.g. Breeze), which doesn't
+      # exist in the sandbox, and then only falls back to hicolor. Copy every symbolic icon
+      # the app uses from the runtime's Adwaita into our own hicolor so it always resolves.
+      - |
+        for n in $(grep -rhoE '"[a-z0-9-]+-symbolic"' src | tr -d '"' | sort -u); do
+          f=$(find /usr/share/icons/Adwaita/symbolic -name "$n.svg" | head -n1)
+          if [ -n "$f" ]; then
+            install -Dm644 "$f" "/app/share/icons/hicolor/scalable/actions/$n.svg"
+          fi
+        done
+    sources:
+      # Build whatever is checked out locally (your branch, your uncommitted changes).
+      - type: dir
+        path: ../..
+        skip:
+          - target
+          - .flatpak-builder
+          - build-dir
+          - repo
+          - packaging/flatpak/.flatpak-builder
+          - packaging/flatpak/build-dir
+      - cargo-sources.json

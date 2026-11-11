@@ -40,6 +40,16 @@ makepkg -si
 sudo systemctl enable --now bluetooth
 ```
 
+### Flatpak
+
+WaveTune 暂未上架 Flathub，但可以从源码在本地构建 Flatpak（需要 `flatpak`、`flatpak-builder` 以及 Flathub 仓库）：
+
+```bash
+./packaging/flatpak/build.sh --run
+```
+
+沙盒仅获得蓝牙套接字、系统总线上的 BlueZ、用于下载设备图片的网络、用于 3D 预览的 GPU，以及托盘所需的 StatusNotifierItem 权限。沙盒内“登录后在后台启动”不会生效，请改用桌面环境自带的自启动设置。
+
 ## GNOME 快捷面板（Quick Settings）扩展
 
 仓库内置适用于 GNOME 45–51 的配套扩展 `gnome-shell/wavetune@onlymash.github.com`（通过安装包安装时会自动部署到系统扩展目录）。
@@ -52,6 +62,12 @@ gnome-extensions enable wavetune@onlymash.github.com
 ```
 
 > Wayland 会话下首次安装新扩展时，若 `gnome-extensions` 尚未识别该 UUID，重新登录一次桌面会话后再执行启用命令即可。
+
+使用 Flatpak 版本时，Flatpak 本身无法导出 Shell 扩展，可通过以下脚本从已安装的应用中链接出扩展：
+
+```bash
+./packaging/flatpak/install-gnome-extension.sh
+```
 
 连接受支持的耳机后，右上角快捷设置面板会自动显示耳机磁贴，支持一键开关降噪、查看实时电量、切换降噪子模式或唤起主窗口。应用默认开启「保持后台运行」（关闭窗口隐藏至后台，可通过主菜单「退出」或 `Ctrl+Q` 完全退出），并可在首选项中开启「登录时后台自启」。
 
@@ -92,6 +108,8 @@ packaging/package.sh            # 有 makepkg 时构建 Arch 包，否则构建 
 packaging/package.sh arch       # 构建本地工作区快照 Arch 包
 packaging/package.sh git        # 从本地已提交 HEAD 构建 wavetune-git
 packaging/package.sh deb        # 构建 Debian/Ubuntu .deb 包（需 dpkg-deb 及 libadwaita >= 1.9）
+packaging/flatpak/build.sh                  # 从当前工作区构建并安装 Flatpak
+packaging/flatpak/update-cargo-sources.sh   # Cargo.lock 变更后重新生成 cargo-sources.json
 ```
 
 构建产物统一输出至 `target/dist/`。AUR 仓库生成与发布流程详见 [`packaging/arch/README.md`](packaging/arch/README.md)。
